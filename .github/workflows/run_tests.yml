@@ -29,10 +29,10 @@ jobs:
             enable-cache: true
 
       - name: Check styling
-        run: black . --check
+        run: uv run ruff format --check src/lanfactory
 
       - name: Linting
-        run: ruff check . --line-length 120 --exclude "notebooks/*" "docs/basic_tutorial/basic_tutorial.ipynb"
+        run: uv run ruff check src/lanfactory
 
     #   - name: Run pytest
     #     run: pytest
