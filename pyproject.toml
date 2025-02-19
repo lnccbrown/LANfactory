@@ -2,37 +2,67 @@
 requires = ["setuptools", "wheel"]
 
 [project.urls]
-"Homepage"= "https://github.com/AlexanderFengler/LANFactory"
-"Bug Tracker"= "https://github.com/AlexanderFengler/LANFactory/issues"
+"Homepage" = "https://github.com/lnccbrown/LANFactory"
+"Bug Tracker" = "https://github.com/lnccbrown/LANFactory/issues"
 
 [project]
-name= "lanfactory"
-version= "0.4.7"
-authors= [{name = "Alexander Fenger", email = "alexander_fengler@brown.edu"}]
-description= "Package with convenience functions to train LANs"
+name = "lanfactory"
+version = "0.4.7"
+authors = [{ name = "Alexander Fenger", email = "alexander_fengler@brown.edu" }]
+description = "Package with convenience functions to train LANs"
 readme = "README.md"
-requires-python= ">3.10, <3.13"
-classifiers= [
-    "Development Status :: 1 - Planning",
+license = { file = "LICENSE" }
+requires-python = ">3.10, <3.13"
+classifiers = [
+    "Development Status :: 1 - Planning",     #TODO: update to something more accurate?
     "Environment :: Console",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python",
-    "Topic :: Scientific/Engineering"
-    ]
-dependencies=[
-        "NumPy >= 1.17.0, < 2.0.0",
-        "SciPy >= 1.6.3",
-        "pandas >= 1.2.4",
-        "torch >= 1.7",
-        "jax >= 0.4.14",
-        "flax >= 0.6.4",
-        "optax >= 0.1.4",
-        "tqdm >= 4.0.0",
-        "frozendict >= 2.3.4",
-        "onnx >= 1.14.0",
-        "matplotlib >= 3.0.0",
-    ]
-keywords= ["LANs", "generative models", "cognitive science", "neuroscience", "sbi"]
+    "Topic :: Scientific/Engineering",
+]
+
+keywords = [
+    "LANs",
+    "generative models",
+    "cognitive science",
+    "neuroscience",
+    "sbi",
+]
+
+dependencies = [
+    "flax >= 0.10.2",
+    "frozendict >= 2.4.6",
+    "jax >= 0.5.0",
+    "matplotlib >= 3.10.0",
+    "numpy>= 1.26.4, < 2.0.0",
+    "onnx >= 1.17.0",
+    "optax >= 0.2.4",
+    "pandas >= 2.2.3",
+    "scipy >= 1.15.2",
+    "torch >= 2.6.0",
+    "tqdm >= 4.67.1",
+]
 
 [project.optional-dependencies]
-dev = ["black", "ruff", "pytest"]
+viz = ["wandb>=0.19.6"]
+
+[dependency-groups]
+dev = [
+    "coverage>=7.6.4",
+    "ipykernel>=6.29.5",
+    "ipython>=8.31.0",
+    "ipywidgets>=8.1.2",
+    "jupyterlab>=4.2.4",
+    "mypy>=1.11.1",
+    "nbconvert>=7.16.5",
+    "pre-commit>=2.20.0",
+    "ptpython>=3.0.29",
+    "pytest-cov>=6.0.0",
+    "pytest-xdist>=3.6.1",
+    "pytest>=8.3.1",
+    "ruff>=0.9.1",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["lanfactory", "lanfactory.*"]
