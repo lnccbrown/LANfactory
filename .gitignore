@@ -1,9 +1,8 @@
 # AF-Added
 .DS_Store
 notebooks/data/
-
 notebooks/test_notebooks/data/
-
+docs/basic_tutorial/data/lan_mlp/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
