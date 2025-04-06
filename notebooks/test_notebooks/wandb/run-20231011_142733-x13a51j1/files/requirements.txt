@@ -66,7 +66,7 @@ jupyterlab-server==2.25.0
 jupyterlab-widgets==3.0.9
 jupyterlab==4.0.6
 kiwisolver==1.4.5
-lanfactory==0.4.7
+lanfactory==0.4.8
 markdown-it-py==3.0.0
 markupsafe==2.1.2
 matplotlib-inline==0.1.6

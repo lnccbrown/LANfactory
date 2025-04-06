@@ -5,7 +5,9 @@ import warnings
 """Some utility functions for the lanfactory package."""
 
 
-def try_gen_folder(folder=None, allow_abs_path_folder_generation=True):
+def try_gen_folder(
+    folder: str | None = None, allow_abs_path_folder_generation: bool = True
+) -> None:
     """Function to generate a folder from a string. If the folder already exists, it will not be generated.
 
     Arguments
@@ -72,12 +74,12 @@ def try_gen_folder(folder=None, allow_abs_path_folder_generation=True):
 
 
 def save_configs(
-    model_id=None,
-    save_folder=None,
-    network_config=None,
-    train_config=None,
-    allow_abs_path_folder_generation=True,
-):
+    model_id: str | None = None,
+    save_folder: str | None = None,
+    network_config: dict | None = None,
+    train_config: dict | None = None,
+    allow_abs_path_folder_generation: bool = True,
+) -> None:
     """Function to save the network and training configurations to a folder.
 
     Arguments

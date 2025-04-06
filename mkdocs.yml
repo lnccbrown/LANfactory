@@ -8,6 +8,8 @@ nav:
       - Overview: index.md
   - Basic Tutorial:
       - Installation: basic_tutorial/basic_tutorial.ipynb
+  - Basic Tutorial / JAX:
+      - Installation: basic_tutorial_jax/basic_tutorial_jax.ipynb
   - API:
       - lanfactory: api/lanfactory.md
       - config: api/config.md
