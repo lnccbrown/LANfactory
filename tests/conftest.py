@@ -57,33 +57,6 @@ def jax_random_key():
     return jax.random.PRNGKey(42)
 
 
-# @pytest.fixture
-# def dummy_network_config():
-#     """Fixture providing a basic network configuration for testing."""
-#     return {
-#         "layer_sizes": [100, 100, 100, 1],
-#         "activations": ["tanh", "tanh", "tanh", "linear"],
-#         "train_output_type": "logprob",
-#     }
-
-
-# @pytest.fixture
-# def dummy_train_config():
-#     """Fixture providing a dummy train config for testing."""
-#     return {
-#         "cpu_batch_size": 4196,
-#         "gpu_batch_size": 4196,
-#         "n_epochs": 5,
-#         "optimizer": "adam",
-#         "learning_rate": 2e-06,
-#         "lr_scheduler": "reduce_on_plateau",
-#         "lr_scheduler_params": {},
-#         "weight_decay": 0.0,
-#         "loss": "huber",
-#         "save_history": False,
-#     }
-
-
 @pytest.fixture(scope="session")
 def test_run_seed():
     """Fixture providing a fixed seed for test runs."""
