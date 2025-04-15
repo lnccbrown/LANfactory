@@ -9,7 +9,6 @@ from copy import deepcopy
 import random
 import time
 import lanfactory
-from lanfactory.utils import clean_out_folder
 import multiprocessing
 from dataclasses import dataclass
 from .constants import (

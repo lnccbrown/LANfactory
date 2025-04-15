@@ -8,9 +8,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def clean_out_folder(
-    folder: str | pathlib.Path | None = None, dry_run=True
-) -> list[tuple[str, str]]:
+def clean_out_folder(folder: str | pathlib.Path | None = None, dry_run=True) -> None:
     """Safely remove all contents of a folder with optional dry-run mode.
 
     Args:
@@ -35,8 +33,8 @@ def clean_out_folder(
 
     folder = pathlib.Path(folder)
     if not folder.exists():
-        print(f"Folder '{folder}' does not exist.")
-        return []
+        logger.info(f"Folder '{folder}' does not exist.")
+        return
 
     # Collect all items that would be removed
     if dry_run:
@@ -46,13 +44,6 @@ def clean_out_folder(
 
     logger.info("Contents:")
     print_tree(folder)
-
-    # items_to_remove: list[tuple[str, str]] = []
-    # for item in glob.glob(os.path.join(folder, "*")):
-    # if os.path.isfile(item):
-    #     items_to_remove.append((item, "file"))
-    # elif os.path.isdir(item):
-    #     items_to_remove.append((item, "directory"))
 
     if folder.exists():
         try:
@@ -66,26 +57,6 @@ def clean_out_folder(
             logger.error(f"Error removing folder '{folder}': {str(e)}")
     else:
         logger.error(f"Folder '{folder}' does not exist.")
-
-    # Actually remove the items
-    # for item_path, item_type in items_to_remove:
-    #     try:
-    #         if item_type == "file":
-    #             if dry_run:
-    #                 print(f"Would remove file: {os.path.basename(item_path)}")
-    #             else:
-    #                 os.remove(item_path)
-    #         else:
-    #             if dry_run:
-    #                 print(f"Would remove directory: {os.path.basename(item_path)}")
-    #             else:
-    #                 shutil.rmtree(item_path)
-    #     except PermissionError:
-    #         print(f"Permission denied when trying to remove {item_type}: {item_path}")
-    #     except Exception as e:
-    #         print(f"Error removing {item_type} {item_path}: {str(e)}")
-
-    return items_to_remove
 
 
 def print_tree(

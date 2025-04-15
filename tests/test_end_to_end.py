@@ -5,7 +5,6 @@ import os
 import numpy as np
 from copy import deepcopy
 import torch
-import pickle
 from .utils import clean_out_folder
 import jax.numpy as jnp
 from .constants import (
@@ -197,4 +196,4 @@ def test_end_to_end_lan_mlp(
     # Compare the two outputs
     np.testing.assert_allclose(net_out, net_out_jitted, rtol=1e-4, atol=1e-4)
 
-    clean_out_folder(folder=TEST_GENERATOR_CONSTANTS.OUT_FOLDER, dry_run=False)
+    clean_out_folder(folder=TEST_GENERATOR_CONSTANTS.TEST_FOLDER, dry_run=False)
