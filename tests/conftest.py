@@ -10,6 +10,7 @@ import random
 import time
 import lanfactory
 from lanfactory.utils import clean_out_folder
+import multiprocessing
 from dataclasses import dataclass
 from .constants import (
     TEST_GENERATOR_CONSTANTS,
@@ -17,6 +18,8 @@ from .constants import (
     TEST_NETWORK_CONSTANTS_LAN,
 )
 import logging
+
+multiprocessing.set_start_method("spawn", force=True)
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -136,6 +139,7 @@ def dummy_network_train_config_lan():
     network_config["activations"] = TEST_NETWORK_CONSTANTS_LAN.ACTIVATIONS
     network_config["train_output_type"] = TEST_NETWORK_CONSTANTS_LAN.TRAIN_OUTPUT_TYPE
     logger.info(f"Network config from dummy_network_train_config_lan: {network_config}")
+
     train_config = deepcopy(lanfactory.config.network_configs.train_config_mlp)
     train_config["n_epochs"] = TEST_TRAIN_CONSTANTS.N_EPOCHS
     train_config["cpu_batch_size"] = TEST_TRAIN_CONSTANTS.CPU_BATCH_SIZE
@@ -143,4 +147,5 @@ def dummy_network_train_config_lan():
     train_config["optimizer"] = TEST_TRAIN_CONSTANTS.OPTIMIZER
     train_config["learning_rate"] = TEST_TRAIN_CONSTANTS.LEARNING_RATE
     logger.info(f"Train config from dummy_network_train_config_lan: {train_config}")
+
     return {"network_config": network_config, "train_config": train_config}

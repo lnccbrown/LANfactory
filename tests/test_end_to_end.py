@@ -6,7 +6,7 @@ import numpy as np
 from copy import deepcopy
 import torch
 import pickle
-from lanfactory.utils import clean_out_folder
+from .utils import clean_out_folder
 import jax.numpy as jnp
 from .constants import (
     TEST_GENERATOR_CONSTANTS,
@@ -179,15 +179,14 @@ def test_end_to_end_lan_mlp(
             ).astype(np.float32)
         )
     )
-    logger.info(f"Input mat shape: {input_mat.shape}")
-
+    logger.info("Input mat shape: %s", input_mat.shape)
     shape_of_input = jax_infer.load_state_from_file(
         file_path=os.path.join(
             TEST_GENERATOR_CONSTANTS.MODEL_FOLDER,
             "jax_lan_" + model_config["name"] + "__train_state.jax",
         )
     )["params"]["layers_0"]["kernel"].shape
-    logger.info(f"Shape of input from loading state: {shape_of_input}")
+    logger.info("Shape of input from loading state: %s", shape_of_input)
 
     net_out_jitted = forward_pass_jitted(input_mat)
     assert net_out_jitted.shape == (LEN_FORWARD_PASS_DUMMY, 1)
@@ -198,4 +197,4 @@ def test_end_to_end_lan_mlp(
     # Compare the two outputs
     np.testing.assert_allclose(net_out, net_out_jitted, rtol=1e-4, atol=1e-4)
 
-    clean_out_folder(dry_run=False)
+    clean_out_folder(folder=TEST_GENERATOR_CONSTANTS.OUT_FOLDER, dry_run=False)

@@ -30,8 +30,8 @@ jobs:
       - name: Linting
         run: ruff check . --line-length 120 --exclude "notebooks/*" "docs/basic_tutorial/basic_tutorial.ipynb"
 
-    #   - name: Run pytest
-    #     run: pytest
+      - name: Run pytest
+        run: pytest
 
       # - name: Build Docs
       #   run: mkdocs build

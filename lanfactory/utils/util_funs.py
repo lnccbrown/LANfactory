@@ -1,12 +1,11 @@
+"""Some utility functions for the lanfactory package."""
+
 import os
 import pickle
 import shutil
 import glob
 from typing import List, Tuple
 import warnings
-
-
-"""Some utility functions for the lanfactory package."""
 
 
 def try_gen_folder(
@@ -119,57 +118,3 @@ def save_configs(
     )
     print("Saved train config")
     return
-
-
-def clean_out_folder(folder="tests/test_data", dry_run=True) -> List[Tuple[str, str]]:
-    """Safely remove all contents of a folder with optional dry-run mode.
-
-    Args:
-        folder (str): Path to the folder to clean out
-        dry_run (bool): If True, only prints what would be removed without actually deleting
-
-    Returns:
-        List[Tuple[str, str]]: List of tuples containing (item_path, action_type)
-        where action_type is either 'file' or 'directory'
-
-    Example:
-        # Preview what would be deleted
-        items = clean_out_folder("test_data", dry_run=True)
-        for path, item_type in items:
-            print(f"Would remove {item_type}: {path}")
-
-        # Actually delete the items
-        clean_out_folder("test_data", dry_run=False)
-    """
-    if not os.path.exists(folder):
-        print(f"Folder '{folder}' does not exist.")
-        return []
-
-    items_to_remove = []
-
-    # Collect all items that would be removed
-    for item in glob.glob(os.path.join(folder, "*")):
-        if os.path.isfile(item):
-            items_to_remove.append((item, "file"))
-        elif os.path.isdir(item):
-            items_to_remove.append((item, "directory"))
-
-    # Actually remove the items
-    for item_path, item_type in items_to_remove:
-        try:
-            if item_type == "file":
-                if dry_run:
-                    print(f"Would remove file: {os.path.basename(item_path)}")
-                else:
-                    os.remove(item_path)
-            else:
-                if dry_run:
-                    print(f"Would remove directory: {os.path.basename(item_path)}")
-                else:
-                    shutil.rmtree(item_path)
-        except PermissionError:
-            print(f"Permission denied when trying to remove {item_type}: {item_path}")
-        except Exception as e:
-            print(f"Error removing {item_type} {item_path}: {str(e)}")
-
-    return items_to_remove
