@@ -1,8 +1,8 @@
+"""Some utility functions for the lanfactory package."""
+
 import os
 import pickle
 import warnings
-
-"""Some utility functions for the lanfactory package."""
 
 
 def try_gen_folder(
