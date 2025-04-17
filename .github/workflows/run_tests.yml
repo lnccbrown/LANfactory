@@ -20,18 +20,18 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-
+      
       - name: Install package
         run: pip install -e .[dev]
+        
+      - name: Run pytest
+        run: pytest
 
       - name: Check styling
         run: black . --check
 
       - name: Linting
         run: ruff check . --line-length 120 --exclude "notebooks/*" "docs/basic_tutorial/basic_tutorial.ipynb"
-
-      - name: Run pytest
-        run: pytest
 
       # - name: Build Docs
       #   run: mkdocs build
