@@ -30,11 +30,11 @@ jobs:
       - name: Install package
         run: uv sync --all-groups
 
-      - name: Run pytest
-        run: uv run pytest
-
       - name: Check styling
-        run: uv run ruff format --check .
+        run: uv run ruff format --check
 
       - name: Linting
-        run: uv run ruff check . --line-length 120 --exclude "notebooks/*" "docs/basic_tutorial/basic_tutorial.ipynb"
+        run: uv run ruff check .
+
+      - name: Run pytest
+        run: uv run pytest
