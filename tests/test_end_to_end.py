@@ -68,7 +68,6 @@ def test_end_to_end_lan_mlp(
     request,
     generator_config_fixture,
 ):
-
     if train_type == "lan":
         MODEL_FOLDER = TEST_GENERATOR_CONSTANTS.LAN_MODEL_FOLDER
     elif train_type == "cpn":
@@ -97,18 +96,14 @@ def test_end_to_end_lan_mlp(
     logger.info(f"File list: {file_list_}")
     device = TEST_GENERATOR_CONSTANTS.DEVICE
 
-    logger.info(
-        f"Testing end-to-end {train_type} MLP with model {model_config['name']}"
-    )
+    logger.info(f"Testing end-to-end {train_type} MLP with model {model_config['name']}")
 
     # INDEPENDENT TESTS OF DATALOADERS
     # Training dataset
     jax_training_dataset = lanfactory.trainers.DatasetTorch(
         file_ids=file_list_,
         batch_size=(
-            train_config[device + "_batch_size"]
-            if torch.cuda.is_available()
-            else train_config[device + "_batch_size"]
+            train_config[device + "_batch_size"] if torch.cuda.is_available() else train_config[device + "_batch_size"]
         ),
         label_lower_bound=np.log(1e-10),
         features_key=f"{train_type}_data",
@@ -128,9 +123,7 @@ def test_end_to_end_lan_mlp(
     jax_validation_dataset = lanfactory.trainers.DatasetTorch(
         file_ids=file_list_,
         batch_size=(
-            train_config[device + "_batch_size"]
-            if torch.cuda.is_available()
-            else train_config[device + "_batch_size"]
+            train_config[device + "_batch_size"] if torch.cuda.is_available() else train_config[device + "_batch_size"]
         ),
         label_lower_bound=np.log(1e-10),
         features_key=f"{train_type}_data",
@@ -146,9 +139,7 @@ def test_end_to_end_lan_mlp(
         pin_memory=True,
     )
 
-    jax_net = lanfactory.trainers.MLPJaxFactory(
-        network_config=network_config, train=True
-    )
+    jax_net = lanfactory.trainers.MLPJaxFactory(network_config=network_config, train=True)
 
     # Test properties of jax trainer
     jax_trainer = lanfactory.trainers.ModelTrainerJaxMLP(
@@ -177,11 +168,7 @@ def test_end_to_end_lan_mlp(
 
     forward_pass, forward_pass_jitted = jax_infer.make_forward_partial(
         seed=42,
-        input_dim=(
-            model_config["n_params"] + 2
-            if train_type == "lan"
-            else model_config["n_params"]
-        ),
+        input_dim=(model_config["n_params"] + 2 if train_type == "lan" else model_config["n_params"]),
         state=os.path.join(
             MODEL_FOLDER,
             (
@@ -208,12 +195,8 @@ def test_end_to_end_lan_mlp(
             jnp.array(
                 np.concatenate(
                     [
-                        np.linspace(5, 0, LEN_FORWARD_PASS_DUMMY // 2).astype(
-                            np.float32
-                        ),
-                        np.linspace(0, 5, LEN_FORWARD_PASS_DUMMY // 2).astype(
-                            np.float32
-                        ),
+                        np.linspace(5, 0, LEN_FORWARD_PASS_DUMMY // 2).astype(np.float32),
+                        np.linspace(0, 5, LEN_FORWARD_PASS_DUMMY // 2).astype(np.float32),
                     ]
                 )
             )

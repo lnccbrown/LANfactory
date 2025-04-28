@@ -74,9 +74,7 @@ class TestNetworkConstantsLAN:
     """Test network constants for LANs."""
 
     LAYER_SIZES: list = field(default_factory=lambda: [100, 100, 100, 1])
-    ACTIVATIONS: list = field(
-        default_factory=lambda: ["tanh", "tanh", "tanh", "linear"]
-    )
+    ACTIVATIONS: list = field(default_factory=lambda: ["tanh", "tanh", "tanh", "linear"])
     TRAIN_OUTPUT_TYPE: str = "logprob"
 
 

@@ -48,16 +48,10 @@ def transform_to_onnx(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Convert a TorchMLP model to ONNX format."
-    )
-    parser.add_argument(
-        "network_config_file", help="Path to the network configuration file (pickle)."
-    )
+    parser = argparse.ArgumentParser(description="Convert a TorchMLP model to ONNX format.")
+    parser.add_argument("network_config_file", help="Path to the network configuration file (pickle).")
     parser.add_argument("state_dict_file", help="Path to the state dictionary file.")
-    parser.add_argument(
-        "input_shape", type=int, help="Size of the input tensor for the model."
-    )
+    parser.add_argument("input_shape", type=int, help="Size of the input tensor for the model.")
     parser.add_argument("output_onnx_file", help="Path to the output ONNX file.")
 
     args = parser.parse_args()
