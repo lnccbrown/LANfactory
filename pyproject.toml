@@ -20,6 +20,7 @@ classifiers= [
     "Topic :: Scientific/Engineering"
     ]
 dependencies=[
+        "ssm-simulators == 0.8.3",
         "NumPy >= 1.17.0, < 2.0.0",
         "SciPy >= 1.6.3",
         "pandas >= 1.2.4",
@@ -31,7 +32,6 @@ dependencies=[
         "frozendict >= 2.3.4",
         "onnx >= 1.14.0",
         "matplotlib >= 3.0.0",
-        "ssm-simulators == 0.8.3",
     ]
 keywords= ["LANs", "generative models", "cognitive science", "neuroscience", "sbi"]
 
