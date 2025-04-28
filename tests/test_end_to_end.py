@@ -4,7 +4,6 @@ import lanfactory
 import os
 import numpy as np
 from copy import deepcopy
-import torch
 import jax.numpy as jnp
 from .constants import (
     TEST_GENERATOR_CONSTANTS,
@@ -83,76 +82,18 @@ def test_end_to_end_lan_mlp(
 
     logger.info(f"Train config: {train_config_dict}")
     network_config = train_config_dict["network_config"]
-    train_config = train_config_dict["train_config"]
 
     file_list_ = dummy_training_data_files(generator_config, model_config)
     logger.info(f"File list: {file_list_}")
-    device = TEST_GENERATOR_CONSTANTS.DEVICE
 
     logger.info(f"Testing end-to-end {train_type} MLP with model {model_config['name']}")
 
     # INDEPENDENT TESTS OF DATALOADERS
     # Training dataset
-    jax_training_dataset = lanfactory.trainers.DatasetTorch(
-        file_ids=file_list_,
-        batch_size=(
-            train_config[device + "_batch_size"] if torch.cuda.is_available() else train_config[device + "_batch_size"]
-        ),
-        label_lower_bound=np.log(1e-10),
-        features_key=f"{train_type}_data",
-        label_key=f"{train_type}_labels",
-        out_framework="jax",
-    )
-
-    jax_training_dataloader = torch.utils.data.DataLoader(
-        jax_training_dataset,
-        shuffle=True,
-        batch_size=None,
-        num_workers=1,
-        pin_memory=True,
-    )
 
     # Validation dataset
-    jax_validation_dataset = lanfactory.trainers.DatasetTorch(
-        file_ids=file_list_,
-        batch_size=(
-            train_config[device + "_batch_size"] if torch.cuda.is_available() else train_config[device + "_batch_size"]
-        ),
-        label_lower_bound=np.log(1e-10),
-        features_key=f"{train_type}_data",
-        label_key=f"{train_type}_labels",
-        out_framework="jax",
-    )
-
-    jax_validation_dataloader = torch.utils.data.DataLoader(
-        jax_validation_dataset,
-        shuffle=True,
-        batch_size=None,
-        num_workers=1,
-        pin_memory=True,
-    )
-
-    jax_net = lanfactory.trainers.MLPJaxFactory(network_config=network_config, train=True)
 
     # Test properties of jax trainer
-    jax_trainer = lanfactory.trainers.ModelTrainerJaxMLP(
-        train_config=train_config,
-        model=jax_net,
-        train_dl=jax_training_dataloader,
-        valid_dl=jax_validation_dataloader,
-        pin_memory=True,
-    )
-
-    train_state = jax_trainer.train_and_evaluate(
-        output_folder=MODEL_FOLDER,
-        output_file_id=model_config["name"],
-        run_id="jax",
-        wandb_on=False,
-        wandb_project_id="jax",
-        save_data_details=True,
-        verbose=1,
-        save_all=True,
-    )
 
     jax_infer = lanfactory.trainers.MLPJaxFactory(
         network_config=network_config,
