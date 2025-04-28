@@ -7,7 +7,7 @@ requires = ["setuptools", "wheel"]
 
 [project]
 name= "lanfactory"
-version= "0.4.8"
+version= "0.4.9"
 authors= [{name = "Alexander Fenger", email = "alexander_fengler@brown.edu"}]
 description= "Package with convenience functions to train LANs"
 readme = "README.md"
@@ -31,6 +31,7 @@ dependencies=[
         "frozendict >= 2.3.4",
         "onnx >= 1.14.0",
         "matplotlib >= 3.0.0",
+        "ssm-simulators == 0.8.3",
     ]
 keywords= ["LANs", "generative models", "cognitive science", "neuroscience", "sbi"]
 
