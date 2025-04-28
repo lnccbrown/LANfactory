@@ -33,6 +33,13 @@ dependencies = [
     "onnx >= 1.14.0",
     "matplotlib >= 3.0.0",
 ]
+keywords = [
+    "LANs",
+    "generative models",
+    "cognitive science",
+    "neuroscience",
+    "sbi",
+]
 
 [dependency-groups]
 dev = ["pytest-cov>=6.1.1", "pytest-timer>=1.0.0", "ruff>=0.11.1"]
@@ -49,10 +56,14 @@ addopts = [
     "--timer-top-n=25",
 ]
 
-keywords = [
-    "LANs",
-    "generative models",
-    "cognitive science",
-    "neuroscience",
-    "sbi",
+[tool.ruff]
+# Specify the directories to check
+src = ["lanfactory", "src"]
+exclude = [
+    "notebooks/*",
+    "docs/*",  # Exclude the entire docs folder
+    "docs/basic_tutorial/basic_tutorial.ipynb"
 ]
+
+# Add any additional configuration options for ruff
+line-length = 120
