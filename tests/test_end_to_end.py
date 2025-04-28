@@ -5,16 +5,9 @@ import os
 import numpy as np
 from copy import deepcopy
 import torch
-from .utils import clean_out_folder
 import jax.numpy as jnp
 from .constants import (
     TEST_GENERATOR_CONSTANTS,
-    TEST_TRAIN_CONSTANTS_LAN,
-    TEST_TRAIN_CONSTANTS_CPN,
-    TEST_TRAIN_CONSTANTS_OPN,
-    TEST_NETWORK_CONSTANTS_LAN,
-    TEST_NETWORK_CONSTANTS_CPN,
-    TEST_NETWORK_CONSTANTS_OPN,
 )
 
 # import logger

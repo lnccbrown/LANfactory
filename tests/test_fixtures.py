@@ -1,7 +1,5 @@
-import pytest
 import numpy as np
 import torch
-import jax.numpy as jnp
 
 
 def test_data_fixture(sample_data_small):
