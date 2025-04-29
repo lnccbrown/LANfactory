@@ -1,13 +1,11 @@
+"""Some utility functions for the lanfactory package."""
+
 import os
 import pickle
 import warnings
 
-"""Some utility functions for the lanfactory package."""
 
-
-def try_gen_folder(
-    folder: str | None = None, allow_abs_path_folder_generation: bool = True
-) -> None:
+def try_gen_folder(folder: str | None = None, allow_abs_path_folder_generation: bool = True) -> None:
     """Function to generate a folder from a string. If the folder already exists, it will not be generated.
 
     Arguments
@@ -110,8 +108,6 @@ def save_configs(
     )
     print("Saved network config")
     # Save train config
-    pickle.dump(
-        train_config, open(save_folder + "/" + model_id + "_train_config.pickle", "wb")
-    )
+    pickle.dump(train_config, open(save_folder + "/" + model_id + "_train_config.pickle", "wb"))
     print("Saved train config")
     return

@@ -2,37 +2,68 @@
 requires = ["setuptools", "wheel"]
 
 [project.urls]
-"Homepage"= "https://github.com/AlexanderFengler/LANFactory"
-"Bug Tracker"= "https://github.com/AlexanderFengler/LANFactory/issues"
+"Homepage" = "https://github.com/AlexanderFengler/LANFactory"
+"Bug Tracker" = "https://github.com/AlexanderFengler/LANFactory/issues"
 
 [project]
-name= "lanfactory"
-version= "0.4.8"
-authors= [{name = "Alexander Fenger", email = "alexander_fengler@brown.edu"}]
-description= "Package with convenience functions to train LANs"
+name = "lanfactory"
+version = "0.4.9"
+authors = [{ name = "Alexander Fenger", email = "alexander_fengler@brown.edu" }]
+description = "Package with convenience functions to train LANs"
 readme = "README.md"
-requires-python= ">3.10, <3.13"
-classifiers= [
+requires-python = ">3.10, <3.13"
+classifiers = [
     "Development Status :: 1 - Planning",
     "Environment :: Console",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python",
-    "Topic :: Scientific/Engineering"
-    ]
-dependencies=[
-        "NumPy >= 1.17.0, < 2.0.0",
-        "SciPy >= 1.6.3",
-        "pandas >= 1.2.4",
-        "torch >= 1.7",
-        "jax >= 0.4.14",
-        "flax >= 0.6.4",
-        "optax >= 0.1.4",
-        "tqdm >= 4.0.0",
-        "frozendict >= 2.3.4",
-        "onnx >= 1.14.0",
-        "matplotlib >= 3.0.0",
-    ]
-keywords= ["LANs", "generative models", "cognitive science", "neuroscience", "sbi"]
+    "Topic :: Scientific/Engineering",
+]
+dependencies = [
+    "ssm-simulators == 0.8.3",
+    "NumPy >= 1.17.0, < 2.0.0",
+    "SciPy >= 1.6.3",
+    "pandas >= 1.2.4",
+    "torch >= 1.7",
+    "jax >= 0.4.14",
+    "flax >= 0.6.4",
+    "optax >= 0.1.4",
+    "tqdm >= 4.0.0",
+    "frozendict >= 2.3.4",
+    "onnx >= 1.14.0",
+    "matplotlib >= 3.0.0",
+]
+keywords = [
+    "LANs",
+    "generative models",
+    "cognitive science",
+    "neuroscience",
+    "sbi",
+]
 
-[project.optional-dependencies]
-dev = ["black", "ruff", "pytest"]
+[dependency-groups]
+dev = ["pytest-cov>=6.1.1", "pytest-timer>=1.0.0", "ruff>=0.11.1"]
+
+[tool.pytest.ini_options]
+log_cli = true
+log_cli_level = "INFO" # set minimum log level for console output
+testpaths = ["tests"]
+addopts = [
+    "--cov=.",
+    "--cov-report=term-missing",
+    "--cov-report=xml",
+    "--exitfirst",
+    "--timer-top-n=25",
+]
+
+[tool.ruff]
+# Specify the directories to check
+src = ["lanfactory", "src"]
+exclude = [
+    "notebooks/*",
+    "docs/*",  # Exclude the entire docs folder
+    "docs/basic_tutorial/basic_tutorial.ipynb"
+]
+
+# Add any additional configuration options for ruff
+line-length = 120

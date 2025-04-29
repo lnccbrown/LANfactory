@@ -2,7 +2,6 @@ name: Run tests
 
 on:
   pull_request:
-  push:
 
 jobs:
   run_tests:
@@ -21,17 +20,21 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.5.9"
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml pdm.lock"
+
       - name: Install package
-        run: pip install -e .[dev]
+        run: uv sync --all-groups
 
       - name: Check styling
-        run: black . --check
+        run: uv run ruff format --check
 
       - name: Linting
-        run: ruff check . --line-length 120 --exclude "notebooks/*" "docs/basic_tutorial/basic_tutorial.ipynb"
+        run: uv run ruff check .
 
-    #   - name: Run pytest
-    #     run: pytest
-
-      # - name: Build Docs
-      #   run: mkdocs build
+      - name: Run pytest
+        run: uv run pytest
