@@ -52,7 +52,7 @@ def dummy_training_data_files(generator_config, model_config, save=True):
             "dummy_network_train_config_opn",
             "dummy_generator_config_simple_two_choices",
         ),
-        # ("lan", "dummy_network_train_config_lan", "dummy_generator_config"),
+        ("lan", "dummy_network_train_config_lan", "dummy_generator_config"),
     ],
 )
 def test_end_to_end_lan_mlp(
