@@ -252,10 +252,10 @@ def dummy_network_train_config_opn():
     return {"network_config": network_config, "train_config": train_config}
 
 
-# @pytest.fixture(autouse=True, scope="session")
-# def cleanup_afters_tests(request):
-#     def cleanup():
-#         logger.info("Cleaning up test data")
-#         clean_out_folder(folder=TEST_GENERATOR_CONSTANTS.TEST_FOLDER, dry_run=False)
+@pytest.fixture(autouse=True, scope="session")
+def cleanup_afters_tests(request):
+    def cleanup():
+        logger.info("Cleaning up test data")
+        clean_out_folder(folder=TEST_GENERATOR_CONSTANTS.TEST_FOLDER, dry_run=False)
 
-#     request.addfinalizer(cleanup)
+    request.addfinalizer(cleanup)
