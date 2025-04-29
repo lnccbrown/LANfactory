@@ -118,11 +118,15 @@ def dummy_generator_config(model_selector):
             # Specify generative model (one from the list of included models mentioned above)
             generator_config["model"] = model_selector(mode=mode)
             # Specify number of parameter sets to simulate
-            generator_config["n_parameter_sets"] = TEST_GENERATOR_CONSTANTS.N_PARAMETER_SETS
+            generator_config["n_parameter_sets"] = (
+                TEST_GENERATOR_CONSTANTS.N_PARAMETER_SETS
+            )
             # Specify how many samples a simulation run should entail
             generator_config["n_samples"] = TEST_GENERATOR_CONSTANTS.N_SAMPLES
             # Specify folder in which to save generated data
-            generator_config["output_folder"] = os.path.join(TEST_GENERATOR_CONSTANTS.OUT_FOLDER, str(uuid.uuid4()))
+            generator_config["output_folder"] = os.path.join(
+                TEST_GENERATOR_CONSTANTS.OUT_FOLDER, str(uuid.uuid4())
+            )
             generator_config["n_training_samples_by_parameter_set"] = (
                 TEST_GENERATOR_CONSTANTS.N_SAMPLES_BY_PARAMETER_SET
             )
@@ -153,11 +157,15 @@ def dummy_generator_config_simple_two_choices(model_selector):
             # Specify generative model (one from the list of included models mentioned above)
             generator_config["model"] = model_selector(mode=mode)
             # Specify number of parameter sets to simulate
-            generator_config["n_parameter_sets"] = TEST_GENERATOR_CONSTANTS.N_PARAMETER_SETS
+            generator_config["n_parameter_sets"] = (
+                TEST_GENERATOR_CONSTANTS.N_PARAMETER_SETS
+            )
             # Specify how many samples a simulation run should entail
             generator_config["n_samples"] = TEST_GENERATOR_CONSTANTS.N_SAMPLES
             # Specify folder in which to save generated data
-            generator_config["output_folder"] = os.path.join(TEST_GENERATOR_CONSTANTS.OUT_FOLDER, str(uuid.uuid4()))
+            generator_config["output_folder"] = os.path.join(
+                TEST_GENERATOR_CONSTANTS.OUT_FOLDER, str(uuid.uuid4())
+            )
             generator_config["n_training_samples_by_parameter_set"] = (
                 TEST_GENERATOR_CONSTANTS.N_SAMPLES_BY_PARAMETER_SET
             )
@@ -183,7 +191,9 @@ def dummy_network_train_config_lan():
     network_config["layer_sizes"] = TEST_NETWORK_CONSTANTS_LAN.LAYER_SIZES
     network_config["activations"] = TEST_NETWORK_CONSTANTS_LAN.ACTIVATIONS
     network_config["train_output_type"] = TEST_NETWORK_CONSTANTS_LAN.TRAIN_OUTPUT_TYPE
-    logger.info("Network config from dummy_network_train_config_lan: %s", network_config)
+    logger.info(
+        "Network config from dummy_network_train_config_lan: %s", network_config
+    )
 
     train_config = deepcopy(lanfactory.config.network_configs.train_config_mlp)
     train_config["n_epochs"] = TEST_TRAIN_CONSTANTS_LAN.N_EPOCHS
@@ -203,7 +213,9 @@ def dummy_network_train_config_cpn():
     network_config["layer_sizes"] = TEST_NETWORK_CONSTANTS_CPN.LAYER_SIZES
     network_config["activations"] = TEST_NETWORK_CONSTANTS_CPN.ACTIVATIONS
     network_config["train_output_type"] = TEST_NETWORK_CONSTANTS_CPN.TRAIN_OUTPUT_TYPE
-    logger.info("Network config from dummy_network_train_config_cpn: %s", network_config)
+    logger.info(
+        "Network config from dummy_network_train_config_cpn: %s", network_config
+    )
 
     train_config = deepcopy(lanfactory.config.network_configs.train_config_mlp)
     train_config["n_epochs"] = TEST_TRAIN_CONSTANTS_CPN.N_EPOCHS
@@ -224,7 +236,9 @@ def dummy_network_train_config_opn():
     network_config["layer_sizes"] = TEST_NETWORK_CONSTANTS_OPN.LAYER_SIZES
     network_config["activations"] = TEST_NETWORK_CONSTANTS_OPN.ACTIVATIONS
     network_config["train_output_type"] = TEST_NETWORK_CONSTANTS_OPN.TRAIN_OUTPUT_TYPE
-    logger.info("Network config from dummy_network_train_config_opn: %s", network_config)
+    logger.info(
+        "Network config from dummy_network_train_config_opn: %s", network_config
+    )
 
     train_config = deepcopy(lanfactory.config.network_configs.train_config_mlp)
     train_config["n_epochs"] = TEST_TRAIN_CONSTANTS_OPN.N_EPOCHS
@@ -238,10 +252,10 @@ def dummy_network_train_config_opn():
     return {"network_config": network_config, "train_config": train_config}
 
 
-@pytest.fixture(autouse=True, scope="session")
-def cleanup_afters_tests(request):
-    def cleanup():
-        logger.info("Cleaning up test data")
-        clean_out_folder(folder=TEST_GENERATOR_CONSTANTS.TEST_FOLDER, dry_run=False)
+# @pytest.fixture(autouse=True, scope="session")
+# def cleanup_afters_tests(request):
+#     def cleanup():
+#         logger.info("Cleaning up test data")
+#         clean_out_folder(folder=TEST_GENERATOR_CONSTANTS.TEST_FOLDER, dry_run=False)
 
-    request.addfinalizer(cleanup)
+#     request.addfinalizer(cleanup)
