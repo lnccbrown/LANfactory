@@ -21,13 +21,13 @@ classifiers = [
 ]
 dependencies = [
     "ssm-simulators == 0.8.3",
-    "NumPy >= 1.17.0, < 2.0.0",
+    # "NumPy >= 1.17.0, < 2.0.0",
     "SciPy >= 1.6.3",
     "pandas >= 1.2.4",
     "torch >= 1.7",
-    "jax >= 0.4.14",
+    # "jax >= 0.4.14",
     "flax >= 0.6.4",
-    "optax >= 0.1.4",
+    # "optax >= 0.1.4",
     "tqdm >= 4.0.0",
     "frozendict >= 2.3.4",
     "onnx >= 1.14.0",
