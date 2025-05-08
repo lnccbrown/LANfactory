@@ -2,7 +2,6 @@ name: Run tests
 
 on:
   pull_request:
-  push:
 
 jobs:
   run_tests:
@@ -22,20 +21,27 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v6
         with:
-            # Install a specific version of uv.
-            version: "0.5.9"
-            enable-cache: true
+          version: "0.5.9"
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml pdm.lock"
+
+      - name: Install package
+        run: uv sync --all-groups
 
       - name: Check styling
-        run: uv run ruff format --check src/lanfactory
+        run: uv run ruff format --check .
 
       - name: Linting
         run: uv run ruff check src/lanfactory
 
-    #   - name: Run pytest
-    #     run: pytest
 
-      # - name: Build Docs
-      #   run: mkdocs build
+      - name: Check styling
+        run: uv run ruff format --check
+
+      - name: Linting
+        run: uv run ruff check .
+
+      - name: Run pytest
+        run: uv run pytest
