@@ -7,18 +7,32 @@ requires = ["setuptools", "wheel"]
 
 [project]
 name = "lanfactory"
-version = "0.4.7"
-authors = [{ name = "Alexander Fenger", email = "alexander_fengler@brown.edu" }]
+version = "0.4.9"
+authors = [
+    { name = "Alexander Fengler", email = "alexander_fengler@brown.edu" },
+]
 description = "Package with convenience functions to train LANs"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">3.10, <3.13"
 classifiers = [
-    "Development Status :: 1 - Planning",     #TODO: update to something more accurate?
+    "Development Status :: 1 - Planning",
     "Environment :: Console",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python",
     "Topic :: Scientific/Engineering",
+]
+
+dependencies = [
+    "ssm-simulators == 0.8.3",
+    "scipy >= 1.15.2",
+    "pandas >= 2.2.3",
+    "torch >= 2.7.0",
+    "flax >= 0.10.6",
+    "tqdm >= 4.67.1",
+    "frozendict >= 2.4.6",
+    "onnx >= 1.17.0",
+    "matplotlib >= 3.10.1",
 ]
 
 keywords = [
@@ -27,20 +41,6 @@ keywords = [
     "cognitive science",
     "neuroscience",
     "sbi",
-]
-
-dependencies = [
-    "flax >= 0.10.2",
-    "frozendict >= 2.4.6",
-    "jax >= 0.5.0",
-    "matplotlib >= 3.10.0",
-    "numpy>= 1.26.4",
-    "onnx >= 1.17.0",
-    "optax >= 0.2.4",
-    "pandas >= 2.2.3",
-    "scipy >= 1.15.2",
-    "torch >= 2.6.0",
-    "tqdm >= 4.67.1",
 ]
 
 [project.optional-dependencies]
@@ -57,12 +57,37 @@ dev = [
     "nbconvert>=7.16.5",
     "pre-commit>=2.20.0",
     "ptpython>=3.0.29",
-    "pytest-cov>=6.0.0",
+    "pytest-cov>=6.1.1",
     "pytest-xdist>=3.6.1",
+    "pytest-timer>=1.0.0",
     "pytest>=8.3.1",
-    "ruff>=0.9.1",
 ]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["lanfactory", "lanfactory.*"]
+
+
+[tool.pytest.ini_options]
+log_cli = true
+log_cli_level = "INFO" # set minimum log level for console output
+testpaths = ["tests"]
+addopts = [
+    "--cov=.",
+    "--cov-report=term-missing",
+    "--cov-report=xml",
+    "--exitfirst",
+    "--timer-top-n=25",
+]
+
+[tool.ruff]
+# Specify the directories to check
+src = ["src/lanfactory", "tests"]
+exclude = [
+    "notebooks/*",
+    "docs/*",                                   # Exclude the entire docs folder
+    "docs/basic_tutorial/basic_tutorial.ipynb",
+]
+
+# Add any additional configuration options for ruff
+line-length = 120
