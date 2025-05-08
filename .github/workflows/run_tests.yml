@@ -30,18 +30,11 @@ jobs:
       - name: Install package
         run: uv sync --all-groups
 
+      - name: Run pytest
+        run: uv run pytest
+
       - name: Check styling
         run: uv run ruff format --check .
 
       - name: Linting
         run: uv run ruff check src/lanfactory
-
-
-      - name: Check styling
-        run: uv run ruff format --check
-
-      - name: Linting
-        run: uv run ruff check .
-
-      - name: Run pytest
-        run: uv run pytest
