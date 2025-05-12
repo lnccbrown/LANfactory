@@ -114,7 +114,7 @@ def dummy_generator_config(model_selector):
         # Initialize the generator config (for MLP LANs)
         simulator_param_mapping = True
         while simulator_param_mapping:
-            # TODO: use this after ssms v1.0.0 release
+            # TODO: #35 use this after ssms v1.0.0 release
             # generator_config = ssms.config.get_default_generator_config("lan")
             # and delete the line below
             generator_config = deepcopy(ssms.config.data_generator_config["lan"])
