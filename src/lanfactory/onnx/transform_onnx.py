@@ -1,13 +1,13 @@
+"""This module contains the function to transform Torch/Jax models to ONNX format.
+Can be run as a script.
+"""
+
 import pickle
 from typing import Any
 import argparse
 
 import torch
 from lanfactory.trainers.torch_mlp import TorchMLP
-
-"""This module contains the function to transform Torch/Jax models to ONNX format.
-Can be run as a script.
-"""
 
 
 def transform_to_onnx(

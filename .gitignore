@@ -1,9 +1,9 @@
 # AF-Added
 .DS_Store
 notebooks/data/
+
 notebooks/test_notebooks/data/
-docs/basic_tutorial/data/lan_mlp/
-data/
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -33,6 +33,7 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+uv.lock
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -134,5 +135,3 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-.vscode/settings.json
-uv.lock

@@ -4,7 +4,7 @@ repo_url: htps://github.com/AlexanderFengler/LANFactory
 edit_uri: edit/main/docs
 
 nav:
-  - Home: 
+  - Home:
       - Overview: index.md
   - Basic Tutorial:
       - Installation: basic_tutorial/basic_tutorial.ipynb

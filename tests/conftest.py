@@ -114,6 +114,9 @@ def dummy_generator_config(model_selector):
         # Initialize the generator config (for MLP LANs)
         simulator_param_mapping = True
         while simulator_param_mapping:
+            # TODO: #35 use this after ssms v1.0.0 release
+            # generator_config = ssms.config.get_default_generator_config("lan")
+            # and delete the line below
             generator_config = deepcopy(ssms.config.data_generator_config["lan"])
             # Specify generative model (one from the list of included models mentioned above)
             generator_config["model"] = model_selector(mode=mode)
@@ -144,11 +147,16 @@ def dummy_generator_config(model_selector):
 def dummy_generator_config_simple_two_choices(model_selector):
     """Fixture providing a dummy model config for testing."""
 
+    # TODO: replace use of ssms.config.data_generator_config with ssms.config.get_default_generator_config
+    # after ssms v1.0.0 release
     def _dummy_generator_config_simple_two_choices(mode="random"):
         two_choices = False
         simulator_param_mapping = True
         while (not two_choices) or (simulator_param_mapping):
             # Initialize the generator config (for MLP LANs)
+            # TODO: use this after ssms v1.0.0 release
+            # generator_config = ssms.config.get_default_generator_config("lan")
+            # and delete the line below
             generator_config = deepcopy(ssms.config.data_generator_config["lan"])
             # Specify generative model (one from the list of included models mentioned above)
             generator_config["model"] = model_selector(mode=mode)

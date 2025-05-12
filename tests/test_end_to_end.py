@@ -243,9 +243,3 @@ def test_end_to_end_lan_mlp(
 
     # Compare the two outputs
     np.testing.assert_allclose(net_out, net_out_jitted, rtol=1e-4, atol=1e-4)
-
-    # def cleanup():
-    #     logger.info("Cleaning up test data")
-    #     clean_out_folder(folder=TEST_GENERATOR_CONSTANTS.TEST_FOLDER, dry_run=False)
-
-    # request.addfinalizer(cleanup)

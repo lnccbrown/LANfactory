@@ -1,30 +1,28 @@
-# from ast import Module
+"""This module contains the JaxMLP class and the ModelTrainerJaxMLP class which
+are used to train Jax based LANs and CPNs.
+"""
+
 import numpy as np
 import pandas as pd
 import pickle
+from time import time
 from functools import partial
 from frozendict import frozendict
-
-from lanfactory.utils import try_gen_folder
-from time import time
 
 import jax
 from jax import numpy as jnp
 from typing import Sequence, Callable, Any
-
 import flax
 from flax.training import train_state
 from flax import linen as nn
 import optax
 
+from lanfactory.utils import try_gen_folder
+
 try:
     import wandb
 except ImportError:
     print("wandb not available")
-
-"""This module contains the JaxMLP class and the ModelTrainerJaxMLP class which 
-   are used to train Jax based LANs and CPNs.
-"""
 
 
 def MLPJaxFactory(network_config: dict | str = {}, train: bool = True) -> "MLPJax":

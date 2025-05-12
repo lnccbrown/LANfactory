@@ -5,6 +5,7 @@ import pickle
 import warnings
 
 
+# TODO: this is now in ssms. Delete this file and import from ssms instead.
 def try_gen_folder(folder: str | None = None, allow_abs_path_folder_generation: bool = True) -> None:
     """Function to generate a folder from a string. If the folder already exists, it will not be generated.
 

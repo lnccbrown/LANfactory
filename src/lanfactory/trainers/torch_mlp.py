@@ -1,10 +1,12 @@
+"""This module contains the classes for training TorchMLP models."""
+
 import os
 import numpy as np
 import pandas as pd
 import pickle
-
-from lanfactory.utils import try_gen_folder
+from typing import Callable
 from time import time
+
 
 import torch
 import torch.nn as nn
@@ -12,14 +14,12 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
-from typing import Callable
+from lanfactory.utils import try_gen_folder
 
 try:
     import wandb
 except ImportError:
     print("wandb not available")
-
-"""This module contains the classes for training TorchMLP models."""
 
 
 class DatasetTorch(torch.utils.data.Dataset):
@@ -67,10 +67,6 @@ class DatasetTorch(torch.utils.data.Dataset):
         self.data_generator_config: str = "None"
 
         self.tmp_data: dict = {}
-        # self.file_shape_dict: dict[str, tuple[int, ...]] | None = None
-        # self.batches_per_file: int | None = None
-        # self.input_dim: int | None = None
-        # self.label_dim: int | None = None
 
         # get metadata from loading a test file
         self.__init_file_shape()
