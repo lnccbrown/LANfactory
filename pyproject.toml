@@ -74,7 +74,7 @@ log_cli = true
 log_cli_level = "INFO" # set minimum log level for console output
 testpaths = ["tests"]
 addopts = [
-    "--cov=.",
+    "--cov=src",
     "--cov-report=term-missing",
     "--cov-report=xml",
     "--exitfirst",
