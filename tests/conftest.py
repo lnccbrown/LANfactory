@@ -1,26 +1,28 @@
-import pytest
-import numpy as np
+import logging
+import multiprocessing
 import os
-import torch
-import jax
-import ssms
-from copy import deepcopy
 import random
 import time
-import lanfactory
-import multiprocessing
 import uuid
+from copy import deepcopy
+
+import jax
+import lanfactory
+import numpy as np
+import pytest
+import ssms
+import torch
+
 from .constants import (
     TEST_GENERATOR_CONSTANTS,
-    TEST_TRAIN_CONSTANTS_LAN,
-    TEST_TRAIN_CONSTANTS_CPN,
-    TEST_TRAIN_CONSTANTS_OPN,
-    TEST_NETWORK_CONSTANTS_LAN,
     TEST_NETWORK_CONSTANTS_CPN,
+    TEST_NETWORK_CONSTANTS_LAN,
     TEST_NETWORK_CONSTANTS_OPN,
+    TEST_TRAIN_CONSTANTS_CPN,
+    TEST_TRAIN_CONSTANTS_LAN,
+    TEST_TRAIN_CONSTANTS_OPN,
 )
 from .utils import clean_out_folder
-import logging
 
 multiprocessing.set_start_method("spawn", force=True)
 
