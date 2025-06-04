@@ -155,7 +155,6 @@ def main():
     CLI.add_argument("--log-level", type=str, default="DEBUG", help="Logging level")
 
     args = CLI.parse_args()
-    # breakpoint()
 
     # Set up logging
     logging.basicConfig(
@@ -170,6 +169,7 @@ def main():
 
     logger.info("Arguments passed:\n %s", pformat(vars(args)))
     n_workers = args.dl_workers if not args.dl_workers else min(12, psutil.cpu_count(logical=False) - 2)
+    n_workers = max(0, n_workers)
 
     logger.info("Number of workers we assign to the DataLoader: %d", n_workers)
 
