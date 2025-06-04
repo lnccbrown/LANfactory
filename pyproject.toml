@@ -44,7 +44,7 @@ keywords = [
 ]
 
 [project.optional-dependencies]
-viz = ["wandb>=0.19.6"]
+viz = ["wandb>=0.19.11"]
 
 [dependency-groups]
 dev = [
