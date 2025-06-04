@@ -37,12 +37,8 @@ def test_jax_train_cli_smoke(tmp_path):
     networks_path = tmp_path / "networks"
     networks_path.mkdir()
 
-    # Path to the CLI script
-    cli_path = Path(__file__).parent.parent.parent / "src" / "lanfactory" / "cli" / "jax_train.py"
-
     cmd = [
-        sys.executable,
-        str(cli_path),
+        "jaxtrain",
         "--config-path",
         config_path,
         "--training-data-folder",
