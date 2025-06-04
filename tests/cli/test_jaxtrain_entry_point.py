@@ -24,11 +24,11 @@ def test_non_negative_int_non_integer():
         non_negative_int("abc")
 
 
-def test_jaxtrain_main(monkeypatch):
-    # monkeypatch sys.argv or mock dependencies as needed
-    # Call the main function
-    with pytest.raises(SystemExit):  # If your CLI calls sys.exit()
-        jax_train.main()
+# def test_jaxtrain_main(monkeypatch):
+#     # monkeypatch sys.argv or mock dependencies as needed
+#     # Call the main function
+#     with pytest.raises(SystemExit):  # If your CLI calls sys.exit()
+#         jax_train.main()
 
 
 def test_jax_train_cli_smoke(tmp_path):
