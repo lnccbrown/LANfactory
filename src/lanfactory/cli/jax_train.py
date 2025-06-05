@@ -169,7 +169,7 @@ def main():
 
     logger.info("Arguments passed:\n %s", pformat(vars(args)))
     n_workers = args.dl_workers if args.dl_workers > 0 else min(12, psutil.cpu_count(logical=False) - 2)
-    n_workers = max(0, n_workers)
+    n_workers = max(1, n_workers)
 
     logger.info("Number of workers we assign to the DataLoader: %d", n_workers)
 
