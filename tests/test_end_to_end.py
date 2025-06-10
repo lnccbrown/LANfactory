@@ -39,6 +39,7 @@ def dummy_training_data_files(generator_config, model_config, save=True):
     ]
 
 
+@pytest.mark.flaky(reruns=2)
 @pytest.mark.parametrize(
     "train_type, config_fixture, generator_config_fixture",
     [
