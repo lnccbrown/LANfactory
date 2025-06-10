@@ -45,7 +45,7 @@ keywords = [
 ]
 
 [project.optional-dependencies]
-viz = ["wandb>=0.19.6"]
+viz = ["wandb>=0.19.11"]
 
 [dependency-groups]
 dev = [
@@ -76,7 +76,7 @@ log_cli = true
 log_cli_level = "INFO" # set minimum log level for console output
 testpaths = ["tests"]
 addopts = [
-    "--cov=.",
+    "--cov=src",
     "--cov-report=term-missing",
     "--cov-report=xml",
     "--exitfirst",
@@ -94,3 +94,6 @@ exclude = [
 
 # Add any additional configuration options for ruff
 line-length = 120
+
+[project.scripts]
+jaxtrain = "lanfactory.cli.jax_train:main"

@@ -2,22 +2,21 @@
 are used to train Jax based LANs and CPNs.
 """
 
-import numpy as np
-import pandas as pd
 import pickle
-from time import time
 from functools import partial
-from frozendict import frozendict
+from pathlib import Path
+from time import time
+from typing import Any, Callable, Sequence
 
-import jax
-from jax import numpy as jnp
-from typing import Sequence, Callable, Any
 import flax
-from flax.training import train_state
-from flax import linen as nn
+import jax
+import numpy as np
 import optax
-
-from lanfactory.utils import try_gen_folder
+import pandas as pd
+from flax import linen as nn
+from flax.training import train_state
+from frozendict import frozendict
+from jax import numpy as jnp
 
 try:
     import wandb
@@ -504,13 +503,12 @@ class ModelTrainerJaxMLP:
             flax.core.frozen_dict.FrozenDict:
                 The final state dictionary (model state).
         """
-        try_gen_folder(
-            folder=output_folder,
-            allow_abs_path_folder_generation=self.allow_abs_path_folder_generation,
-        )  # AF-TODO import folder
+        output_folder = Path(output_folder)
+        output_folder.mkdir(parents=True, exist_ok=True)
 
-        if wandb_on:
-            self.__try_wandb(wandb_project_id=wandb_project_id, file_id=output_file_id, run_id=run_id)
+        # TODO: make wandb functionality optional
+        # if wandb_on:
+        #     self.__try_wandb(wandb_project_id=wandb_project_id, file_id=output_file_id, run_id=run_id)
 
         # Identify network type:
         if self.model.train_output_type == "logprob":
@@ -568,10 +566,10 @@ class ModelTrainerJaxMLP:
         self.state = state
 
         # Saving
-        full_path = output_folder + "/" + run_id + "_" + network_type + "_" + output_file_id + "_"
+        full_path = str(output_folder / (run_id + "_" + network_type + "_" + output_file_id + "_"))
 
         if save_history or save_all:
-            training_history_path = full_path + "_jax_training_history.csv"
+            training_history_path = f"{full_path}_jax_training_history.csv"
             training_history.to_csv(training_history_path)
             print("Saving training history to: " + training_history_path)
 
@@ -580,19 +578,19 @@ class ModelTrainerJaxMLP:
             byte_output = flax.serialization.to_bytes(state.params)
 
             # Write to file
-            train_state_path = full_path + "_train_state.jax"
+            train_state_path = f"{full_path}_train_state.jax"
             file = open(train_state_path, "wb")
             file.write(byte_output)
             file.close()
             print("Saving model parameters to: " + train_state_path)
 
         if save_config or save_all:
-            config_path = full_path + "_train_config.pickle"
+            config_path = f"{full_path}_train_config.pickle"
             pickle.dump(self.train_config, open(config_path, "wb"))
             print("Saving training config to: " + config_path)
 
         if save_data_details or save_all:
-            data_details_path = full_path + "_data_details.pickle"
+            data_details_path = f"{full_path}_data_details.pickle"
             pickle.dump(
                 {
                     "train_data_generator_config": self.train_dl.dataset.data_generator_config,
