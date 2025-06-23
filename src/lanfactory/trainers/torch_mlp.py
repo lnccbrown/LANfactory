@@ -75,7 +75,13 @@ class DatasetTorch(torch.utils.data.Dataset):
         # Number of batches per epoch
         return int(
             np.floor(
-                (len(self.file_ids) * ((self.file_shape_dict["inputs"][0] // self.batch_size) * self.batch_size))
+                (
+                    len(self.file_ids)
+                    * (
+                        (self.file_shape_dict["inputs"][0] // self.batch_size)
+                        * self.batch_size
+                    )
+                )
                 / self.batch_size
             )
         )
@@ -102,7 +108,9 @@ class DatasetTorch(torch.utils.data.Dataset):
             size=self.tmp_data[self.features_key].shape[0],
             replace=True,
         )
-        self.tmp_data[self.features_key] = self.tmp_data[self.features_key][shuffle_idx, :]
+        self.tmp_data[self.features_key] = self.tmp_data[self.features_key][
+            shuffle_idx, :
+        ]
         self.tmp_data[self.label_key] = self.tmp_data[self.label_key][shuffle_idx]
         return
 
@@ -125,7 +133,9 @@ class DatasetTorch(torch.utils.data.Dataset):
             self.label_dim = 1
         return
 
-    def __data_generation(self, batch_ids: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
+    def __data_generation(
+        self, batch_ids: np.ndarray | None = None
+    ) -> tuple[np.ndarray, np.ndarray]:
         # Generates data containing batch_size samples
         X = self.tmp_data[self.features_key][batch_ids, :]
         if self.tmp_data[self.label_key].ndim == 1:
@@ -133,7 +143,10 @@ class DatasetTorch(torch.utils.data.Dataset):
         elif self.tmp_data[self.label_key].ndim == 2:
             y = self.tmp_data[self.label_key][batch_ids]
         else:
-            raise ValueError("Label data has unexpected shape: " + str(self.tmp_data[self.label_key].shape))
+            raise ValueError(
+                "Label data has unexpected shape: "
+                + str(self.tmp_data[self.label_key].shape)
+            )
 
         if self.label_lower_bound is not None:
             y[y < self.label_lower_bound] = self.label_lower_bound
@@ -195,7 +208,9 @@ class TorchMLP(nn.Module):
         # Build the network ------
         self.layers = nn.ModuleList()
 
-        self.layers.append(nn.Linear(input_shape, self.network_config["layer_sizes"][0]))
+        self.layers.append(
+            nn.Linear(input_shape, self.network_config["layer_sizes"][0])
+        )
         self.layers.append(self.activations[self.network_config["activations"][0]])
         print(self.network_config["activations"][0])
         for i in range(len(self.network_config["layer_sizes"]) - 1):
@@ -208,12 +223,19 @@ class TorchMLP(nn.Module):
             print(self.network_config["activations"][i + 1])
             if i < (len(self.network_config["layer_sizes"]) - 2):
                 # activations until last hidden layer are always applied
-                self.layers.append(self.activations[self.network_config["activations"][i + 1]])
-            elif len(self.network_config["activations"]) >= len(self.network_config["layer_sizes"]) - 1:
+                self.layers.append(
+                    self.activations[self.network_config["activations"][i + 1]]
+                )
+            elif (
+                len(self.network_config["activations"])
+                >= len(self.network_config["layer_sizes"]) - 1
+            ):
                 # apply output activation if supplied
                 # e.g. classification network
                 if self.network_config["activations"][i + 1] != "linear":
-                    self.layers.append(self.activations[self.network_config["activations"][i + 1]])
+                    self.layers.append(
+                        self.activations[self.network_config["activations"][i + 1]]
+                    )
                 else:
                     pass
             else:
@@ -280,7 +302,9 @@ class ModelTrainerTorchMLP:
                 Random seed.
         """
         torch.backends.cudnn.benchmark = True
-        self.dev: torch.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        self.dev: torch.device = (
+            torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        )
         print("Torch Device: ", self.dev)
         if train_config is None:
             ValueError("train_config is passed as None")
@@ -358,7 +382,10 @@ class ModelTrainerTorchMLP:
         # Add scheduler if scheduler option supplied
         if self.train_config["lr_scheduler"] is not None:
             if self.train_config["lr_scheduler"] == "reduce_on_plateau":
-                self.scheduler: optim.lr_scheduler._LRScheduler = optim.lr_scheduler.ReduceLROnPlateau(
+                self.scheduler: (
+                    optim.lr_scheduler.ReduceLROnPlateau
+                    | optim.lr_scheduler.ExponentialLR
+                ) = optim.lr_scheduler.ReduceLROnPlateau(
                     self.optimizer,
                     mode="min",
                     factor=(
@@ -373,7 +400,8 @@ class ModelTrainerTorchMLP:
                     ),
                     threshold=(
                         self.train_config["lr_scheduler_params"]["threshold"]
-                        if "threshold" in self.train_config["lr_scheduler_params"].keys()
+                        if "threshold"
+                        in self.train_config["lr_scheduler_params"].keys()
                         else 0.001
                     ),
                     threshold_mode="rel",
@@ -383,14 +411,12 @@ class ModelTrainerTorchMLP:
                         if "min_lr" in self.train_config["lr_scheduler_params"].keys()
                         else 0.00000001
                     ),
-                    verbose=(
-                        self.train_config["lr_scheduler_params"]["verbose"]
-                        if "verbose" in self.train_config["lr_scheduler_params"].keys()
-                        else True
-                    ),
                 )
             elif self.train_config["lr_scheduler"] == "multiply":
-                self.scheduler: optim.lr_scheduler._LRScheduler = optim.lr_scheduler.ExponentialLR(
+                self.scheduler: (
+                    optim.lr_scheduler.ExponentialLR
+                    | optim.lr_scheduler.ReduceLROnPlateau
+                ) = optim.lr_scheduler.ExponentialLR(
                     self.optimizer,
                     gamma=(
                         self.train_config["lr_scheduler_params"]["factor"]
@@ -398,11 +424,6 @@ class ModelTrainerTorchMLP:
                         else 0.1
                     ),
                     last_epoch=-1,
-                    verbose=(
-                        self.train_config["lr_scheduler_params"]["verbose"]
-                        if "verbose" in self.train_config["lr_scheduler_params"].keys()
-                        else True
-                    ),
                 )
 
     def __load_weights(self) -> None:
@@ -460,20 +481,9 @@ class ModelTrainerTorchMLP:
         )  # AF-TODO import folder
 
         if wandb_on:
-            self.__try_wandb(wandb_project_id=wandb_project_id, file_id=output_file_id, run_id=run_id)
-
-        # Identify network type:
-        # if self.model.train_output_type == "logprob":
-        #     network_type = "lan"
-        # elif self.model.train_output_type == "logits":
-        #     network_type = "cpn"
-        # else:
-        #     network_type = "unknown"
-        #     print(
-        #         'Model type identified as "unknown" because the '
-        #         "training_output_type attribute"
-        #         + ' of the supplied jax model is neither "logprob", nor "logits"'
-        #     )
+            self.__try_wandb(
+                wandb_project_id=wandb_project_id, file_id=output_file_id, run_id=run_id
+            )
 
         training_history: pd.DataFrame = pd.DataFrame(
             np.zeros((self.train_config["n_epochs"], 2)), columns=["epoch", "val_loss"]
@@ -483,7 +493,6 @@ class ModelTrainerTorchMLP:
             try:
                 wandb.watch(self.model, criterion=None, log="all", log_freq=1000)
             except Exception as e:
-                print("passing 4")
                 print(e)
 
         step_cnt: int = 0
@@ -520,17 +529,26 @@ class ModelTrainerTorchMLP:
                 step_cnt += 1
 
             print(
-                "Epoch took {} / {},  took {} seconds".format(epoch, self.train_config["n_epochs"], time() - epoch_s_t)
+                "Epoch took {} / {},  took {} seconds".format(
+                    epoch, self.train_config["n_epochs"], time() - epoch_s_t
+                )
             )
 
             # Start validation
             # self.model.eval()
             with torch.no_grad():
                 val_loss: torch.Tensor = (
-                    sum(self.loss_fun(self.model(xb.to(self.dev)), yb.to(self.dev)) for xb, yb in self.valid_dl)
+                    sum(
+                        self.loss_fun(self.model(xb.to(self.dev)), yb.to(self.dev))
+                        for xb, yb in self.valid_dl
+                    )
                     / self.valid_dl.__len__()
                 )
-            print("epoch {} / {}, validation_loss: {:2.4}".format(epoch, self.train_config["n_epochs"], val_loss))
+            print(
+                "epoch {} / {}, validation_loss: {:2.4}".format(
+                    epoch, self.train_config["n_epochs"], val_loss
+                )
+            )
 
             # Scheduler step:
             if self.train_config["lr_scheduler"] is not None:
@@ -545,24 +563,24 @@ class ModelTrainerTorchMLP:
             if wandb_on:
                 try:
                     wandb.log({"loss": loss, "val_loss": val_loss}, step=step_cnt)
-                # print('logged loss')
                 except Exception as e:
-                    print("passing 5")
                     print(e)
 
         # Saving
-        full_path: str = os.path.join(output_folder, f"{output_file_id}_{self.model.network_type}_{run_id}")
+        full_path: str = os.path.join(
+            output_folder, f"{output_file_id}_{self.model.network_type}_{run_id}"
+        )
 
         if save_history or save_all:
             print("Saving training history")
-            training_history_path: str = full_path + "_torch_training_history.csv"
+            training_history_path: str = full_path + "_training_history.csv"
             pd.DataFrame(training_history).to_csv(training_history_path)
             print("Saving training history to: " + training_history_path)
             self.file_path_training_history: str = training_history_path
 
         if save_model or save_all:
             print("Saving model state dict")
-            train_state_path: str = full_path + "_train_state_dict_torch.pt"
+            train_state_path: str = full_path + "_train_state_dict.pt"
             torch.save(
                 self.model.state_dict(),
                 train_state_path,
@@ -593,7 +611,7 @@ class ModelTrainerTorchMLP:
 
         if save_onnx or save_all:
             print("Saving model to ONNX format")
-            onnx_path: str = full_path + "_torch_model.onnx"
+            onnx_path: str = full_path + "_model.onnx"
             # Put model in eval mode
             self.model.eval()
             torch.onnx.export(
@@ -610,7 +628,6 @@ class ModelTrainerTorchMLP:
                 wandb.finish()
                 print("wandb uploaded")
             except Exception as e:
-                print("passing 6")
                 print(e)
 
         print("Training finished successfully...")
@@ -638,12 +655,21 @@ class LoadTorchMLPInfer:
         network_config: dict | str | None = None,
         input_dim: int | None = None,
     ) -> None:
-        torch.backends.cudnn.benchmark = True
-        self.dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
+        if input_dim is None:
+            raise ValueError("input_dim is required")
+        if model_file_path is None:
+            raise ValueError("model_file_path is required")
+
         self.model_file_path = model_file_path
+        torch.backends.cudnn.benchmark = True
+        self.dev = (
+            torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        )
 
         if isinstance(network_config, str):
-            self.network_config = pickle.load(open(network_config, "rb"))
+            with open(network_config, "rb") as f:
+                self.network_config = pickle.load(f)
         elif isinstance(network_config, dict):
             self.network_config = network_config
         else:
@@ -657,7 +683,9 @@ class LoadTorchMLPInfer:
             generative_model_id=None,
         )
         if not torch.cuda.is_available():
-            self.net.load_state_dict(torch.load(self.model_file_path, map_location=torch.device("cpu")))
+            self.net.load_state_dict(
+                torch.load(self.model_file_path, map_location=torch.device("cpu"))
+            )
         else:
             self.net.load_state_dict(torch.load(self.model_file_path))
         self.net.to(self.dev)
@@ -714,7 +742,9 @@ class LoadTorchMLP:
         network_config: dict | str,
         input_dim: int,
     ) -> None:
-        self.dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        self.dev = (
+            torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        )
         self.model_file_path = model_file_path
 
         # Load network config from pickle file if string path provided
@@ -732,7 +762,9 @@ class LoadTorchMLP:
             generative_model_id=None,
         )
         if not torch.cuda.is_available():
-            self.net.load_state_dict(torch.load(self.model_file_path, map_location=torch.device("cpu")))
+            self.net.load_state_dict(
+                torch.load(self.model_file_path, map_location=torch.device("cpu"))
+            )
         else:
             self.net.load_state_dict(torch.load(self.model_file_path))
         self.net.to(self.dev)
@@ -743,4 +775,17 @@ class LoadTorchMLP:
 
     @torch.no_grad()
     def predict_on_batch(self, x: np.ndarray | None = None) -> np.ndarray:
+        """Makes predictions on a batch of data.
+
+        Args:
+            x: Input data as numpy array.
+
+        Returns:
+            numpy.ndarray: Model predictions as numpy array.
+
+        Note:
+            Input data is automatically converted to torch tensor and moved to the
+            appropriate device (CPU/GPU). Output is converted back to numpy array
+            on CPU.
+        """
         return self.net(torch.from_numpy(x).to(self.dev)).cpu().numpy()

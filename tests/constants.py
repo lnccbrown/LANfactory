@@ -4,6 +4,24 @@ from dataclasses import dataclass, field
 
 
 @dataclass
+class ModelFolderConstantsJAX:
+    """Model folder constants."""
+
+    LAN_MODEL_FOLDER: str = "tests/test_data/jax_models/lan"
+    CPN_MODEL_FOLDER: str = "tests/test_data/jax_models/cpn"
+    OPN_MODEL_FOLDER: str = "tests/test_data/jax_models/opn"
+
+
+@dataclass
+class ModelFolderConstantsTorch:
+    """Model folder constants."""
+
+    LAN_MODEL_FOLDER: str = "tests/test_data/torch_models/lan"
+    CPN_MODEL_FOLDER: str = "tests/test_data/torch_models/cpn"
+    OPN_MODEL_FOLDER: str = "tests/test_data/torch_models/opn"
+
+
+@dataclass
 class TestGeneratorConstants:
     """Test configuration constants."""
 
@@ -14,9 +32,6 @@ class TestGeneratorConstants:
     N_SAMPLES_BY_PARAMETER_SET: int = 2000
     TEST_FOLDER: str = "tests/test_data"
     OUT_FOLDER: str = "tests/test_data/lan_mlp/training_data"
-    LAN_MODEL_FOLDER: str = "tests/test_data/jax_models/lan"
-    CPN_MODEL_FOLDER: str = "tests/test_data/jax_models/cpn"
-    OPN_MODEL_FOLDER: str = "tests/test_data/jax_models/opn"
     N_DATA_FILES: int = 2
     DEVICE: str = "cpu"
 
@@ -74,7 +89,9 @@ class TestNetworkConstantsLAN:
     """Test network constants for LANs."""
 
     LAYER_SIZES: list = field(default_factory=lambda: [100, 100, 100, 1])
-    ACTIVATIONS: list = field(default_factory=lambda: ["tanh", "tanh", "tanh", "linear"])
+    ACTIVATIONS: list = field(
+        default_factory=lambda: ["tanh", "tanh", "tanh", "linear"]
+    )
     TRAIN_OUTPUT_TYPE: str = "logprob"
 
 
@@ -97,6 +114,8 @@ class TestNetworkConstantsOPN:
 
 
 TEST_GENERATOR_CONSTANTS = TestGeneratorConstants()
+TEST_MODEL_FOLDER_CONSTANTS_JAX = ModelFolderConstantsJAX()
+TEST_MODEL_FOLDER_CONSTANTS_TORCH = ModelFolderConstantsTorch()
 TEST_TRAIN_CONSTANTS_LAN = TestTrainConstantsLAN()
 TEST_TRAIN_CONSTANTS_CPN = TestTrainConstantsCPN()
 TEST_TRAIN_CONSTANTS_OPN = TestTrainConstantsOPN()
