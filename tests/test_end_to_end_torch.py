@@ -171,9 +171,8 @@ def test_end_to_end_lan_mlp(
         run_id="runid",
         wandb_on=False,
         wandb_project_id="torch",
-        save_data_details=True,
         verbose=1,
-        save_all=True,
+        save_outputs=True,
     )
 
     network = lanfactory.trainers.LoadTorchMLPInfer(
@@ -185,7 +184,7 @@ def test_end_to_end_lan_mlp(
         input_dim=torch_training_dataset.input_dim,
     )
 
-    # Make input metric
+    # Make input matrix
     logger.info("Model config: %s \n \n \n", model_config)
     theta = deepcopy(ssms.config.model_config[model_config["name"]]["default_params"])
     logger.info("Theta: %s \n \n \n", theta)
