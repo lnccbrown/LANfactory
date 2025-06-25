@@ -156,7 +156,7 @@ class MLPJax(nn.Module):
 
         if file_path is None:
             raise ValueError(
-                "file_path argument needs to be speficied! "
+                "file_path argument needs to be specified! "
                 + "(Currently Set to its default: None)"
             )
 
@@ -560,7 +560,7 @@ class ModelTrainerJaxMLP:
         if not isinstance(self.seed, int):
             raise ValueError(
                 "seed argument is not an integer, "
-                + "please specift a valid seed to make this code reproducible!"
+                + "please specify a valid seed to make this code reproducible!"
             )
         else:
             rng = jax.random.PRNGKey(self.seed)

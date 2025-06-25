@@ -77,18 +77,10 @@ class DatasetTorch(torch.utils.data.Dataset):
 
     def __len__(self) -> int:
         # Number of batches per epoch
-        return int(
-            np.floor(
-                (
-                    len(self.file_ids)
-                    * (
-                        (self.file_shape_dict["inputs"][0] // self.batch_size)
-                        * self.batch_size
-                    )
-                )
-                / self.batch_size
-            )
-        )
+        return (
+            len(self.file_ids)
+            * ((self.file_shape_dict["inputs"][0] // self.batch_size) * self.batch_size)
+        ) // self.batch_size
 
     def __getitem__(self, index: int) -> tuple[np.ndarray, np.ndarray]:
         # Check if it is time to load the next file
@@ -309,7 +301,7 @@ class ModelTrainerTorchMLP:
         self.dev: torch.device = (
             torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         )
-        print("Torch Device: ", self.dev)
+        logger.info(f"Torch Device: {self.dev}")
         if train_config is None:
             raise ValueError("train_config is passed as None")
         elif isinstance(train_config, str | Path):
