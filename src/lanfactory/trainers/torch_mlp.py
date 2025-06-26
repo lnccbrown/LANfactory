@@ -459,18 +459,8 @@ class ModelTrainerTorchMLP:
                 Whether to use wandb.
             wandb_project_id (str):
                 Wandb project ID.
-            save_history (bool):
-                Whether to save the training history.
-            save_model (bool):
-                Whether to save the model.
-            save_config (bool):
-                Whether to save the training configuration.
-            save_onnx (bool):
-                Whether to save the model to ONNX format.
-            save_all (bool):
-                Whether to save all.
-            save_data_details (bool):
-                Whether to save the data details.
+            save_outputs (bool):
+                Whether to save all outputs.
             verbose (int):
                 Verbosity level.
         """

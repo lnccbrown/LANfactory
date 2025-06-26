@@ -39,9 +39,12 @@ def _make_train_network_configs(
 ):
     # Load basic configs and update with provided arguments
     train_config = lanfactory.config.train_config_mlp
-    train_config.update(train_arg_dict)
+    if train_arg_dict is not None:
+        train_config.update(train_arg_dict)
+
     network_config = lanfactory.config.network_config_mlp
-    network_config.update(network_arg_dict)
+    if network_arg_dict is not None:
+        network_config.update(network_arg_dict)
 
     config_dict = {
         "network_config": network_config,
@@ -65,15 +68,24 @@ def _make_train_network_configs(
 
 
 def _get_train_network_config(yaml_config_path: str | Path | None = None, net_index=0):
-    basic_config = yaml.safe_load(open(yaml_config_path, "rb"))
-    network_type = basic_config["NETWORK_TYPE"]
+    if yaml_config_path is not None:
+        basic_config = yaml.safe_load(open(yaml_config_path, "rb"))
+        network_type = basic_config["NETWORK_TYPE"]
+    else:
+        raise ValueError("No YAML config path provided")
 
     # Train output type specifies what the network output node
     # 'represents' (e.g. log-probabilities / logprob, logits, probabilities / prob)
 
     # Specifically for cpn, we train on logit outputs for numerical stability, then transform outputs
     # to log-probabilities when running the model in evaluation / inference mode
-    train_output_type_dict = {"lan": "logprob", "cpn": "logits", "opn": "logits", "gonogo": "logits", "cpn_bce": "prob"}
+    train_output_type_dict = {
+        "lan": "logprob",
+        "cpn": "logits",
+        "opn": "logits",
+        "gonogo": "logits",
+        "cpn_bce": "prob",
+    }
 
     # Last layer activation depending on train output type
     output_layer_dict = {"logits": "linear", "logprob": "linear", "prob": "sigmoid"}
@@ -101,7 +113,10 @@ def _get_train_network_config(yaml_config_path: str | Path | None = None, net_in
     # Number is set to 10000 here (an upper bound), for training on all available data (usually roughly 300 files, but has never been more than 1000)
     # For numerical experiments, one may want to artificially constraint the number of training files to teest the impact on network performance
 
-    network_arg_dict = {"train_output_type": train_output_type_dict[network_type], "network_type": network_type}
+    network_arg_dict = {
+        "train_output_type": train_output_type_dict[network_type],
+        "network_type": network_type,
+    }
 
     network_arg_dict["layer_sizes"] = layer_sizes
     network_arg_dict["activations"] = activations
@@ -125,7 +140,6 @@ def _get_train_network_config(yaml_config_path: str | Path | None = None, net_in
         "learning_rate": basic_config["LEARNING_RATE"],
         "features_key": data_key_dict[network_type]["features_key"],
         "label_key": data_key_dict[network_type]["label_key"],
-        "save_history": True,
         "lr_scheduler": basic_config["LR_SCHEDULER"],
         "lr_scheduler_params": basic_config["LR_SCHEDULER_PARAMS"],
     }
@@ -145,13 +159,27 @@ def _get_train_network_config(yaml_config_path: str | Path | None = None, net_in
 
 def main():
     CLI = argparse.ArgumentParser()
-    CLI.add_argument("--config-path", type=Path, default=None, help="Path to the YAML config file")
-    CLI.add_argument("--training-data-folder", type=Path, default=None, help="Path to the training data folder")
+    CLI.add_argument(
+        "--config-path", type=Path, default=None, help="Path to the YAML config file"
+    )
+    CLI.add_argument(
+        "--training-data-folder",
+        type=Path,
+        default=None,
+        help="Path to the training data folder",
+    )
     CLI.add_argument(
         "--network-id", type=non_negative_int, default=0, help="Network ID to train"
     )  # can it be named net_index as used below?
-    CLI.add_argument("--dl-workers", type=non_negative_int, default=1, help="Number of workers for DataLoader")
-    CLI.add_argument("--networks-path-base", type=Path, default=None, help="Base path for networks")
+    CLI.add_argument(
+        "--dl-workers",
+        type=non_negative_int,
+        default=1,
+        help="Number of workers for DataLoader",
+    )
+    CLI.add_argument(
+        "--networks-path-base", type=Path, default=None, help="Base path for networks"
+    )
     CLI.add_argument("--log-level", type=str, default="DEBUG", help="Logging level")
 
     args = CLI.parse_args()
@@ -168,13 +196,19 @@ def main():
     logger = logging.getLogger(__name__)
 
     logger.info("Arguments passed:\n %s", pformat(vars(args)))
-    n_workers = args.dl_workers if args.dl_workers > 0 else min(12, psutil.cpu_count(logical=False) - 2)
+    n_workers = (
+        args.dl_workers
+        if args.dl_workers > 0
+        else min(12, psutil.cpu_count(logical=False) - 2)
+    )
     n_workers = max(1, n_workers)
 
     logger.info("Number of workers we assign to the DataLoader: %d", n_workers)
 
     # Load config dict (new)
-    config_dict = _get_train_network_config(yaml_config_path=args.config_path, net_index=args.network_id)
+    config_dict = _get_train_network_config(
+        yaml_config_path=args.config_path, net_index=args.network_id
+    )
 
     logger.info("config dict keys: %s", config_dict.keys())
     train_config = config_dict["config_dict"]["train_config"]
@@ -190,20 +224,28 @@ def main():
     logger.info("TRAINING DATA FILES: %s", file_list)
 
     # TODO: this is weird. Improve this later
-    valid_file_list = [str(args.training_data_folder) + "/" + file_ for file_ in file_list]
+    valid_file_list = [
+        str(args.training_data_folder) + "/" + file_ for file_ in file_list
+    ]
 
     logger.info("VALID FILE LIST: %s", valid_file_list)
 
     random.shuffle(valid_file_list)
     n_training_files = min(len(valid_file_list), train_config["n_training_files"])
-    val_idx_cutoff = int(config_dict["config_dict"]["train_val_split"] * n_training_files)
+    val_idx_cutoff = int(
+        config_dict["config_dict"]["train_val_split"] * n_training_files
+    )
 
     logger.info("NUMBER OF TRAINING FILES FOUND: %d", len(valid_file_list))
     logger.info("NUMBER OF TRAINING FILES USED: %d", n_training_files)
 
     # Check if gpu is available
     backend = jax.default_backend()
-    batch_size = train_config["gpu_batch_size"] if backend == "gpu" else train_config["cpu_batch_size"]
+    batch_size = (
+        train_config["gpu_batch_size"]
+        if backend == "gpu"
+        else train_config["cpu_batch_size"]
+    )
     train_config["train_batch_size"] = batch_size
 
     logger.info("CUDA devices: %s", jax.devices())
@@ -219,7 +261,11 @@ def main():
     )
 
     dataloader_train = torch.utils.data.DataLoader(
-        train_dataset, shuffle=train_config["shuffle_files"], batch_size=None, num_workers=n_workers, pin_memory=True
+        train_dataset,
+        shuffle=train_config["shuffle_files"],
+        batch_size=None,
+        num_workers=n_workers,
+        pin_memory=True,
     )
 
     val_dataset = lanfactory.trainers.DatasetTorch(
@@ -231,7 +277,11 @@ def main():
     )
 
     dataloader_val = torch.utils.data.DataLoader(
-        val_dataset, shuffle=train_config["shuffle_files"], batch_size=None, num_workers=n_workers, pin_memory=True
+        val_dataset,
+        shuffle=train_config["shuffle_files"],
+        batch_size=None,
+        num_workers=n_workers,
+        pin_memory=True,
     )
 
     # Load network
@@ -256,7 +306,9 @@ def main():
     wandb_project_id = extra_config["model"] + "_" + network_config["network_type"]
 
     # save network config for this run
-    networks_path = args.networks_path_base / network_config["network_type"] / extra_config["model"]
+    networks_path = (
+        args.networks_path_base / network_config["network_type"] / extra_config["model"]
+    )
     networks_path.mkdir(parents=True, exist_ok=True)
 
     # try_gen_folder(folder=networks_path, allow_abs_path_folder_generation=True)
@@ -279,13 +331,12 @@ def main():
 
     # Train model
     model_trainer.train_and_evaluate(
-        save_history=train_config["save_history"],
         output_folder=networks_path,
         output_file_id=extra_config["model"],
         run_id=run_id,
         wandb_on=False,  # TODO: make this optional
         wandb_project_id=wandb_project_id,  # TODO: make this optional
-        save_all=True,
+        save_outputs=True,
         verbose=1,
     )
 
