@@ -11,7 +11,6 @@ from .constants import (
     TEST_MODEL_FOLDER_CONSTANTS_TORCH,
 )
 
-# import logger
 import logging
 
 logger = logging.getLogger(__name__)
@@ -190,7 +189,9 @@ def test_end_to_end_lan_mlp(
     logger.info("Theta: %s \n \n \n", theta)
 
     if train_type == "lan":
-        input_mat = torch.from_numpy(np.zeros((LEN_FORWARD_PASS_DUMMY, len(theta) + 2)).astype(np.float32))
+        input_mat = torch.from_numpy(
+            np.zeros((LEN_FORWARD_PASS_DUMMY, len(theta) + 2)).astype(np.float32)
+        )
 
         # Add rt
         input_mat[:, len(theta)] = torch.from_numpy(
@@ -212,12 +213,16 @@ def test_end_to_end_lan_mlp(
             ).astype(np.float32)
         )
     else:
-        input_mat = torch.from_numpy(np.zeros((LEN_FORWARD_PASS_DUMMY, len(theta))).astype(np.float32))
+        input_mat = torch.from_numpy(
+            np.zeros((LEN_FORWARD_PASS_DUMMY, len(theta))).astype(np.float32)
+        )
 
     logger.info("Input mat shape: %s \n \n \n", input_mat.shape)
 
     for i, param in enumerate(theta):
-        input_mat[:, i] = torch.from_numpy((np.ones(LEN_FORWARD_PASS_DUMMY) * param).astype(np.float32))
+        input_mat[:, i] = torch.from_numpy(
+            (np.ones(LEN_FORWARD_PASS_DUMMY) * param).astype(np.float32)
+        )
 
     logger.info("Input mat shape: %s \n \n \n", input_mat.shape)
 
