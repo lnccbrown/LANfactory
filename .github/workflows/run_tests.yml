@@ -41,7 +41,7 @@ jobs:
           PIP_NO_CACHE_DIR: "1"
 
       - name: Specifically install ssm-simulators
-        run: uv pip install ssm-simulators==0.8.3
+        run: uv pip install "ssm-simulators==0.8.3"
 
       - name: Run pytest
         run: uv run pytest
