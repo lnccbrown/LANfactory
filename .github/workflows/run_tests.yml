@@ -37,7 +37,7 @@ jobs:
       - name: Install package
         run: uv sync --all-groups --reinstall
         env:
-          UV_CACHE_DIR: ""
+          # UV_CACHE_DIR: ""
           PIP_NO_CACHE_DIR: "1"
 
       - name: Run pytest
