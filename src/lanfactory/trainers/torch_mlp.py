@@ -78,8 +78,7 @@ class DatasetTorch(torch.utils.data.Dataset):
     def __len__(self) -> int:
         # Number of batches per epoch
         return (
-            len(self.file_ids)
-            * ((self.file_shape_dict["inputs"][0] // self.batch_size) * self.batch_size)
+            len(self.file_ids) * ((self.file_shape_dict["inputs"][0] // self.batch_size) * self.batch_size)
         ) // self.batch_size
 
     def __getitem__(self, index: int) -> tuple[np.ndarray, np.ndarray]:
@@ -104,9 +103,7 @@ class DatasetTorch(torch.utils.data.Dataset):
             size=self.tmp_data[self.features_key].shape[0],
             replace=True,
         )
-        self.tmp_data[self.features_key] = self.tmp_data[self.features_key][
-            shuffle_idx, :
-        ]
+        self.tmp_data[self.features_key] = self.tmp_data[self.features_key][shuffle_idx, :]
         self.tmp_data[self.label_key] = self.tmp_data[self.label_key][shuffle_idx]
         return
 
@@ -129,9 +126,7 @@ class DatasetTorch(torch.utils.data.Dataset):
             self.label_dim = 1
         return
 
-    def __data_generation(
-        self, batch_ids: np.ndarray | None = None
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def __data_generation(self, batch_ids: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
         # Generates data containing batch_size samples
         X = self.tmp_data[self.features_key][batch_ids, :]
         if self.tmp_data[self.label_key].ndim == 1:
@@ -139,10 +134,7 @@ class DatasetTorch(torch.utils.data.Dataset):
         elif self.tmp_data[self.label_key].ndim == 2:
             y = self.tmp_data[self.label_key][batch_ids]
         else:
-            raise ValueError(
-                "Label data has unexpected shape: "
-                + str(self.tmp_data[self.label_key].shape)
-            )
+            raise ValueError("Label data has unexpected shape: " + str(self.tmp_data[self.label_key].shape))
 
         if self.label_lower_bound is not None:
             y[y < self.label_lower_bound] = self.label_lower_bound
@@ -204,9 +196,7 @@ class TorchMLP(nn.Module):
         # Build the network ------
         self.layers = nn.ModuleList()
 
-        self.layers.append(
-            nn.Linear(input_shape, self.network_config["layer_sizes"][0])
-        )
+        self.layers.append(nn.Linear(input_shape, self.network_config["layer_sizes"][0]))
         self.layers.append(self.activations[self.network_config["activations"][0]])
         print(self.network_config["activations"][0])
         for i in range(len(self.network_config["layer_sizes"]) - 1):
@@ -219,19 +209,12 @@ class TorchMLP(nn.Module):
             print(self.network_config["activations"][i + 1])
             if i < (len(self.network_config["layer_sizes"]) - 2):
                 # activations until last hidden layer are always applied
-                self.layers.append(
-                    self.activations[self.network_config["activations"][i + 1]]
-                )
-            elif (
-                len(self.network_config["activations"])
-                >= len(self.network_config["layer_sizes"]) - 1
-            ):
+                self.layers.append(self.activations[self.network_config["activations"][i + 1]])
+            elif len(self.network_config["activations"]) >= len(self.network_config["layer_sizes"]) - 1:
                 # apply output activation if supplied
                 # e.g. classification network
                 if self.network_config["activations"][i + 1] != "linear":
-                    self.layers.append(
-                        self.activations[self.network_config["activations"][i + 1]]
-                    )
+                    self.layers.append(self.activations[self.network_config["activations"][i + 1]])
                 else:
                     pass
             else:
@@ -298,9 +281,7 @@ class ModelTrainerTorchMLP:
                 Random seed.
         """
         torch.backends.cudnn.benchmark = True
-        self.dev: torch.device = (
-            torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-        )
+        self.dev: torch.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         logger.info(f"Torch Device: {self.dev}")
         if train_config is None:
             raise ValueError("train_config is passed as None")
@@ -310,9 +291,7 @@ class ModelTrainerTorchMLP:
                 logger.info("Trying to load string as path to pickle file: ")
                 self.train_config: dict = pickle.load(open(train_config, "rb"))
             except:
-                logger.error(
-                    f"Unexpected error: {train_config} when trying to load training config from file"
-                )
+                logger.error(f"Unexpected error: {train_config} when trying to load training config from file")
         elif isinstance(train_config, dict):
             print("train_config is passed as dictionary: \n")
             print(train_config)
@@ -331,11 +310,7 @@ class ModelTrainerTorchMLP:
             weight_decay=self.train_config["weight_decay"],
             lr=self.train_config["learning_rate"],
         )
-        self.scheduler: (
-            optim.lr_scheduler.ExponentialLR
-            | optim.lr_scheduler.ReduceLROnPlateau
-            | None
-        ) = None
+        self.scheduler: optim.lr_scheduler.ExponentialLR | optim.lr_scheduler.ReduceLROnPlateau | None = None
 
         # Override default training parameters with user-provided values
         self.__get_loss()
@@ -378,9 +353,7 @@ class ModelTrainerTorchMLP:
 
     def __get_optimizer(self) -> None:
         if self.train_config["optimizer"] not in ["adam", "sgd"]:
-            raise ValueError(
-                f"Optimizer {self.train_config['optimizer']} not supported yet"
-            )
+            raise ValueError(f"Optimizer {self.train_config['optimizer']} not supported yet")
         elif self.train_config["optimizer"] == "sgd":
             self.optimizer = optim.SGD(
                 self.model.parameters(),
@@ -407,8 +380,7 @@ class ModelTrainerTorchMLP:
                     ),
                     threshold=(
                         self.train_config["lr_scheduler_params"]["threshold"]
-                        if "threshold"
-                        in self.train_config["lr_scheduler_params"].keys()
+                        if "threshold" in self.train_config["lr_scheduler_params"].keys()
                         else 0.001
                     ),
                     threshold_mode="rel",
@@ -494,7 +466,6 @@ class ModelTrainerTorchMLP:
 
             # Training loop
             for xb, yb in self.train_dl:
-
                 # Shift data to device
                 if self.pin_memory and str(self.dev) == "cuda":
                     xb, yb = xb.cuda(non_blocking=True), yb.cuda(non_blocking=True)
@@ -516,21 +487,16 @@ class ModelTrainerTorchMLP:
                 cnt += 1
                 step_cnt += 1
 
-            print(
-                f"Epoch took {epoch} / {self.train_config['n_epochs']}, took {time() - epoch_s_t} seconds"
-            )
+            print(f"Epoch took {epoch} / {self.train_config['n_epochs']}, took {time() - epoch_s_t} seconds")
 
             # Start validation
             with torch.no_grad():
                 val_loss: torch.Tensor = sum(
-                    self.loss_fun(self.model(xb.to(self.dev)), yb.to(self.dev))
-                    for xb, yb in self.valid_dl
+                    self.loss_fun(self.model(xb.to(self.dev)), yb.to(self.dev)) for xb, yb in self.valid_dl
                 ) / len(self.valid_dl)
 
             # Print validation loss
-            print(
-                f"epoch {epoch} / {self.train_config['n_epochs']}, validation_loss: {val_loss:2.4}"
-            )
+            print(f"epoch {epoch} / {self.train_config['n_epochs']}, validation_loss: {val_loss:2.4}")
 
             # Scheduler step:
             if self.train_config["lr_scheduler"] is not None:
@@ -546,28 +512,18 @@ class ModelTrainerTorchMLP:
             self._log_wandb(wandb_on, loss, val_loss, step_cnt)
 
         if save_outputs:
-            partial_path_str = str(
-                output_folder / f"{output_file_id}_{self.model.network_type}_{run_id}"
-            )
+            partial_path_str = str(output_folder / f"{output_file_id}_{self.model.network_type}_{run_id}")
 
-            self._save_training_history(
-                training_history, partial_path_str + "_training_history.csv"
-            )
+            self._save_training_history(training_history, partial_path_str + "_training_history.csv")
             self._save_model(self.model, partial_path_str + "_train_state_dict.pt")
-            self._save_config(
-                self.train_config, partial_path_str + "_train_config.pickle"
-            )
-            self._save_data_details(
-                self.train_dl, self.valid_dl, partial_path_str + "_data_details.pickle"
-            )
+            self._save_config(self.train_config, partial_path_str + "_train_config.pickle")
+            self._save_data_details(self.train_dl, self.valid_dl, partial_path_str + "_data_details.pickle")
             self._save_onnx(self.model, self.dev, partial_path_str + "_model.onnx")
 
         self._close_wandb(wandb_on)
         logger.info("Training finished successfully...")
 
-    def _log_training_progress(
-        self, epoch: int, cnt: int, loss: torch.Tensor, verbose: int
-    ) -> None:
+    def _log_training_progress(self, epoch: int, cnt: int, loss: torch.Tensor, verbose: int) -> None:
         """Log training progress based on verbosity level."""
         if verbose == 0:
             return
@@ -599,9 +555,7 @@ class ModelTrainerTorchMLP:
             logger.info("wandb not available, nothing to close")
 
     @staticmethod
-    def _log_wandb(
-        wandb_on: bool, loss: torch.Tensor, val_loss: torch.Tensor, step_cnt: int
-    ) -> None:
+    def _log_wandb(wandb_on: bool, loss: torch.Tensor, val_loss: torch.Tensor, step_cnt: int) -> None:
         if wandb_on:
             try:
                 wandb.log({"loss": loss, "val_loss": val_loss}, step=step_cnt)
@@ -628,9 +582,7 @@ class ModelTrainerTorchMLP:
         logger.info(f"Saving config to: {path}")
 
     @staticmethod
-    def _save_data_details(
-        train_dl: DataLoader, valid_dl: DataLoader, path: str
-    ) -> None:
+    def _save_data_details(train_dl: DataLoader, valid_dl: DataLoader, path: str) -> None:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         with open(path, "wb") as f:
             pickle.dump(
@@ -678,7 +630,6 @@ class LoadTorchMLPInfer:
         network_config: dict | str | None = None,
         input_dim: int | None = None,
     ) -> None:
-
         if input_dim is None:
             raise ValueError("input_dim is required")
         if model_file_path is None:
@@ -686,9 +637,7 @@ class LoadTorchMLPInfer:
 
         self.model_file_path = model_file_path
         torch.backends.cudnn.benchmark = True
-        self.dev = (
-            torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-        )
+        self.dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
         if isinstance(network_config, str):
             with open(network_config, "rb") as f:
@@ -706,9 +655,7 @@ class LoadTorchMLPInfer:
             generative_model_id=None,
         )
         if not torch.cuda.is_available():
-            self.net.load_state_dict(
-                torch.load(self.model_file_path, map_location=torch.device("cpu"))
-            )
+            self.net.load_state_dict(torch.load(self.model_file_path, map_location=torch.device("cpu")))
         else:
             self.net.load_state_dict(torch.load(self.model_file_path))
         self.net.to(self.dev)
@@ -765,9 +712,7 @@ class LoadTorchMLP:
         network_config: dict | str,
         input_dim: int,
     ) -> None:
-        self.dev = (
-            torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-        )
+        self.dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         self.model_file_path = model_file_path
 
         # Load network config from pickle file if string path provided
@@ -785,9 +730,7 @@ class LoadTorchMLP:
             generative_model_id=None,
         )
         if not torch.cuda.is_available():
-            self.net.load_state_dict(
-                torch.load(self.model_file_path, map_location=torch.device("cpu"))
-            )
+            self.net.load_state_dict(torch.load(self.model_file_path, map_location=torch.device("cpu")))
         else:
             self.net.load_state_dict(torch.load(self.model_file_path))
         self.net.to(self.dev)

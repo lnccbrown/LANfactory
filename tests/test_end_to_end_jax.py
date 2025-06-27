@@ -104,9 +104,7 @@ def test_end_to_end_lan_mlp(
     file_list_ = dummy_training_data_files(generator_config, model_config)
     logger.info("File list: %s", file_list_)
 
-    logger.info(
-        "Testing end-to-end %s MLP with model %s", train_type, model_config["name"]
-    )
+    logger.info("Testing end-to-end %s MLP with model %s", train_type, model_config["name"])
 
     # INDEPENDENT TESTS OF DATALOADERS
     # Training dataset
@@ -145,9 +143,7 @@ def test_end_to_end_lan_mlp(
         pin_memory=True,
     )
 
-    jax_net = lanfactory.trainers.MLPJaxFactory(
-        network_config=network_config, train=True
-    )
+    jax_net = lanfactory.trainers.MLPJaxFactory(network_config=network_config, train=True)
 
     # Test properties of jax trainer
     jax_trainer = lanfactory.trainers.ModelTrainerJaxMLP(
@@ -176,11 +172,7 @@ def test_end_to_end_lan_mlp(
     # TODO also test this with returned test_state!
     forward_pass, forward_pass_jitted = jax_infer.make_forward_partial(
         seed=42,
-        input_dim=(
-            model_config["n_params"] + 2
-            if train_type == "lan"
-            else model_config["n_params"]
-        ),
+        input_dim=(model_config["n_params"] + 2 if train_type == "lan" else model_config["n_params"]),
         state=os.path.join(
             MODEL_FOLDER,
             (
@@ -207,12 +199,8 @@ def test_end_to_end_lan_mlp(
             jnp.array(
                 np.concatenate(
                     [
-                        np.linspace(5, 0, LEN_FORWARD_PASS_DUMMY // 2).astype(
-                            np.float32
-                        ),
-                        np.linspace(0, 5, LEN_FORWARD_PASS_DUMMY // 2).astype(
-                            np.float32
-                        ),
+                        np.linspace(5, 0, LEN_FORWARD_PASS_DUMMY // 2).astype(np.float32),
+                        np.linspace(0, 5, LEN_FORWARD_PASS_DUMMY // 2).astype(np.float32),
                     ]
                 )
             )

@@ -159,9 +159,7 @@ def _get_train_network_config(yaml_config_path: str | Path | None = None, net_in
 
 def main():
     CLI = argparse.ArgumentParser()
-    CLI.add_argument(
-        "--config-path", type=Path, default=None, help="Path to the YAML config file"
-    )
+    CLI.add_argument("--config-path", type=Path, default=None, help="Path to the YAML config file")
     CLI.add_argument(
         "--training-data-folder",
         type=Path,
@@ -177,9 +175,7 @@ def main():
         default=1,
         help="Number of workers for DataLoader",
     )
-    CLI.add_argument(
-        "--networks-path-base", type=Path, default=None, help="Base path for networks"
-    )
+    CLI.add_argument("--networks-path-base", type=Path, default=None, help="Base path for networks")
     CLI.add_argument("--log-level", type=str, default="DEBUG", help="Logging level")
 
     args = CLI.parse_args()
@@ -196,19 +192,13 @@ def main():
     logger = logging.getLogger(__name__)
 
     logger.info("Arguments passed:\n %s", pformat(vars(args)))
-    n_workers = (
-        args.dl_workers
-        if args.dl_workers > 0
-        else min(12, psutil.cpu_count(logical=False) - 2)
-    )
+    n_workers = args.dl_workers if args.dl_workers > 0 else min(12, psutil.cpu_count(logical=False) - 2)
     n_workers = max(1, n_workers)
 
     logger.info("Number of workers we assign to the DataLoader: %d", n_workers)
 
     # Load config dict (new)
-    config_dict = _get_train_network_config(
-        yaml_config_path=args.config_path, net_index=args.network_id
-    )
+    config_dict = _get_train_network_config(yaml_config_path=args.config_path, net_index=args.network_id)
 
     logger.info("config dict keys: %s", config_dict.keys())
     train_config = config_dict["config_dict"]["train_config"]
@@ -224,28 +214,20 @@ def main():
     logger.info("TRAINING DATA FILES: %s", file_list)
 
     # TODO: this is weird. Improve this later
-    valid_file_list = [
-        str(args.training_data_folder) + "/" + file_ for file_ in file_list
-    ]
+    valid_file_list = [str(args.training_data_folder) + "/" + file_ for file_ in file_list]
 
     logger.info("VALID FILE LIST: %s", valid_file_list)
 
     random.shuffle(valid_file_list)
     n_training_files = min(len(valid_file_list), train_config["n_training_files"])
-    val_idx_cutoff = int(
-        config_dict["config_dict"]["train_val_split"] * n_training_files
-    )
+    val_idx_cutoff = int(config_dict["config_dict"]["train_val_split"] * n_training_files)
 
     logger.info("NUMBER OF TRAINING FILES FOUND: %d", len(valid_file_list))
     logger.info("NUMBER OF TRAINING FILES USED: %d", n_training_files)
 
     # Check if gpu is available
     backend = jax.default_backend()
-    batch_size = (
-        train_config["gpu_batch_size"]
-        if backend == "gpu"
-        else train_config["cpu_batch_size"]
-    )
+    batch_size = train_config["gpu_batch_size"] if backend == "gpu" else train_config["cpu_batch_size"]
     train_config["train_batch_size"] = batch_size
 
     logger.info("CUDA devices: %s", jax.devices())
@@ -306,9 +288,7 @@ def main():
     wandb_project_id = extra_config["model"] + "_" + network_config["network_type"]
 
     # save network config for this run
-    networks_path = (
-        args.networks_path_base / network_config["network_type"] / extra_config["model"]
-    )
+    networks_path = args.networks_path_base / network_config["network_type"] / extra_config["model"]
     networks_path.mkdir(parents=True, exist_ok=True)
 
     # try_gen_folder(folder=networks_path, allow_abs_path_folder_generation=True)

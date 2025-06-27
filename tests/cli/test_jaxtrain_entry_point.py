@@ -29,8 +29,7 @@ def test_jax_train_cli_smoke(tmp_path):
     # Path to the training data directory
     __dir__ = Path(__file__).parent
     training_data_folder = str(
-        __dir__
-        / "test_training_data/training_data/lan/training_data_n_samples_2000_dt_0.001/ddm"
+        __dir__ / "test_training_data/training_data/lan/training_data_n_samples_2000_dt_0.001/ddm"
     )
 
     config_path = str(__dir__ / "config_network_training_lan.yaml")
