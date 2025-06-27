@@ -95,5 +95,6 @@ exclude = [
 # Add any additional configuration options for ruff
 line-length = 120
 
+
 [project.scripts]
 jaxtrain = "lanfactory.cli.jax_train:main"
