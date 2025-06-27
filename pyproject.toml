@@ -33,7 +33,7 @@ dependencies = [
     "frozendict >= 2.4.6",
     "onnx >= 1.17.0",
     "matplotlib >= 3.10.1",
-    "ssm-simulators >= 0.9.1",
+    "ssm-simulators >= 0.9.2",
 ]
 
 keywords = [
