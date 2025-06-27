@@ -25,7 +25,6 @@ classifiers = [
 ]
 
 dependencies = [
-    "ssm-simulators == 0.8.3",
     "scipy >= 1.15.2",
     "pandas >= 2.2.3",
     "torch >= 2.7.0",
@@ -34,6 +33,7 @@ dependencies = [
     "frozendict >= 2.4.6",
     "onnx >= 1.17.0",
     "matplotlib >= 3.10.1",
+    "ssm-simulators >= 0.9.1",
 ]
 
 keywords = [
@@ -94,6 +94,7 @@ exclude = [
 
 # Add any additional configuration options for ruff
 line-length = 120
+
 
 [project.scripts]
 jaxtrain = "lanfactory.cli.jax_train:main"
