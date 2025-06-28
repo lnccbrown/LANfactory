@@ -1,8 +1,14 @@
 # AF-Added
 .DS_Store
 notebooks/data/
+notebooks/jax_nb_data/
+notebooks/torch_nb_data/
 
 notebooks/test_notebooks/data/
+
+ssms_data/
+ssms_data_configs/
+network_data/
 
 
 # Byte-compiled / optimized / DLL files

@@ -42,9 +42,7 @@ def MLPJaxFactory(network_config: dict | str = {}, train: bool = True) -> "MLPJa
     elif isinstance(network_config, dict):
         network_config_internal = network_config
     else:
-        raise ValueError(
-            "network_config argument is not passed as " + "either a dictionary or a string (path to a file)!"
-        )
+        raise ValueError("network_config argument is not passed as either a dictionary or a string (path to a file)!")
 
     return MLPJax(
         layer_sizes=network_config_internal["layer_sizes"],
@@ -150,7 +148,7 @@ class MLPJax(nn.Module):
         """
 
         if file_path is None:
-            raise ValueError("file_path argument needs to be speficied! " + "(Currently Set to its default: None)")
+            raise ValueError("file_path argument needs to be specified! " + "(Currently Set to its default: None)")
 
         with open(file_path, "rb") as file_:
             loaded_state_bytes = file_.read()
@@ -460,16 +458,12 @@ class ModelTrainerJaxMLP:
 
     def train_and_evaluate(
         self,
-        output_folder: str = "data/",
+        output_folder: str | Path = "data/",
         output_file_id: str = "fileid",
         run_id: str = "runid",
         wandb_on: bool = True,
         wandb_project_id: str = "projectid",
-        save_history: bool = True,
-        save_model: bool = True,
-        save_config: bool = True,
-        save_all: bool = True,
-        save_data_details: bool = True,
+        save_outputs: bool = True,
         verbose: int = 1,
     ) -> train_state.TrainState:
         """Train and evaluate JAXMLP model.
@@ -486,16 +480,8 @@ class ModelTrainerJaxMLP:
                 Whether to use wandb or not.
             wandb_project_id (str):
                 Project id for wandb.
-            save_history (bool):
-                Whether to save the training history or not.
-            save_model (bool):
-                Whether to save the model or not.
-            save_config (bool):
-                Whether to save the training configuration or not.
-            save_all (bool):
+            save_outputs (bool):
                 Whether to save all files or not.
-            save_data_details (bool):
-                Whether to save the data details or not.
             verbose (int):
                 The verbosity level.
         Returns
@@ -529,7 +515,7 @@ class ModelTrainerJaxMLP:
         # Initialize network
         if not isinstance(self.seed, int):
             raise ValueError(
-                "seed argument is not an integer, " + "please specift a valid seed to make this code reproducible!"
+                "seed argument is not an integer, " + "please specify a valid seed to make this code reproducible!"
             )
         else:
             rng = jax.random.PRNGKey(self.seed)
@@ -568,12 +554,11 @@ class ModelTrainerJaxMLP:
         # Saving
         full_path = str(output_folder / (run_id + "_" + network_type + "_" + output_file_id + "_"))
 
-        if save_history or save_all:
+        if save_outputs:
             training_history_path = f"{full_path}_jax_training_history.csv"
             training_history.to_csv(training_history_path)
             print("Saving training history to: " + training_history_path)
 
-        if save_model or save_all:
             # Serialize parameter state
             byte_output = flax.serialization.to_bytes(state.params)
 
@@ -584,12 +569,10 @@ class ModelTrainerJaxMLP:
             file.close()
             print("Saving model parameters to: " + train_state_path)
 
-        if save_config or save_all:
             config_path = f"{full_path}_train_config.pickle"
             pickle.dump(self.train_config, open(config_path, "wb"))
             print("Saving training config to: " + config_path)
 
-        if save_data_details or save_all:
             data_details_path = f"{full_path}_data_details.pickle"
             pickle.dump(
                 {
