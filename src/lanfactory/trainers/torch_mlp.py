@@ -1,6 +1,5 @@
 """This module contains the classes for training TorchMLP models."""
 
-import os
 import numpy as np
 import pandas as pd
 import pickle
@@ -15,8 +14,6 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-
-from lanfactory.utils import try_gen_folder
 
 try:
     import wandb
@@ -49,7 +46,7 @@ class DatasetTorch(torch.utils.data.Dataset):
 
     def __init__(
         self,
-        file_ids: list[str],
+        file_ids: list[str] | list[Path],
         batch_size: int = 32,
         label_lower_bound: float | None = None,
         label_upper_bound: float | None = None,
@@ -307,10 +304,11 @@ class ModelTrainerTorchMLP:
             try:
                 logger.info("Trying to load string as path to pickle file: ")
                 self.train_config: dict = pickle.load(open(train_config, "rb"))
-            except:
+            except (OSError, pickle.PickleError) as e:
                 logger.error(
-                    f"Unexpected error: {train_config} when trying to load training config from file"
+                    f"Error loading training config from file {train_config}: {str(e)}"
                 )
+                raise
         elif isinstance(train_config, dict):
             print("train_config is passed as dictionary: \n")
             print(train_config)

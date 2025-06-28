@@ -43,8 +43,8 @@ def MLPJaxFactory(network_config: dict | str = {}, train: bool = True) -> "MLPJa
         network_config_internal = network_config
     else:
         raise ValueError(
-            f"network_config argument is not passed as "
-            f"either a dictionary or a string (path to a file)!"
+            "network_config argument is not passed as "
+            "either a dictionary or a string (path to a file)!"
         )
 
     return MLPJax(
