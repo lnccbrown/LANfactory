@@ -3,10 +3,13 @@
 import os
 import pickle
 import warnings
+from pathlib import Path
 
 
 # TODO: this is now in ssms. Delete this file and import from ssms instead.
-def try_gen_folder(folder: str | None = None, allow_abs_path_folder_generation: bool = True) -> None:
+def try_gen_folder(
+    folder: str | None = None, allow_abs_path_folder_generation: bool = True
+) -> None:
     """Function to generate a folder from a string. If the folder already exists, it will not be generated.
 
     Arguments
@@ -74,7 +77,7 @@ def try_gen_folder(folder: str | None = None, allow_abs_path_folder_generation: 
 
 def save_configs(
     model_id: str | None = None,
-    save_folder: str | None = None,
+    save_folder: str | Path | None = None,
     network_config: dict | None = None,
     train_config: dict | None = None,
     allow_abs_path_folder_generation: bool = True,
@@ -96,6 +99,9 @@ def save_configs(
             If False, the folder string is treated as a relative path.
     """
 
+    if isinstance(save_folder, Path):
+        save_folder = str(save_folder)
+
     # Generate save_folder if it doesn't yet exist
     try_gen_folder(
         folder=save_folder,
@@ -109,6 +115,8 @@ def save_configs(
     )
     print("Saved network config")
     # Save train config
-    pickle.dump(train_config, open(save_folder + "/" + model_id + "_train_config.pickle", "wb"))
+    pickle.dump(
+        train_config, open(save_folder + "/" + model_id + "_train_config.pickle", "wb")
+    )
     print("Saved train config")
     return
