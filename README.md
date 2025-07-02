@@ -89,7 +89,7 @@ LR_SCHEDULER_PARAMS:
   verbose: True
 ```
 
-Below, you will find more details on the components of the config file
+Here, you will find more details on the components of the config file
 
 | Option | Definition |
 | ------ | ---------- |
@@ -116,7 +116,7 @@ To make your own configuration file, you can copy the `config_network_training_l
 If you are using `uv`, you can also use the `uv run` command to run `jaxtrain` or `torchtrain` from the command line
 
 ```bash
-uv run path/to/jaxtrain.py --config-path path/to/config.yaml --training-data-folder /users/yourname/project/my_generated_data/data/training_data/lan/training_data_n_samples_2000_dt_0.001/ddm --network-id 0 --dl-workers 3 --network-path-base /users/yourname/project/my_trained_network
+uv run torchtrain --config-path path/to/config.yaml --training-data-folder /users/yourname/project/my_generated_data/data/training_data/lan/training_data_n_samples_2000_dt_0.001/ddm --network-id 0 --dl-workers 3 --network-path-base /users/yourname/project/my_trained_network
 ```
     
 ### TorchMLP to ONNX Converter
