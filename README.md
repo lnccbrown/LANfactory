@@ -42,8 +42,12 @@ Check the basic tutorial [here](docs/basic_tutorial/basic_tutorial.ipynb).
 
 LANfactory includes a command line interface with the commands `jaxtrain` and `torchtrain`, which train neural networks using `jax` and `torch` as backends.
 
+**Examples**
 ```bash
-python path/to/jaxtrain.py --config-path path/to/config.yaml --training-data-folder /users/yourname/project/my_generated_data/data/training_data/lan/training_data_n_samples_2000_dt_0.001/ddm --network-id 0 --dl-workers 3 --network-path-base /users/yourname/project/my_trained_network
+jaxtrain --config-path config.yaml --training-data-folder my_generated_data --network-id 0 --dl-workers 3 --network-path-base my_trained_network
+```
+```bash
+torchtrain --config-path config.yaml --training-data-folder my_generated_data --network-id 0 --dl-workers 3 --network-path-base my_trained_network
 ```
 
 `jaxtrain` and `torchtrain` have the same 6 arguments 
@@ -89,7 +93,7 @@ LR_SCHEDULER_PARAMS:
   verbose: True
 ```
 
-Here, you will find more details on the components of the config file
+Configuration file parameter details follow:
 
 | Option | Definition |
 | ------ | ---------- |
@@ -111,13 +115,9 @@ Here, you will find more details on the components of the config file
 | `LR_SCHEDULER` | The learning rate scheduler used to adapt the learning rate during training. `reduce_on_plateau` reduces the learning rate when the validation loss stops improving. |
 | `LR_SCHEDULER_PARAMS` | A dictionary specifying the parameters for the learning rate scheduler. It includes: `factor` (multiplier applied to reduce the LR), `patience` (number of epochs with no improvement before reducing LR), `threshold` (minimum change to qualify as improvement), `min_lr` (minimum LR allowed), and `verbose` (whether to print updates). |
 
-To make your own configuration file, you can copy the `config_network_training_lan.yaml` file from `src/lanfactory/cli`, and modify it with your preferences.
+To make your own configuration file, you can copy the example above into a new `.yaml` file and modify it with your preferences.
 
 If you are using `uv`, you can also use the `uv run` command to run `jaxtrain` or `torchtrain` from the command line
-
-```bash
-uv run torchtrain --config-path path/to/config.yaml --training-data-folder /users/yourname/project/my_generated_data/data/training_data/lan/training_data_n_samples_2000_dt_0.001/ddm --network-id 0 --dl-workers 3 --network-path-base /users/yourname/project/my_trained_network
-```
     
 ### TorchMLP to ONNX Converter
 
