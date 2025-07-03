@@ -12,21 +12,14 @@ Please find the original [documentation here](https://alexanderfengler.github.io
 
 ### Quick Start
 
-The `LANfactory` package is a light-weight convenience package for training `likelihood approximation networks` (LANs) in torch (or keras), 
-starting from supplied training data.
+The `LANfactory` package is a light-weight convenience package for training `likelihood approximation networks` (LANs) in torch (or jaxtrain), starting from supplied training data.
 
 [LANs](https://elifesciences.org/articles/65074), although more general in potential scope of applications, were conceived in the context of sequential sampling modeling
 to account for cognitive processes giving rise to *choice* and *reaction time* data in *n-alternative forced choice experiments* commonly encountered in the cognitive sciences.
 
-For a basic tutorial on how to use the `LANfactory` package, please refer to the [basic tutorial notebook](docs/basic_tutorial/basic_tutorial.ipynb).
-
-In this quick tutorial we will use the [`ssms`](https://github.com/AlexanderFengler/ssm_simulators) package to generate our training data using such a sequential sampling model (SSM). The use is in no way bound to utilize the `ssms` package.
+For a basic tutorial on how to use the `LANfactory` package, please refer to the [basic tutorial notebook](docs/basic_tutorial/basic_tutorial.ipynb)..
 
 #### Install
-
-To install the `ssms` package type,
-
-`pip install ssm-simulators`
 
 To install the `LANfactory` package type,
 
@@ -40,7 +33,7 @@ Check the basic tutorial [here](docs/basic_tutorial/basic_tutorial.ipynb).
 
 ### Command Line Interface
 
-LANfactory includes a command line interface with the commands `jaxtrain` and `torchtrain`, which train neural networks using `jax` and `torch` as backends.
+LANfactory includes a command line interface with the commands `jaxtrain` and `torchtrain`, which train neural networks using `jax` and `torch` as backends, respectively.
 
 **Examples**
 ```bash
