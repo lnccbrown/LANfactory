@@ -6,10 +6,14 @@ edit_uri: edit/main/docs
 nav:
   - Home:
       - Overview: index.md
-  - Basic Tutorial:
-      - Installation: basic_tutorial/basic_tutorial.ipynb
-  - Basic Tutorial / JAX:
-      - Installation: basic_tutorial_jax/basic_tutorial_jax.ipynb
+  - LAN Tutorial JAX:
+      - Installation: basic_tutorial/basic_tutorial_lan_jax.ipynb
+  - LAN Tutorial Torch:
+      - Installation: basic_tutorial/basic_tutorial_lan_torch.ipynb
+  - LAN Tutorial CPN Torch:
+      - Installation: basic_tutorial/basic_tutorial_cpn_torch.ipynb
+  - LAN Tutorial OPN Torch:
+      - Installation: basic_tutorial/basic_tutorial_opn_torch.ipynb
   - API:
       - lanfactory: api/lanfactory.md
       - config: api/config.md
@@ -23,7 +27,10 @@ plugins:
   - mkdocs-jupyter:
       execute: True
       execute_ignore:
-        - basic_tutorial/basic_tutorial.ipynb
+        - basic_tutorial/basic_tutorial_lan_jax.ipynb
+        - basic_tutorial/basic_tutorial_lan_torch.ipynb
+        - basic_tutorial/basic_tutorial_cpn_torch.ipynb
+        - basic_tutorial/basic_tutorial_opn_torch.ipynb
   - mkdocstrings:
       default_handler: python
       handlers:

@@ -628,6 +628,7 @@ class LoadTorchMLPInfer:
         model_file_path: str | None = None,
         network_config: dict | str | None = None,
         input_dim: int | None = None,
+        network_type: str | None = None,
     ) -> None:
         if input_dim is None:
             raise ValueError("input_dim is required")
@@ -652,6 +653,7 @@ class LoadTorchMLPInfer:
             network_config=self.network_config,
             input_shape=self.input_dim,
             generative_model_id=None,
+            network_type=network_type,
         )
         if not torch.cuda.is_available():
             self.net.load_state_dict(torch.load(self.model_file_path, map_location=torch.device("cpu")))
