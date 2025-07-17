@@ -4,9 +4,10 @@ Can be run as a script.
 
 import pickle
 from typing import Any
-import argparse
 
 import torch
+import typer
+
 from lanfactory.trainers.torch_mlp import TorchMLP
 
 
@@ -47,18 +48,30 @@ def transform_to_onnx(
     torch.onnx.export(mynet, x, output_onnx_file)
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Convert a TorchMLP model to ONNX format.")
-    parser.add_argument("network_config_file", help="Path to the network configuration file (pickle).")
-    parser.add_argument("state_dict_file", help="Path to the state dictionary file.")
-    parser.add_argument("input_shape", type=int, help="Size of the input tensor for the model.")
-    parser.add_argument("output_onnx_file", help="Path to the output ONNX file.")
+app = typer.Typer()
 
-    args = parser.parse_args()
 
+def option_no_default(help: str) -> Any:
+    return typer.Option(..., help=help, show_default=False)
+
+
+@app.command()
+def main(
+    network_config_file: str = option_no_default("Path to the network configuration file (pickle)."),
+    state_dict_file: str = option_no_default("Path to the state dictionary file."),
+    input_shape: int = option_no_default("Size of the input tensor for the model."),
+    output_onnx_file: str = option_no_default("Path to the output ONNX file."),
+):
+    """
+    Convert a TorchMLP model to ONNX format.
+    """
     transform_to_onnx(
-        args.network_config_file,
-        args.state_dict_file,
-        args.input_shape,
-        args.output_onnx_file,
+        network_config_file,
+        state_dict_file,
+        input_shape,
+        output_onnx_file,
     )
+
+
+if __name__ == "__main__":
+    app()
