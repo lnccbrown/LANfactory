@@ -3,7 +3,6 @@ Can be run as a script.
 """
 
 import pickle
-from typing import Any
 
 import torch
 import typer
@@ -32,7 +31,7 @@ def transform_to_onnx(
             Path to the output ONNX file.
     """
     with open(network_config_file, "rb") as f:
-        network_config_mlp: Any = pickle.load(f)
+        network_config_mlp = pickle.load(f)
 
     mynet = TorchMLP(
         network_config=network_config_mlp,
@@ -51,7 +50,7 @@ def transform_to_onnx(
 app = typer.Typer()
 
 
-def option_no_default(help: str) -> Any:
+def option_no_default(help: str) -> typer.Option:
     return typer.Option(..., help=help, show_default=False)
 
 
