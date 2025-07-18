@@ -99,3 +99,4 @@ line-length = 120
 [project.scripts]
 jaxtrain = "lanfactory.cli.jax_train:app"
 torchtrain = "lanfactory.cli.torch_train:app"
+transform-onnx = "lanfactory.onnx.transform_onnx:app"
