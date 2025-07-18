@@ -114,7 +114,7 @@ If you are using `uv`, you can also use the `uv run` command to run `jaxtrain` o
 
 ### TorchMLP to ONNX Converter
 
-Once you have trained your model, you can convert it to the ONNX format using the provided `transform-onnx.py` command.
+Once you have trained your model, you can convert it to the ONNX format using the provided `transform-onnx` command.
 
 ```sh
 $ transform-onnx --help
