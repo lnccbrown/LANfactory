@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 
-Lightweight python package to help with training [LANs](https://elifesciences.org/articles/65074) (Likelihood approximation networks). 
+Lightweight python package to help with training [LANs](https://elifesciences.org/articles/65074) (Likelihood approximation networks).
 
 Please find the original [documentation here](https://alexanderfengler.github.io/LANfactory/).
 
@@ -43,7 +43,7 @@ jaxtrain --config-path config.yaml --training-data-folder my_generated_data --ne
 torchtrain --config-path config.yaml --training-data-folder my_generated_data --network-id 0 --dl-workers 3 --network-path-base my_trained_network
 ```
 
-`jaxtrain` and `torchtrain` have the same 6 arguments 
+`jaxtrain` and `torchtrain` have the same 6 arguments
 * `--config-path`: Path to the YAML config file
 * `--training-data-folder`: Path to folder with data to train the neural network on
 * `--networks-path-base`: Path to the output folder for trained neural network
@@ -53,10 +53,10 @@ torchtrain --config-path config.yaml --training-data-folder my_generated_data --
 
 You can also view the help to see further documentation.
 
-Below is a sample configuration file you can use with `jaxtrain` or `torchtrain`. 
+Below is a sample configuration file you can use with `jaxtrain` or `torchtrain`.
 
 ```yaml
-NETWORK_TYPE: "lan" 
+NETWORK_TYPE: "lan"
 CPU_BATCH_SIZE: 1000
 GPU_BATCH_SIZE: 50000
 GENERATOR_APPROACH: "lan"
@@ -111,30 +111,37 @@ Configuration file parameter details follow:
 To make your own configuration file, you can copy the example above into a new `.yaml` file and modify it with your preferences.
 
 If you are using `uv`, you can also use the `uv run` command to run `jaxtrain` or `torchtrain` from the command line
-    
+
 ### TorchMLP to ONNX Converter
 
-Once you have trained your model, you can convert it to the ONNX format using the `transform_onnx.py` script.
+Once you have trained your model, you can convert it to the ONNX format using the provided `transform-onnx` command.
 
-The `transform_onnx.py` script converts a TorchMLP model to the ONNX format. It takes a network configuration file (in pickle format), a state dictionary file (Torch model weights), the size of the input tensor, and the desired output ONNX file path.
+```sh
+$ transform-onnx --help
+ Usage: transform-onnx [OPTIONS]
 
-### Usage
+ Convert a TorchMLP model to ONNX format.
 
-```python onnx/transform_onnx.py <network_config_file> <state_dict_file> <input_shape> <output_onnx_file>```
 
-Replace the placeholders with the appropriate values:
-
-- <network_config_file>: Path to the pickle file containing the network configuration.
-- <state_dict_file>: Path to the file containing the state dictionary of the model.
-- <input_shape>: The size of the input tensor for the model (integer).
-- <output_onnx_file>: Path to the output ONNX file.
-
-For example:
-
+╭─ Options ───────────────────────────────────────────────────────────────────────────────────╮
+│ *  --network-config-file        TEXT     Path to the network configuration file (pickle).   │
+│                                          [required]                                         │
+│ *  --state-dict-file            TEXT     Path to the state dictionary file. [required]      │
+│ *  --input-shape                INTEGER  Size of the input tensor for the model. [required] │
+│ *  --output-onnx-file           TEXT     Path to the output ONNX file. [required]           │
+│    --help                                Show this message and exit.                        │
+╰─────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
-python onnx/transform_onnx.py '0d9f0e94175b11eca9e93cecef057438_lca_no_bias_4_torch__network_config.pickle' '0d9f0e94175b11eca9e93cecef057438_lca_no_bias_4_torch_state_dict.pt' 11 'lca_no_bias_4_torch.onnx'
+
+#### Example
+
+```sh
+$ transform-onnx --network-config-file my_lca_no_bias_4_torch_network_config.pkl \
+                 --state-dict-file my_lca_no_bias_4_torch_state_dict.pt
+                 --input-shape 11 \
+                 --ouput-onnx-file my_lca_no_bias_4_torch.onnx
 ```
-This onnx file can be used directly with the [`HSSM`](https://github.com/lnccbrown/HSSM) package. 
+The produced onnx file can be used directly with the [`HSSM`](https://github.com/lnccbrown/HSSM) package.
 
 We hope this package may be helpful in case you attempt to train [LANs](https://elifesciences.org/articles/65074) for your own research.
 
