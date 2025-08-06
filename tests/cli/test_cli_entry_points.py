@@ -17,14 +17,14 @@ def test_jax_train_cli_smoke(tmp_path):
 
     cmd = [
         "jaxtrain",
-        "--config-path",
-        config_path,
         "--training-data-folder",
         training_data_folder,
         "--networks-path-base",
         str(networks_path),
         "--log-level",
         "WARNING",
+        "--config-path",
+        config_path,
     ]
 
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
