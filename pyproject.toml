@@ -100,3 +100,6 @@ line-length = 120
 jaxtrain = "lanfactory.cli.jax_train:app"
 torchtrain = "lanfactory.cli.torch_train:app"
 transform-onnx = "lanfactory.onnx.transform_onnx:app"
+
+[tool.setuptools.package-data]
+"lanfactory.cli" = ["config_network_training_lan.yaml"]
