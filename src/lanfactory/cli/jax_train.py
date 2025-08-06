@@ -14,19 +14,20 @@ The main functionality includes:
 - Optional logging to Weights & Biases
 """
 
+import importlib.resources
 import logging
 import pickle  # convert to dill later
 import random
 import uuid
 from copy import deepcopy
 from pathlib import Path
-import typer
-import psutil
 
 import jax
-import torch
-
 import lanfactory
+import psutil
+import torch
+import typer
+
 from lanfactory.cli.utils import (
     _get_train_network_config,
 )
