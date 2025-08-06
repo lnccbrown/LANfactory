@@ -54,22 +54,7 @@ def main(
         autocompletion=lambda: ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
     ),
 ):
-    """Train a JAX neural network using the provided configuration.
-
-    Args:
-        config_path: Path to the YAML configuration file containing network and training settings
-        training_data_folder: Directory containing the training data files
-        network_id: ID of the specific network configuration to use from the config file
-        dl_workers: Number of worker processes for data loading. If <= 0, will use CPU count - 2
-        networks_path_base: Base directory to save trained networks and configs
-        log_level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-
-    The function:
-    1. Sets up logging and loads configuration
-    2. Prepares training and validation datasets
-    3. Initializes the JAX network and trainer
-    4. Trains the network and saves results
-    """
+    """Train a JAX neural network using the provided configuration."""
 
     # Set up logging ------------------------------------------------
     logging.basicConfig(
