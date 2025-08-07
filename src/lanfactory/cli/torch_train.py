@@ -36,7 +36,7 @@ app = typer.Typer()
 
 @app.command()
 def main(
-    config_path: Path = typer.Option(..., help="Path to the YAML config file"),
+    config_path: Path = typer.Option(None, help="Path to the YAML config file"),
     training_data_folder: Path = typer.Option(..., help="Path to the training data folder"),
     networks_path_base: Path = typer.Option(..., help="Base path for networks"),
     network_id: int = typer.Option(0, help="Network ID to train"),
