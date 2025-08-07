@@ -14,15 +14,17 @@ The main functionality includes:
 - Optional logging to Weights & Biases
 """
 
-import random
 import logging
-from pathlib import Path
+import pickle
+import random
 import uuid
 from copy import deepcopy
-import pickle
+from importlib.resources import as_file, files
+from pathlib import Path
+
+import psutil
 import torch
 import typer
-import psutil
 
 import lanfactory
 from lanfactory.cli.utils import (
