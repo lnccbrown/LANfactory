@@ -69,7 +69,11 @@ def main(
 
     logger.info("Number of workers we assign to the DataLoader: %d", n_workers)
 
-    # Load config dict (new)
+    if config_path is None:
+        logger.warning("No config path provided, using default configuration.")
+        with as_file(files("lanfactory.cli") / "config_network_training_lan.yaml") as default_config:
+            config_path = default_config
+
     if network_id is None:
         config_dict = _get_train_network_config(yaml_config_path=config_path, net_index=0)
     else:
