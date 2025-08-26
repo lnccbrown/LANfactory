@@ -44,7 +44,7 @@ torchtrain --config-path config.yaml --training-data-folder my_generated_data --
 ```
 
 `jaxtrain` and `torchtrain` have the same 6 arguments
-* `--config-path`: Path to the YAML config file
+* `--config-path`: Path to the YAML config file (optional)
 * `--training-data-folder`: Path to folder with data to train the neural network on
 * `--networks-path-base`: Path to the output folder for trained neural network
 * `--network-id`: ID for the neural network to train (default: 0)
@@ -53,7 +53,7 @@ torchtrain --config-path config.yaml --training-data-folder my_generated_data --
 
 You can also view the help to see further documentation.
 
-Below is a sample configuration file you can use with `jaxtrain` or `torchtrain`.
+Below is a sample (default) configuration file you can use with `jaxtrain` or `torchtrain`.
 
 ```yaml
 NETWORK_TYPE: "lan"
