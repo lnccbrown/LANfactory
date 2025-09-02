@@ -25,11 +25,11 @@ from pathlib import Path
 import jax
 import lanfactory
 import psutil
-import torch
 import typer
 from lanfactory.cli.utils import (
     _get_train_network_config,
 )
+from torch.utils.data import DataLoader
 
 app = typer.Typer()
 
@@ -119,7 +119,7 @@ def main(
         label_key=train_config["label_key"],
     )
 
-    dataloader_train = torch.utils.data.DataLoader(
+    dataloader_train = DataLoader(
         train_dataset,
         shuffle=train_config["shuffle_files"],
         batch_size=None,
@@ -135,7 +135,7 @@ def main(
         label_key=train_config["label_key"],
     )
 
-    dataloader_val = torch.utils.data.DataLoader(
+    dataloader_val = DataLoader(
         val_dataset,
         shuffle=train_config["shuffle_files"],
         batch_size=None,
