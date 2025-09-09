@@ -14,15 +14,17 @@ The main functionality includes:
 - Optional logging to Weights & Biases
 """
 
-import random
 import logging
-from pathlib import Path
+import pickle
+import random
 import uuid
 from copy import deepcopy
-import pickle
+from importlib.resources import as_file, files
+from pathlib import Path
+
+import psutil
 import torch
 import typer
-import psutil
 
 import lanfactory
 from lanfactory.cli.utils import (
@@ -34,7 +36,7 @@ app = typer.Typer()
 
 @app.command()
 def main(
-    config_path: Path = typer.Option(..., help="Path to the YAML config file"),
+    config_path: Path = typer.Option(None, help="Path to the YAML config file"),
     training_data_folder: Path = typer.Option(..., help="Path to the training data folder"),
     networks_path_base: Path = typer.Option(..., help="Base path for networks"),
     network_id: int = typer.Option(0, help="Network ID to train"),
@@ -51,22 +53,7 @@ def main(
         autocompletion=lambda: ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
     ),
 ):
-    """Train a JAX neural network using the provided configuration.
-
-    Args:
-        config_path: Path to the YAML configuration file containing network and training settings
-        training_data_folder: Directory containing the training data files
-        network_id: ID of the specific network configuration to use from the config file
-        dl_workers: Number of worker processes for data loading. If <= 0, will use CPU count - 2
-        networks_path_base: Base directory to save trained networks and configs
-        log_level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-
-    The function:
-    1. Sets up logging and loads configuration
-    2. Prepares training and validation datasets
-    3. Initializes the JAX network and trainer
-    4. Trains the network and saves results
-    """
+    """Train a JAX neural network using the provided configuration."""
 
     # Set up logging ------------------------------------------------
     logging.basicConfig(
@@ -82,7 +69,11 @@ def main(
 
     logger.info("Number of workers we assign to the DataLoader: %d", n_workers)
 
-    # Load config dict (new)
+    if config_path is None:
+        logger.warning("No config path provided, using default configuration.")
+        with as_file(files("lanfactory.cli") / "config_network_training_lan.yaml") as default_config:
+            config_path = default_config
+
     if network_id is None:
         config_dict = _get_train_network_config(yaml_config_path=config_path, net_index=0)
     else:
