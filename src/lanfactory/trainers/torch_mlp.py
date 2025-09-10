@@ -664,7 +664,7 @@ class LoadTorchMLPInfer:
 
     @torch.no_grad()
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        return self.net(x)
+        return self.net(x.to(self.dev))
 
     @torch.no_grad()
     def predict_on_batch(self, x: np.ndarray | None = None) -> np.ndarray:
@@ -738,7 +738,7 @@ class LoadTorchMLP:
 
     @torch.no_grad()
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        return self.net(x)
+        return self.net(x.to(self.dev))
 
     @torch.no_grad()
     def predict_on_batch(self, x: np.ndarray | None = None) -> np.ndarray:
