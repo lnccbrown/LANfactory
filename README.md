@@ -13,7 +13,7 @@ Please find the original [documentation here](https://alexanderfengler.github.io
 
 ### Cite LANfactory
 
-Use this doi to cite `lanfactory`: [https://doi.org/10.5281/zenodo.17137303](https://doi.org/10.5281/zenodo.17137303)
+Use this DOI to cite `lanfactory`: [https://doi.org/10.5281/zenodo.17137303](https://doi.org/10.5281/zenodo.17137303)
 
 ### Quick Start
 
