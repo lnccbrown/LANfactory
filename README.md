@@ -1,5 +1,6 @@
 # LANfactory
 
+[![DOI](https://zenodo.org/badge/386076271.svg)](https://doi.org/10.5281/zenodo.17137303)
 ![PyPI](https://img.shields.io/pypi/v/lanfactory)
 ![PyPI_dl](https://img.shields.io/pypi/dm/lanfactory)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
@@ -9,6 +10,10 @@
 Lightweight python package to help with training [LANs](https://elifesciences.org/articles/65074) (Likelihood approximation networks).
 
 Please find the original [documentation here](https://alexanderfengler.github.io/LANfactory/).
+
+### Cite LANfactory
+
+Use this DOI to cite `lanfactory`: [https://doi.org/10.5281/zenodo.17137303](https://doi.org/10.5281/zenodo.17137303)
 
 ### Quick Start
 
