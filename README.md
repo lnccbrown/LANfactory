@@ -3,7 +3,7 @@
 [![DOI](https://zenodo.org/badge/386076271.svg)](https://doi.org/10.5281/zenodo.17137303)
 ![PyPI](https://img.shields.io/pypi/v/lanfactory)
 ![PyPI_dl](https://img.shields.io/pypi/dm/lanfactory)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 
