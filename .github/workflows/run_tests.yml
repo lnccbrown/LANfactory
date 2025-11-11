@@ -48,3 +48,8 @@ jobs:
 
       - name: Linting
         run: uv run ruff check src/lanfactory
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}

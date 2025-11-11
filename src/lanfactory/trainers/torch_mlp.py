@@ -603,6 +603,7 @@ class ModelTrainerTorchMLP:
             model,
             torch.randn(1, model.input_shape).to(dev),
             path,
+            dynamo=False,  # disable dynamo for now to support older ONNX versions
         )
         logger.info(f"Saving model to ONNX format to: {path}")
 

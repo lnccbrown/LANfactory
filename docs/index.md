@@ -6,11 +6,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 
-Lightweight python package to help with training [LANs](https://elifesciences.org/articles/65074) (Likelihood approximation networks). 
+Lightweight python package to help with training [LANs](https://elifesciences.org/articles/65074) (Likelihood approximation networks).
 
 ### Quick Start
 
-The `LANfactory` package is a light-weight convenience package for training `likelihood approximation networks` (LANs) in torch (or keras), 
+The `LANfactory` package is a light-weight convenience package for training `likelihood approximation networks` (LANs) in torch (or keras),
 starting from supplied training data.
 
 [LANs](https://elifesciences.org/articles/65074), although more general in potential scope of applications, were conceived in the context of sequential sampling modeling
@@ -36,7 +36,7 @@ Necessary dependency should be installed automatically in the process.
 ```python
 # Load necessary packages
 import ssms
-import lanfactory 
+import lanfactory
 import os
 import numpy as np
 from copy import deepcopy
@@ -54,9 +54,9 @@ of this package. Please refer to the [basic ssms tutorial] (https://github.com/A
 # Initialize the generator config (for MLP LANs)
 generator_config = deepcopy(ssms.config.data_generator_config['lan']['mlp'])
 # Specify generative model (one from the list of included models mentioned above)
-generator_config['dgp_list'] = 'angle' 
+generator_config['dgp_list'] = 'angle'
 # Specify number of parameter sets to simulate
-generator_config['n_parameter_sets'] = 100 
+generator_config['n_parameter_sets'] = 100
 # Specify how many samples a simulation run should entail
 generator_config['n_samples'] = 1000
 # Specify folder in which to save generated data
@@ -93,11 +93,11 @@ training_data = my_dataset_generator.generate_data_training_uniform(save = True)
 #### Prepare for Training
 
 Next we set up dataloaders for training with pytorch. The `LANfactory` uses custom dataloaders, taking into account particularities of the expected training data.
-Specifically, we expect to receive a bunch of training data files (the present example generates only one), where each file hosts a large number of training examples. 
-So we want to define a dataloader which spits out batches from data with a specific training data file, and keeps checking when to load in a new file. 
+Specifically, we expect to receive a bunch of training data files (the present example generates only one), where each file hosts a large number of training examples.
+So we want to define a dataloader which spits out batches from data with a specific training data file, and keeps checking when to load in a new file.
 The way this is implemented here, is via the `DatasetTorch` class in `lanfactory.trainers`, which inherits from `torch.utils.data.Dataset` and prespecifies a `batch_size`. Finally this is supplied to a [`DataLoader`](https://pytorch.org/docs/stable/data.html), for which we keep the `batch_size` argument at 0.
 
-The `DatasetTorch` class is then called as an iterator via the DataLoader and takes care of batching as well as file loading internally. 
+The `DatasetTorch` class is then called as an iterator via the DataLoader and takes care of batching as well as file loading internally.
 
 You may choose your own way of defining the `DataLoader` classes, downstream you are simply expected to supply one.
 
@@ -152,9 +152,9 @@ print('Train config: ')
 print(train_config)
 ```
 
-    Network config: 
+    Network config:
     {'layer_types': ['dense', 'dense', 'dense'], 'layer_sizes': [100, 100, 1], 'activations': ['tanh', 'tanh', 'linear'], 'loss': ['huber'], 'callbacks': ['checkpoint', 'earlystopping', 'reducelr']}
-    Train config: 
+    Train config:
     {'batch_size': 128, 'n_epochs': 10, 'optimizer': 'adam', 'learning_rate': 0.002, 'loss': 'huber', 'save_history': True, 'metrics': [<keras.losses.MeanSquaredError object at 0x12c403d30>, <keras.losses.Huber object at 0x12c1c78e0>], 'callbacks': ['checkpoint', 'earlystopping', 'reducelr']}
 
 
@@ -170,9 +170,9 @@ net = lanfactory.trainers.TorchMLP(network_config = deepcopy(network_config),
 
 # SAVE CONFIGS
 lanfactory.utils.save_configs(model_id = net.model_id + '_torch_',
-                              save_folder = 'data/torch_models/angle/', 
-                              network_config = network_config, 
-                              train_config = train_config, 
+                              save_folder = 'data/torch_models/angle/',
+                              network_config = network_config,
+                              train_config = train_config,
                               allow_abs_path_folder_generation = True)
 ```
 
@@ -213,10 +213,10 @@ model_trainer.train_model(save_history = True,
 
 #### Load Model for Inference and Call
 
-The `LANfactory` provides some convenience functions to use networks for inference after training. 
+The `LANfactory` provides some convenience functions to use networks for inference after training.
 We can load a model using the `LoadTorchMLPInfer` class, which then allows us to run fast inference via either
-a direct call, which expects a `torch.tensor` as input, or the `predict_on_batch` method, which expects a `numpy.array` 
-of `dtype`, `np.float32`. 
+a direct call, which expects a `torch.tensor` as input, or the `predict_on_batch` method, which expects a `numpy.array`
+of `dtype`, `np.float32`.
 
 
 ```python
@@ -273,7 +273,7 @@ predict_on_batch_out = network.predict_on_batch(data.values.astype(np.float32))
 
 # Simulations
 from ssms.basic_simulators import simulator
-sim_out = simulator(model = 'angle', 
+sim_out = simulator(model = 'angle',
                     theta = data.values[0, :-2],
                     n_samples = 2000)
 ```
@@ -299,11 +299,11 @@ plt.ylabel('likelihod')
 
 
 
-    
+
 ![png](basic_tutorial_files/basic_tutorial_22_1.png)
 
 
-    
+
 ### TorchMLP to ONNX Converter
 
 The `transform_onnx.py` script converts a TorchMLP model to the ONNX format. It takes a network configuration file (in pickle format), a state dictionary file (Torch model weights), the size of the input tensor, and the desired output ONNX file path.
@@ -324,9 +324,8 @@ For example:
 ```
 python onnx/transform_onnx.py '0d9f0e94175b11eca9e93cecef057438_lca_no_bias_4_torch__network_config.pickle' '0d9f0e94175b11eca9e93cecef057438_lca_no_bias_4_torch_state_dict.pt' 11 'lca_no_bias_4_torch.onnx'
 ```
-This onnx file can be used directly with the [`HSSM`](https://github.com/lnccbrown/HSSM) package. 
+This onnx file can be used directly with the [`HSSM`](https://github.com/lnccbrown/HSSM) package.
 
 We hope this package may be helpful in case you attempt to train [LANs](https://elifesciences.org/articles/65074) for your own research.
 
 #### END
-
