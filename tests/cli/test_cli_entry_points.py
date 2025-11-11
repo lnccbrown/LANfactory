@@ -1,11 +1,10 @@
 import subprocess
 from pathlib import Path
 
-import pytest
 
-
-@pytest.mark.parametrize("with_config", [True, False])
-def test_jax_train_cli_smoke(tmp_path, with_config):
+# AF-TODO: Add test for callable without config,
+# but needs to be marked as slow and skipped in CI.
+def test_jax_train_cli_smoke(tmp_path):
     """Smoke test: actually runs the CLI with real data."""
     # Path to the training data directory
     __dir__ = Path(__file__).parent
@@ -19,8 +18,14 @@ def test_jax_train_cli_smoke(tmp_path, with_config):
     networks_path.mkdir()
 
     # Build command based on parameter
+
+    # In principle callable without config, in which case
+    # default config is used, but default config is
+    # too slow for testing.
     cmd = [
         "jaxtrain",
+        "--config-path",
+        config_path,
         "--training-data-folder",
         training_data_folder,
         "--networks-path-base",
@@ -28,8 +33,7 @@ def test_jax_train_cli_smoke(tmp_path, with_config):
         "--log-level",
         "WARNING",
     ]
-    if with_config:
-        cmd += ["--config-path", config_path]
+
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     assert result.returncode == 0, f"jax_train.py failed: {result.stderr}"
 

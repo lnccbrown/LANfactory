@@ -44,7 +44,12 @@ def transform_to_onnx(
     )
 
     x = torch.randn(1, input_shape, requires_grad=True)
-    torch.onnx.export(mynet, x, output_onnx_file)
+    torch.onnx.export(
+        mynet,
+        x,
+        output_onnx_file,
+        dynamo=False,  # disable dynamo for now to support older ONNX versions
+    )
 
 
 app = typer.Typer()

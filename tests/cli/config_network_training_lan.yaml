@@ -3,18 +3,12 @@ CPU_BATCH_SIZE: 1000
 GPU_BATCH_SIZE: 50000
 GENERATOR_APPROACH: "lan" # could maybe be deleted
 OPTIMIZER_: "adam"
-N_EPOCHS: 20
+N_EPOCHS: 2
 TRAINING_DATA_FOLDER: "tests/cli/test_training_data/training_data/lan/training_data_n_samples_2000_dt_0.001/ddm"
 MODEL: "ddm"
 SHUFFLE: True
-LAYER_SIZES: [[100, 100, 100, 1], [100, 100, 100, 100, 1], [100, 100, 100, 100, 100, 1],
-              [120, 120, 120, 1], [120, 120, 120, 120, 1], [120, 120, 120, 120, 120, 1]]
-ACTIVATIONS: [['tanh', 'tanh', 'tanh'],
-              ['tanh', 'tanh', 'tanh', 'tanh'],
-              ['tanh', 'tanh', 'tanh', 'tanh', 'tanh'],
-              ['tanh', 'tanh', 'tanh'],
-              ['tanh', 'tanh', 'tanh', 'tanh'],
-              ['tanh', 'tanh', 'tanh', 'tanh', 'tanh']] # specifies all but output layer activation (output layer activation is determined by)
+LAYER_SIZES: [[100, 100, 100, 1]]
+ACTIVATIONS: [['tanh', 'tanh', 'tanh']] # specifies all but output layer activation (output layer activation is determined by)
 WEIGHT_DECAY: 0.0
 TRAIN_VAL_SPLIT: 0.98
 N_TRAINING_FILES: 10000 # can be list
