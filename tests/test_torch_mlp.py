@@ -3,18 +3,7 @@
 import pickle
 import numpy as np
 import pytest
-
 from lanfactory.trainers.torch_mlp import DatasetTorch
-
-
-# @pytest.fixture
-# def mock_data_file_content():
-#     """Create mock training data that would be in a pickle file."""
-#     return {
-#         "lan_data": np.random.randn(1000, 6).astype(np.float32),  # 1000 samples, 6 features
-#         "lan_labels": np.random.randn(1000).astype(np.float32),   # 1000 labels
-#         "generator_config": {"model": "ddm", "n_samples": 1000},
-#     }
 
 
 @pytest.fixture
