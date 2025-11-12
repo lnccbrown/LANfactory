@@ -1,3 +1,3 @@
-from .util_funs import try_gen_folder, save_configs
+from .util_funs import save_configs
 
-__all__ = ["try_gen_folder", "save_configs"]
+__all__ = ["save_configs"]
