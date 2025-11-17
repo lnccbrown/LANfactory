@@ -61,7 +61,9 @@ def option_no_default(help: str) -> typer.Option:
 
 @app.command()
 def main(
-    network_config_file: str = option_no_default("Path to the network configuration file (pickle)."),
+    network_config_file: str = option_no_default(
+        "Path to the network configuration file (pickle)."
+    ),
     state_dict_file: str = option_no_default("Path to the state dictionary file."),
     input_shape: int = option_no_default("Size of the input tensor for the model."),
     output_onnx_file: str = option_no_default("Path to the output ONNX file."),

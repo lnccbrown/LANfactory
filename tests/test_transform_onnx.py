@@ -127,7 +127,9 @@ def test_transform_to_onnx_loads_state_dict(mock_network_config, mock_state_dict
         )
 
         # Verify torch.load was called with correct arguments
-        mock_torch_load.assert_called_once_with(state_dict_file, map_location=torch.device("cpu"))
+        mock_torch_load.assert_called_once_with(
+            state_dict_file, map_location=torch.device("cpu")
+        )
 
         # Verify load_state_dict was called on the model
         mock_model.load_state_dict.assert_called_once_with(mock_state_dict)
@@ -182,7 +184,10 @@ def test_transform_to_onnx_missing_state_dict_file(mock_network_config):
         patch("builtins.open", mock_open()),
         patch("lanfactory.onnx.transform_onnx.pickle.load") as mock_pickle_load,
         patch("lanfactory.onnx.transform_onnx.TorchMLP"),
-        patch("lanfactory.onnx.transform_onnx.torch.load", side_effect=FileNotFoundError("State dict not found")),
+        patch(
+            "lanfactory.onnx.transform_onnx.torch.load",
+            side_effect=FileNotFoundError("State dict not found"),
+        ),
     ):
         mock_pickle_load.return_value = mock_network_config
 
@@ -202,7 +207,10 @@ def test_transform_to_onnx_invalid_pickle_file():
     # Mock pickle.load to raise UnpicklingError
     with (
         patch("builtins.open", mock_open()),
-        patch("lanfactory.onnx.transform_onnx.pickle.load", side_effect=pickle.UnpicklingError("Invalid pickle")),
+        patch(
+            "lanfactory.onnx.transform_onnx.pickle.load",
+            side_effect=pickle.UnpicklingError("Invalid pickle"),
+        ),
     ):
         with pytest.raises(pickle.UnpicklingError):
             transform_to_onnx(
