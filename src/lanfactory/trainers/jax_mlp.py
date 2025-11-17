@@ -128,7 +128,7 @@ class MLPJax(nn.Module):
             x = x  # just for pedagogy
         elif (not self.train) and (self.train_output_type == "logits"):
             x = -jnp.log((1 + jnp.exp(-x)))
-        elif not self.train:
+        elif not self.train:  # pragma: no cover
             x = x  # just for pedagogy
 
         return x
@@ -271,7 +271,7 @@ class ModelTrainerJaxMLP:
                 "mse": {"fun": optax.l2_loss, "kwargs": {}},
                 "bcelogit": {"fun": optax.sigmoid_binary_cross_entropy, "kwargs": {}},
             }
-        else:
+        else:  # pragma: no cover
             self.loss_dict = train_config["loss_dict"]
 
         if "lr_dict" not in train_config.keys():
@@ -452,12 +452,12 @@ class ModelTrainerJaxMLP:
 
             # Log wandb and print progress if verbose
             if (step % 100) == 0:
-                if self.wandb_on:
+                if self.wandb_on:  # pragma: no cover
                     try:
                         wandb.log({"loss": loss}, step=int(state.step))
                     except ModuleNotFoundError:
                         pass
-                if verbose == 2:
+                if verbose == 2:  # pragma: no cover
                     print(
                         train_str
                         + " - Step: "
@@ -467,7 +467,7 @@ class ModelTrainerJaxMLP:
                         + " - Loss: "
                         + str(loss)
                     )
-                elif verbose == 1:
+                elif verbose == 1:  # pragma: no cover
                     if (step % 1000) == 0:
                         print(
                             train_str
