@@ -1,9 +1,17 @@
-"""Tests for the DatasetTorch class."""
+"""Tests for the DatasetTorch class and related components."""
 
 import pickle
 import numpy as np
 import pytest
-from lanfactory.trainers.torch_mlp import DatasetTorch
+import torch
+from unittest.mock import MagicMock
+
+from lanfactory.trainers.torch_mlp import (
+    DatasetTorch,
+    ModelTrainerTorchMLP,
+    LoadTorchMLPInfer,
+    TorchMLP,
+)
 
 
 @pytest.fixture
@@ -312,3 +320,245 @@ def test_dataset_torch_batch_ids_calculation(
     # All should be different
     assert not np.array_equal(X0, X1)
     assert not np.array_equal(X1, X9)
+
+
+def test_dataset_torch_label_bounds(tmp_path):
+    """Test DatasetTorch applies label bounds correctly."""
+    # Create data with labels outside bounds
+    file_path = tmp_path / "training_data.pickle"
+    data = {
+        "lan_data": np.random.randn(1000, 6).astype(np.float32),
+        "lan_labels": np.random.randn(1000).astype(np.float32) * 20,  # Large values
+    }
+    with open(file_path, "wb") as f:
+        pickle.dump(data, f)
+
+    dataset = DatasetTorch(
+        file_ids=[str(file_path)],
+        batch_size=100,
+        label_lower_bound=-10.0,
+        label_upper_bound=10.0,
+        features_key="lan_data",
+        label_key="lan_labels",
+    )
+
+    X, y = dataset[0]
+
+    # Labels should be clipped to bounds
+    assert np.all(y >= -10.0)
+    assert np.all(y <= 10.0)
+
+
+def test_dataset_torch_3d_labels_raises_error(tmp_path):
+    """Test DatasetTorch raises ValueError for 3D labels."""
+    file_path = tmp_path / "training_data.pickle"
+    data = {
+        "lan_data": np.random.randn(1000, 6).astype(np.float32),
+        "lan_labels": np.random.randn(1000, 3, 2).astype(np.float32),  # 3D labels
+    }
+    with open(file_path, "wb") as f:
+        pickle.dump(data, f)
+
+    dataset = DatasetTorch(
+        file_ids=[str(file_path)],
+        batch_size=100,
+        features_key="lan_data",
+        label_key="lan_labels",
+    )
+
+    with pytest.raises(ValueError, match="Label data has unexpected shape"):
+        X, y = dataset[0]
+
+
+def test_model_trainer_torch_mlp_init_with_dict():
+    """Test ModelTrainerTorchMLP initialization with dict train_config."""
+    train_config = {
+        "n_epochs": 10,
+        "learning_rate": 0.001,
+        "weight_decay": 0.0,
+        "optimizer": "adam",
+        "loss": "huber",
+        "lr_scheduler": "reduce_on_plateau",
+        "lr_scheduler_params": {"patience": 2},
+    }
+
+    network_config = {
+        "layer_sizes": [100, 100, 1],
+        "activations": ["tanh", "tanh", "linear"],
+        "train_output_type": "logprob",
+    }
+
+    # Create mock model and dataloaders
+    mock_model = TorchMLP(
+        network_config=network_config, input_shape=6, generative_model_id=None
+    )
+    mock_train_dl = MagicMock()
+    mock_valid_dl = MagicMock()
+
+    trainer = ModelTrainerTorchMLP(
+        train_config=train_config,
+        model=mock_model,
+        train_dl=mock_train_dl,
+        valid_dl=mock_valid_dl,
+    )
+
+    assert trainer.train_config == train_config
+    assert trainer.model is not None
+
+
+def test_model_trainer_torch_mlp_init_with_path(tmp_path):
+    """Test ModelTrainerTorchMLP initialization with path train_config."""
+    train_config = {
+        "n_epochs": 10,
+        "learning_rate": 0.001,
+        "weight_decay": 0.0,
+        "optimizer": "adam",
+        "loss": "huber",
+        "lr_scheduler": "reduce_on_plateau",
+        "lr_scheduler_params": {"patience": 2},
+    }
+
+    network_config = {
+        "layer_sizes": [100, 100, 1],
+        "activations": ["tanh", "tanh", "linear"],
+        "train_output_type": "logprob",
+    }
+
+    # Save train_config to file
+    config_file = tmp_path / "train_config.pickle"
+    with open(config_file, "wb") as f:
+        pickle.dump(train_config, f)
+
+    # Create mock model and dataloaders
+    mock_model = TorchMLP(
+        network_config=network_config, input_shape=6, generative_model_id=None
+    )
+    mock_train_dl = MagicMock()
+    mock_valid_dl = MagicMock()
+
+    trainer = ModelTrainerTorchMLP(
+        train_config=str(config_file),
+        model=mock_model,
+        train_dl=mock_train_dl,
+        valid_dl=mock_valid_dl,
+    )
+
+    assert trainer.train_config["n_epochs"] == 10
+    assert trainer.train_config["learning_rate"] == 0.001
+
+
+def test_load_torch_mlp_infer_with_dict_config(tmp_path):
+    """Test LoadTorchMLPInfer with dict network_config."""
+    network_config = {
+        "layer_sizes": [100, 100, 1],
+        "activations": ["tanh", "tanh", "linear"],
+        "train_output_type": "logprob",
+    }
+
+    # Create a simple model and save its state dict
+    model = TorchMLP(
+        network_config=network_config, input_shape=6, generative_model_id=None
+    )
+    model_file = tmp_path / "model.pt"
+    torch.save(model.state_dict(), model_file)
+
+    # Load with LoadTorchMLPInfer
+    infer_model = LoadTorchMLPInfer(
+        model_file_path=str(model_file),
+        network_config=network_config,
+        input_dim=6,
+    )
+
+    assert infer_model.network_config == network_config
+    assert infer_model.input_dim == 6
+
+
+def test_load_torch_mlp_infer_with_string_config(tmp_path):
+    """Test LoadTorchMLPInfer with string path network_config."""
+    network_config = {
+        "layer_sizes": [100, 100, 1],
+        "activations": ["tanh", "tanh", "linear"],
+        "train_output_type": "logprob",
+    }
+
+    # Save network_config to file
+    config_file = tmp_path / "network_config.pickle"
+    with open(config_file, "wb") as f:
+        pickle.dump(network_config, f)
+
+    # Create a simple model and save its state dict
+    model = TorchMLP(
+        network_config=network_config, input_shape=6, generative_model_id=None
+    )
+    model_file = tmp_path / "model.pt"
+    torch.save(model.state_dict(), model_file)
+
+    # Load with LoadTorchMLPInfer using string path for config
+    infer_model = LoadTorchMLPInfer(
+        model_file_path=str(model_file),
+        network_config=str(config_file),
+        input_dim=6,
+    )
+
+    assert infer_model.network_config == network_config
+    assert infer_model.input_dim == 6
+
+
+def test_load_torch_mlp_infer_call_method(tmp_path):
+    """Test LoadTorchMLPInfer.__call__() method."""
+    network_config = {
+        "layer_sizes": [100, 100, 1],
+        "activations": ["tanh", "tanh", "linear"],
+        "train_output_type": "logprob",
+    }
+
+    # Create a simple model and save its state dict
+    model = TorchMLP(
+        network_config=network_config, input_shape=6, generative_model_id=None
+    )
+    model_file = tmp_path / "model.pt"
+    torch.save(model.state_dict(), model_file)
+
+    # Load with LoadTorchMLPInfer
+    infer_model = LoadTorchMLPInfer(
+        model_file_path=str(model_file),
+        network_config=network_config,
+        input_dim=6,
+    )
+
+    # Test call method
+    test_input = torch.randn(10, 6)
+    output = infer_model(test_input)
+
+    assert output.shape == (10, 1)
+    assert isinstance(output, torch.Tensor)
+
+
+def test_load_torch_mlp_infer_predict_on_batch(tmp_path):
+    """Test LoadTorchMLPInfer.predict_on_batch() method."""
+    network_config = {
+        "layer_sizes": [100, 100, 1],
+        "activations": ["tanh", "tanh", "linear"],
+        "train_output_type": "logprob",
+    }
+
+    # Create a simple model and save its state dict
+    model = TorchMLP(
+        network_config=network_config, input_shape=6, generative_model_id=None
+    )
+    model_file = tmp_path / "model.pt"
+    torch.save(model.state_dict(), model_file)
+
+    # Load with LoadTorchMLPInfer
+    infer_model = LoadTorchMLPInfer(
+        model_file_path=str(model_file),
+        network_config=network_config,
+        input_dim=6,
+    )
+
+    # Test predict_on_batch method
+    test_input = np.random.randn(10, 6).astype(np.float32)
+    output = infer_model.predict_on_batch(test_input)
+
+    assert output.shape == (10, 1)
+    assert isinstance(output, np.ndarray)

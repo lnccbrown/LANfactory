@@ -37,7 +37,9 @@ app = typer.Typer()
 @app.command()
 def main(
     config_path: Path = typer.Option(None, help="Path to the YAML config file"),
-    training_data_folder: Path = typer.Option(..., help="Path to the training data folder"),
+    training_data_folder: Path = typer.Option(
+        ..., help="Path to the training data folder"
+    ),
     networks_path_base: Path = typer.Option(..., help="Base path for networks"),
     network_id: int = typer.Option(0, help="Network ID to train"),
     dl_workers: int = typer.Option(1, help="Number of workers for DataLoader"),
@@ -64,20 +66,28 @@ def main(
     # -------------------------------------------------------------
 
     # Set up basic configuration ------------------------------------
-    n_workers = dl_workers if dl_workers > 0 else min(12, psutil.cpu_count(logical=False) - 2)
+    n_workers = (
+        dl_workers if dl_workers > 0 else min(12, psutil.cpu_count(logical=False) - 2)
+    )
     n_workers = max(1, n_workers)
 
     logger.info("Number of workers we assign to the DataLoader: %d", n_workers)
 
     if config_path is None:
         logger.warning("No config path provided, using default configuration.")
-        with as_file(files("lanfactory.cli") / "config_network_training_lan.yaml") as default_config:
+        with as_file(
+            files("lanfactory.cli") / "config_network_training_lan.yaml"
+        ) as default_config:
             config_path = default_config
 
     if network_id is None:
-        config_dict = _get_train_network_config(yaml_config_path=config_path, net_index=0)
+        config_dict = _get_train_network_config(
+            yaml_config_path=config_path, net_index=0
+        )
     else:
-        config_dict = _get_train_network_config(yaml_config_path=str(config_path), net_index=network_id)
+        config_dict = _get_train_network_config(
+            yaml_config_path=str(config_path), net_index=network_id
+        )
 
     logger.info("config dict keys: %s", config_dict.keys())
 
@@ -95,7 +105,9 @@ def main(
 
     random.shuffle(valid_file_list)
     n_training_files = min(len(valid_file_list), train_config["n_training_files"])
-    val_idx_cutoff = int(config_dict["config_dict"]["train_val_split"] * n_training_files)
+    val_idx_cutoff = int(
+        config_dict["config_dict"]["train_val_split"] * n_training_files
+    )
 
     logger.info("NUMBER OF TRAINING FILES FOUND: %d", len(valid_file_list))
     logger.info("NUMBER OF TRAINING FILES USED: %d", n_training_files)
@@ -154,7 +166,11 @@ def main(
     wandb_project_id = "_".join([extra_config["model"], network_config["network_type"]])
 
     # save network config for this run
-    networks_path = Path(networks_path_base) / network_config["network_type"] / extra_config["model"]
+    networks_path = (
+        Path(networks_path_base)
+        / network_config["network_type"]
+        / extra_config["model"]
+    )
     networks_path.mkdir(parents=True, exist_ok=True)
 
     file_name_suffix = "_".join(

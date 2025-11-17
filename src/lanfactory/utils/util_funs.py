@@ -34,6 +34,8 @@ def save_configs(
     )
     print("Saved network config")
     # Save train config
-    pickle.dump(train_config, open(Path(save_folder) / f"{model_id}_train_config.pickle", "wb"))
+    pickle.dump(
+        train_config, open(Path(save_folder) / f"{model_id}_train_config.pickle", "wb")
+    )
     print("Saved train config")
     return

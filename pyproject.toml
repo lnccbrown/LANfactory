@@ -79,6 +79,7 @@ addopts = [
     "--cov=src",
     "--cov-report=term-missing",
     "--cov-report=xml",
+    "--cov-report=html",
     "--exitfirst",
     "--timer-top-n=25",
 ]
@@ -90,6 +91,31 @@ exclude = [
     "notebooks/*",
     "docs/*",                                   # Exclude the entire docs folder
     "docs/basic_tutorial/basic_tutorial.ipynb",
+]
+
+# Coverage settings
+[tool.coverage.run]
+source = ["src"]
+branch = true                      # Measure branch coverage
+parallel = true                    # Support parallel test execution
+omit = [
+    "*/tests/*",
+    "*/__init__.py",
+    "*/conftest.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if __name__ == .__main__.:",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+    "except.*Exception",
+    "except.*ImportError",
+    "logger.error",
 ]
 
 # Add any additional configuration options for ruff

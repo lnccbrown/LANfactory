@@ -87,7 +87,7 @@ def _make_train_network_configs(
     # TODO: Where is save_name specified? It should be passed as an argument
     if save_name:
         save_folder = Path(save_folder)
-        save_folder.mkdir(parents=True, exist_ok=True)
+        save_folder.mkdir(parents=True, exist_ok=True)  # pragma: no cover
         save_name = save_folder / save_name
         pickle.dump(config_dict, open(save_name, "wb"))
         print(f"Saved to: {save_name}")

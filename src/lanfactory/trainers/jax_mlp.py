@@ -42,7 +42,9 @@ def MLPJaxFactory(network_config: dict | str = {}, train: bool = True) -> "MLPJa
     elif isinstance(network_config, dict):
         network_config_internal = network_config
     else:
-        raise ValueError("network_config argument is not passed as either a dictionary or a string (path to a file)!")
+        raise ValueError(
+            "network_config argument is not passed as either a dictionary or a string (path to a file)!"
+        )
 
     return MLPJax(
         layer_sizes=network_config_internal["layer_sizes"],
@@ -73,7 +75,9 @@ class MLPJax(nn.Module):
     # if train = False, output applies transform f
     # such that: f(train_output_type) = logprob
     train_output_type: str = "logprob"
-    activations_dict = frozendict({"relu": nn.relu, "tanh": nn.tanh, "sigmoid": nn.sigmoid})
+    activations_dict = frozendict(
+        {"relu": nn.relu, "tanh": nn.tanh, "sigmoid": nn.sigmoid}
+    )
     # network_type: Optional[str] = "none"
 
     # Define network type
@@ -87,7 +91,9 @@ class MLPJax(nn.Module):
         # TODO: Warn if linear activation is used before final layer
         self.layers = [nn.Dense(layer_size) for layer_size in self.layer_sizes]
         self.activation_funs = [
-            self.activations_dict[activation] for activation in self.activations if (activation != "linear")
+            self.activations_dict[activation]
+            for activation in self.activations
+            if (activation != "linear")
         ]
 
         # Identification
@@ -148,7 +154,10 @@ class MLPJax(nn.Module):
         """
 
         if file_path is None:
-            raise ValueError("file_path argument needs to be specified! " + "(Currently Set to its default: None)")
+            raise ValueError(
+                "file_path argument needs to be specified! "
+                + "(Currently Set to its default: None)"
+            )
 
         with open(file_path, "rb") as file_:
             loaded_state_bytes = file_.read()
@@ -198,7 +207,9 @@ class MLPJax(nn.Module):
 
         # Load state
         if isinstance(state, str):
-            loaded_state = self.load_state_from_file(seed=seed, input_dim=input_dim, file_path=state)
+            loaded_state = self.load_state_from_file(
+                seed=seed, input_dim=input_dim, file_path=state
+            )
         elif isinstance(state, dict):
             loaded_state = state
         else:
@@ -290,7 +301,9 @@ class ModelTrainerJaxMLP:
         self.apply_model_eval = self.__make_apply_model(train=False)
         self.update_model = self.__make_update_model()
 
-        self.training_history: str = "Please run training for this attribute to be specified!"
+        self.training_history: str = (
+            "Please run training for this attribute to be specified!"
+        )
         self.state: str = "Please run training for this attribute to be specified!"
 
     def __get_loss(self) -> None:
@@ -327,7 +340,9 @@ class ModelTrainerJaxMLP:
         """Compile gradient application"""
 
         @jax.jit
-        def update_model(state: train_state.TrainState, grads: dict) -> train_state.TrainState:
+        def update_model(
+            state: train_state.TrainState, grads: dict
+        ) -> train_state.TrainState:
             return state.apply_gradients(grads=grads)
 
         return update_model
@@ -350,7 +365,7 @@ class ModelTrainerJaxMLP:
                 The run id.
 
         """
-        try:
+        try:  # pragma: no cover
             wandb.init(
                 project=wandb_project_id,
                 name=(
@@ -364,7 +379,7 @@ class ModelTrainerJaxMLP:
                 config=self.train_config,
             )
             self.wandb_on = 1
-        except ModuleNotFoundError:
+        except ModuleNotFoundError:  # pragma: no cover
             print("No wandb found, proceeding without logging")
 
     def create_train_state(self, rng: jax.random.PRNGKey) -> train_state.TrainState:
@@ -378,7 +393,9 @@ class ModelTrainerJaxMLP:
             end_value=self.lr_dict["end_value"],
         )
         tx = optax.adam(learning_rate=lr_schedule)
-        return train_state.TrainState.create(apply_fn=self.model.apply, params=params, tx=tx)
+        return train_state.TrainState.create(
+            apply_fn=self.model.apply, params=params, tx=tx
+        )
 
     def run_epoch(
         self,
@@ -441,17 +458,41 @@ class ModelTrainerJaxMLP:
                     except ModuleNotFoundError:
                         pass
                 if verbose == 2:
-                    print(train_str + " - Step: " + str(step) + " of " + str(cnt_max) + " - Loss: " + str(loss))
+                    print(
+                        train_str
+                        + " - Step: "
+                        + str(step)
+                        + " of "
+                        + str(cnt_max)
+                        + " - Loss: "
+                        + str(loss)
+                    )
                 elif verbose == 1:
                     if (step % 1000) == 0:
-                        print(train_str + " - Step: " + str(step) + " of " + str(cnt_max) + " - Loss: " + str(loss))
+                        print(
+                            train_str
+                            + " - Step: "
+                            + str(step)
+                            + " of "
+                            + str(cnt_max)
+                            + " - Loss: "
+                            + str(loss)
+                        )
                 else:
                     pass
 
             step += 1
 
         end_time = time()
-        print("Epoch " + str(epoch) + "/" + str(max_epochs) + " time: " + str(end_time - start_time) + "s")
+        print(
+            "Epoch "
+            + str(epoch)
+            + "/"
+            + str(max_epochs)
+            + " time: "
+            + str(end_time - start_time)
+            + "s"
+        )
 
         mean_epoch_loss = np.mean(epoch_loss)
         return state, mean_epoch_loss
@@ -510,12 +551,15 @@ class ModelTrainerJaxMLP:
             )
 
         # Initialize Training history
-        training_history = pd.DataFrame(np.zeros((self.train_config["n_epochs"], 2)), columns=["epoch", "val_loss"])
+        training_history = pd.DataFrame(
+            np.zeros((self.train_config["n_epochs"], 2)), columns=["epoch", "val_loss"]
+        )
 
         # Initialize network
         if not isinstance(self.seed, int):
             raise ValueError(
-                "seed argument is not an integer, " + "please specify a valid seed to make this code reproducible!"
+                "seed argument is not an integer, "
+                + "please specify a valid seed to make this code reproducible!"
             )
         else:
             rng = jax.random.PRNGKey(self.seed)
@@ -545,14 +589,20 @@ class ModelTrainerJaxMLP:
             # Collect loss in training history
             training_history.values[epoch, :] = [int(epoch), float(test_loss)]
 
-            print("Epoch: {} / {}, test_loss: {}".format(epoch, self.train_config["n_epochs"], test_loss))
+            print(
+                "Epoch: {} / {}, test_loss: {}".format(
+                    epoch, self.train_config["n_epochs"], test_loss
+                )
+            )
 
         # Set some final attributes
         self.training_history = training_history
         self.state = state
 
         # Saving
-        full_path = str(output_folder / (run_id + "_" + network_type + "_" + output_file_id + "_"))
+        full_path = str(
+            output_folder / (run_id + "_" + network_type + "_" + output_file_id + "_")
+        )
 
         if save_outputs:
             training_history_path = f"{full_path}_jax_training_history.csv"
