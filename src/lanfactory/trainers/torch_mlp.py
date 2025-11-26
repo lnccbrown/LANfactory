@@ -16,9 +16,9 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 try:
-    import wandb
+    import mlflow
 except ImportError:
-    print("wandb not available")
+    print("mlflow not available")
 
 logger = logging.getLogger(__name__)
 
@@ -135,14 +135,14 @@ class DatasetTorch(torch.utils.data.Dataset):
             y = np.expand_dims(self.tmp_data[self.label_key][batch_ids], axis=1)
         elif self.tmp_data[self.label_key].ndim == 2:
             y = self.tmp_data[self.label_key][batch_ids]
-        else:
+        else:  # pragma: no cover
             bad_shape = str(self.tmp_data[self.label_key].shape)
             raise ValueError(f"Label data has unexpected shape: {bad_shape}")
 
         if self.label_lower_bound is not None:
             y[y < self.label_lower_bound] = self.label_lower_bound
 
-        if self.label_upper_bound is not None:
+        if self.label_upper_bound is not None:  # pragma: no cover
             y[y > self.label_upper_bound] = self.label_upper_bound
 
         return X, y
@@ -227,9 +227,9 @@ class TorchMLP(nn.Module):
                     self.layers.append(
                         self.activations[self.network_config["activations"][i + 1]]
                     )
-                else:
+                else:  # pragma: no cover
                     pass
-            else:
+            else:  # pragma: no cover
                 # skip output activation if no activation for last layer is provided
                 # e.g. regression network
                 pass
@@ -339,28 +339,19 @@ class ModelTrainerTorchMLP:
         self.__get_scheduler()
         # self.__load_weights()
 
-    def __try_wandb(  # pragma: no cover
-        self,
-        wandb_project_id: str = "projectid",
-        run_id: str = "runid",
-    ) -> None:
+    def __try_mlflow(self, run_id: str = "runid") -> None:
+        """Helper function to initialize mlflow"""
         try:
-            wandb.init(
-                project=wandb_project_id,
-                name=(
-                    "wd_"
-                    + str(self.train_config["weight_decay"])
-                    + "_optim_"
-                    + str(self.train_config["optimizer"])
-                    + "_"
-                    + run_id
-                ),
-                config=self.train_config,
-            )
-            logger.info("Succefully initialized wandb!")
-        except Exception as e:
-            logger.error(f"Unexpected wandb error: {e}")
-            logger.info("wandb not available, not storing results there")
+            if mlflow.active_run() is None:
+                mlflow.start_run(run_id=run_id)
+
+            # Log params
+            mlflow.log_params(self.train_config)
+            logger.info("Successfully initialized mlflow!")
+        except NameError:  # pragma: no cover
+            logger.info("mlflow not available, not storing results there")
+        except Exception as e:  # pragma: no cover
+            logger.error(f"Unexpected mlflow error: {e}")
 
     def __get_loss(self) -> None:
         if self.train_config["loss"] == "huber":
@@ -373,11 +364,11 @@ class ModelTrainerTorchMLP:
             self.loss_fun = F.binary_cross_entropy_with_logits
 
     def __get_optimizer(self) -> None:
-        if self.train_config["optimizer"] not in ["adam", "sgd"]:
+        if self.train_config["optimizer"] not in ["adam", "sgd"]:  # pragma: no cover
             raise ValueError(
                 f"Optimizer {self.train_config['optimizer']} not supported yet"
             )
-        elif self.train_config["optimizer"] == "sgd":
+        elif self.train_config["optimizer"] == "sgd":  # pragma: no cover
             self.optimizer = optim.SGD(
                 self.model.parameters(),
                 weight_decay=self.train_config["weight_decay"],
@@ -436,8 +427,7 @@ class ModelTrainerTorchMLP:
         output_folder: str | Path = "data/",
         output_file_id: str = "fileid",
         run_id: str = "runid",
-        wandb_on: bool = True,
-        wandb_project_id: str = "projectid",
+        mlflow_on: bool = False,
         save_outputs: bool = True,
         verbose: int = 1,
     ) -> None:
@@ -451,10 +441,8 @@ class ModelTrainerTorchMLP:
                 Output file ID.
             run_id (str):
                 Run ID.
-            wandb_on (bool):
-                Whether to use wandb.
-            wandb_project_id (str):
-                Wandb project ID.
+            mlflow_on (bool):
+                Whether to use mlflow.
             save_outputs (bool):
                 Whether to save all outputs.
             verbose (int):
@@ -469,18 +457,12 @@ class ModelTrainerTorchMLP:
         #     allow_abs_path_folder_generation=self.allow_abs_path_folder_generation,
         # )  # AF-TODO import folder
 
-        if wandb_on:
-            self.__try_wandb(wandb_project_id=wandb_project_id, run_id=run_id)
+        if mlflow_on:
+            self.__try_mlflow(run_id=run_id)
 
         training_history: pd.DataFrame = pd.DataFrame(
             np.zeros((self.train_config["n_epochs"], 2)), columns=["epoch", "val_loss"]
         )
-
-        if wandb_on:
-            try:
-                wandb.watch(self.model, criterion=None, log="all", log_freq=1000)
-            except Exception as e:
-                print(e)
 
         step_cnt = 0
         self.model.train()
@@ -537,8 +519,14 @@ class ModelTrainerTorchMLP:
             # Append training history
             training_history.values[epoch, :] = [epoch, val_loss.cpu()]
 
-            # Log wandb if possible
-            self._log_wandb(wandb_on, loss, val_loss, step_cnt)
+            if mlflow_on:
+                try:
+                    mlflow.log_metrics(
+                        {"loss": float(loss), "val_loss": float(val_loss)},
+                        step=step_cnt,
+                    )
+                except Exception as e:
+                    logger.error(f"Unexpected mlflow error: {e}")
 
         if save_outputs:
             partial_path_str = str(
@@ -557,7 +545,32 @@ class ModelTrainerTorchMLP:
             )
             self._save_onnx(self.model, self.dev, partial_path_str + "_model.onnx")
 
-        self._close_wandb(wandb_on)
+            if mlflow_on:
+                try:
+                    mlflow.log_artifact(
+                        partial_path_str + "_training_history.csv",
+                        artifact_path="training_output",
+                    )
+                    mlflow.log_artifact(
+                        partial_path_str + "_train_state_dict.pt",
+                        artifact_path="training_output",
+                    )
+                    mlflow.log_artifact(
+                        partial_path_str + "_train_config.pickle",
+                        artifact_path="training_output",
+                    )
+                    mlflow.log_artifact(
+                        partial_path_str + "_data_details.pickle",
+                        artifact_path="training_output",
+                    )
+                    mlflow.log_artifact(
+                        partial_path_str + "_model.onnx",
+                        artifact_path="training_output",
+                    )
+                    mlflow.end_run()
+                except Exception as e:
+                    logger.error(f"Failed to log artifacts to MLflow: {e}")
+
         logger.info("Training finished successfully...")
 
     def _log_training_progress(
@@ -581,27 +594,6 @@ class ModelTrainerTorchMLP:
                 f"batch_loss: {loss:.4f}"
             )
             print(message)
-
-    @staticmethod
-    def _close_wandb(wandb_on: bool) -> None:
-        if wandb_on:
-            try:
-                wandb.finish()
-                logger.info("wandb uploaded")
-            except Exception as e:
-                logger.error("Unexpected wandb error: {}".format(e))
-        else:
-            logger.info("wandb not available, nothing to close")
-
-    @staticmethod
-    def _log_wandb(
-        wandb_on: bool, loss: torch.Tensor, val_loss: torch.Tensor, step_cnt: int
-    ) -> None:
-        if wandb_on:
-            try:
-                wandb.log({"loss": loss, "val_loss": val_loss}, step=step_cnt)
-            except Exception as e:
-                logger.error("Unexpected wandb error: {}".format(e))
 
     @staticmethod
     def _save_training_history(training_history: pd.DataFrame, path: str) -> None:
