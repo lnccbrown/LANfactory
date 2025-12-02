@@ -1,6 +1,8 @@
 """Tests for MLflow integration in LANfactory trainers and utilities."""
 
 import pickle
+import shutil
+from pathlib import Path
 
 import pytest
 import numpy as np
@@ -22,19 +24,69 @@ from lanfactory.utils import (
 pytestmark = pytest.mark.skipif(not MLFLOW_AVAILABLE, reason="mlflow not installed")
 
 
+def set_experiment_with_artifact_location(experiment_name, artifact_location):
+    """Helper to set experiment with artifact location (MLflow compatible)."""
+    # Check if experiment exists
+    experiment = mlflow.get_experiment_by_name(experiment_name)
+    if experiment is None:
+        # Create new experiment with artifact location
+        mlflow.create_experiment(experiment_name, artifact_location=artifact_location)
+    mlflow.set_experiment(experiment_name)
+
+
+@pytest.fixture(scope="function", autouse=True)
+def cleanup_mlflow():
+    """Clean up any MLflow artifacts after each test."""
+    # Store original tracking URI
+    original_uri = mlflow.get_tracking_uri()
+
+    yield
+
+    # Clean up any stray mlruns directory
+    mlruns_path = Path.cwd() / "mlruns"
+    if mlruns_path.exists():
+        shutil.rmtree(mlruns_path)
+
+    # Reset to original URI (or default)
+    try:
+        mlflow.set_tracking_uri(original_uri)
+    except Exception:
+        pass
+
+
 @pytest.fixture
 def test_mlflow_dir(tmp_path):
-    """Create a temporary MLflow tracking directory."""
-    mlflow_dir = tmp_path / "test_mlruns"
-    mlflow_dir.mkdir()
-    yield mlflow_dir
+    """Create a temporary MLflow tracking directory with SQLite backend."""
+    # Create isolated directories
+    mlflow_root = tmp_path / "mlflow_test"
+    mlflow_root.mkdir()
+
+    mlflow_db = mlflow_root / "tracking.db"
+    artifact_dir = mlflow_root / "artifacts"
+    artifact_dir.mkdir()
+
+    # Use absolute path for SQLite
+    tracking_uri = f"sqlite:///{mlflow_db.absolute()}"
+    mlflow.set_tracking_uri(tracking_uri)
+
+    # Store artifact location for tests that need it
+    artifact_location = str(artifact_dir.absolute())
+
+    # Return tracking URI, artifact location, and tmp_path
+    yield {
+        "tracking_uri": tracking_uri,
+        "artifact_location": artifact_location,
+        "tmp_path": tmp_path,
+    }
 
 
 @pytest.fixture
 def mock_data_generation_experiment(test_mlflow_dir):
     """Create a mock data generation experiment with multiple runs."""
-    mlflow.set_tracking_uri(str(test_mlflow_dir))
-    experiment = mlflow.set_experiment("test-data-generation")
+    artifact_location = test_mlflow_dir["artifact_location"]
+
+    set_experiment_with_artifact_location("test-data-generation", artifact_location)
+    experiment = mlflow.get_experiment_by_name("test-data-generation")
 
     # Create multiple runs simulating distributed data generation
     run_ids = []
@@ -104,9 +156,11 @@ class TestMLflowUtils:
         self, test_mlflow_dir, mock_data_generation_experiment
     ):
         """Test retrieving files from a data generation experiment."""
+        tracking_uri = test_mlflow_dir["tracking_uri"]
+
         result = get_files_from_data_generation_experiment(
             experiment_id=mock_data_generation_experiment["experiment_id"],
-            tracking_uri=str(test_mlflow_dir),
+            tracking_uri=tracking_uri,
         )
 
         # Verify structure
@@ -128,11 +182,14 @@ class TestMLflowUtils:
 
     def test_get_files_from_empty_experiment(self, test_mlflow_dir):
         """Test behavior when experiment has no runs."""
-        mlflow.set_tracking_uri(str(test_mlflow_dir))
-        experiment = mlflow.set_experiment("empty-experiment")
+        tracking_uri = test_mlflow_dir["tracking_uri"]
+        artifact_location = test_mlflow_dir["artifact_location"]
+
+        set_experiment_with_artifact_location("empty-experiment", artifact_location)
+        experiment = mlflow.get_experiment_by_name("empty-experiment")
 
         result = get_files_from_data_generation_experiment(
-            experiment_id=experiment.experiment_id, tracking_uri=str(test_mlflow_dir)
+            experiment_id=experiment.experiment_id, tracking_uri=tracking_uri
         )
 
         assert result["num_runs"] == 0
@@ -146,8 +203,10 @@ class TestMLflowUtils:
         mock_training_data_folder,
     ):
         """Test logging training data lineage."""
-        mlflow.set_tracking_uri(str(test_mlflow_dir))
-        mlflow.set_experiment("test-training")
+        tracking_uri = test_mlflow_dir["tracking_uri"]
+        artifact_location = test_mlflow_dir["artifact_location"]
+
+        set_experiment_with_artifact_location("test-training", artifact_location)
 
         # Create a training run
         with mlflow.start_run(run_name="test-training-run"):
@@ -164,7 +223,7 @@ class TestMLflowUtils:
                 training_data_folder=mock_training_data_folder,
                 valid_file_list=valid_file_list,
                 n_training_files=len(valid_file_list),
-                tracking_uri=str(test_mlflow_dir),
+                tracking_uri=tracking_uri,
             )
 
         # Verify lineage was logged
@@ -185,7 +244,7 @@ class TestMLflowUtils:
         assert len(lineage["missing_files"]) == 5  # 15 expected - 10 actual
 
         # Verify artifact was logged to MLflow
-        client = mlflow.MlflowClient(tracking_uri=str(test_mlflow_dir))
+        client = mlflow.MlflowClient(tracking_uri=tracking_uri)
         artifacts = client.list_artifacts(run_id)
         artifact_names = [a.path for a in artifacts]
         assert "training_data_lineage.json" in artifact_names
@@ -198,8 +257,9 @@ class TestMLflowUtils:
         self, test_mlflow_dir, mock_data_generation_experiment, tmp_path
     ):
         """Test lineage logging when extra files exist in training folder."""
-        mlflow.set_tracking_uri(str(test_mlflow_dir))
-        mlflow.set_experiment("test-training")
+        tracking_uri = test_mlflow_dir["tracking_uri"]
+        artifact_location = test_mlflow_dir["artifact_location"]
+        set_experiment_with_artifact_location("test-training", artifact_location)
 
         # Create training data folder with extra files
         data_folder = tmp_path / "training_data"
@@ -227,7 +287,7 @@ class TestMLflowUtils:
                 training_data_folder=data_folder,
                 valid_file_list=valid_file_list,
                 n_training_files=len(valid_file_list),
-                tracking_uri=str(test_mlflow_dir),
+                tracking_uri=tracking_uri,
             )
 
         # Verify extra files detected
@@ -250,8 +310,9 @@ class TestMLflowIntegrationWithTrainers:
         from lanfactory.trainers.jax_mlp import MLPJaxFactory, ModelTrainerJaxMLP
         from lanfactory.trainers.torch_mlp import DatasetTorch
 
-        mlflow.set_tracking_uri(str(test_mlflow_dir))
-        mlflow.set_experiment("test-jax-training")
+        tracking_uri = test_mlflow_dir["tracking_uri"]
+        artifact_location = test_mlflow_dir["artifact_location"]
+        set_experiment_with_artifact_location("test-jax-training", artifact_location)
 
         # Generate minimal training data
         gen_configs = dummy_generator_config_simple_two_choices()
@@ -319,7 +380,7 @@ class TestMLflowIntegrationWithTrainers:
             )
 
         # Verify MLflow logged artifacts
-        client = mlflow.MlflowClient(tracking_uri=str(test_mlflow_dir))
+        client = mlflow.MlflowClient(tracking_uri=tracking_uri)
         artifacts = client.list_artifacts(run_id, path="training_output")
         artifact_names = [a.path for a in artifacts]
 
@@ -343,8 +404,9 @@ class TestMLflowIntegrationWithTrainers:
             DatasetTorch,
         )
 
-        mlflow.set_tracking_uri(str(test_mlflow_dir))
-        mlflow.set_experiment("test-torch-training")
+        tracking_uri = test_mlflow_dir["tracking_uri"]
+        artifact_location = test_mlflow_dir["artifact_location"]
+        set_experiment_with_artifact_location("test-torch-training", artifact_location)
 
         # Generate minimal training data
         gen_configs = dummy_generator_config_simple_two_choices()
@@ -420,7 +482,7 @@ class TestMLflowIntegrationWithTrainers:
             )
 
         # Verify MLflow logged artifacts
-        client = mlflow.MlflowClient(tracking_uri=str(test_mlflow_dir))
+        client = mlflow.MlflowClient(tracking_uri=tracking_uri)
         artifacts = client.list_artifacts(run_id, path="training_output")
         artifact_names = [a.path for a in artifacts]
 
@@ -442,8 +504,11 @@ class TestDataLineageTracking:
         mock_training_data_folder,
     ):
         """Test the complete lineage workflow from data gen to training."""
-        mlflow.set_tracking_uri(str(test_mlflow_dir))
-        mlflow.set_experiment("test-lineage-workflow")
+        tracking_uri = test_mlflow_dir["tracking_uri"]
+        artifact_location = test_mlflow_dir["artifact_location"]
+        set_experiment_with_artifact_location(
+            "test-lineage-workflow", artifact_location
+        )
 
         with mlflow.start_run(run_name="training-with-lineage") as run:
             run_id = run.info.run_id
@@ -459,7 +524,7 @@ class TestDataLineageTracking:
                 training_data_folder=mock_training_data_folder,
                 valid_file_list=valid_file_list,
                 n_training_files=len(valid_file_list),
-                tracking_uri=str(test_mlflow_dir),
+                tracking_uri=tracking_uri,
             )
 
         # Verify lineage structure
@@ -469,7 +534,7 @@ class TestDataLineageTracking:
         assert len(lineage["actual_files_used"]) == 10
 
         # Verify MLflow tags
-        client = mlflow.MlflowClient(tracking_uri=str(test_mlflow_dir))
+        client = mlflow.MlflowClient(tracking_uri=tracking_uri)
         run = client.get_run(run_id)
         assert "data_generation_experiment_id" in run.data.tags
         assert (
@@ -486,8 +551,9 @@ class TestDataLineageTracking:
         self, test_mlflow_dir, mock_data_generation_experiment, tmp_path
     ):
         """Test that missing files are properly detected and logged."""
-        mlflow.set_tracking_uri(str(test_mlflow_dir))
-        mlflow.set_experiment("test-missing-files")
+        tracking_uri = test_mlflow_dir["tracking_uri"]
+        artifact_location = test_mlflow_dir["artifact_location"]
+        set_experiment_with_artifact_location("test-missing-files", artifact_location)
 
         # Create folder with only 3 of the expected 15 files
         data_folder = tmp_path / "incomplete_data"
@@ -509,14 +575,14 @@ class TestDataLineageTracking:
                 training_data_folder=data_folder,
                 valid_file_list=valid_file_list,
                 n_training_files=len(valid_file_list),
-                tracking_uri=str(test_mlflow_dir),
+                tracking_uri=tracking_uri,
             )
 
         # Verify missing files detected
         assert len(lineage["missing_files"]) == 12  # 15 - 3
 
         # Verify logged to MLflow
-        client = mlflow.MlflowClient(tracking_uri=str(test_mlflow_dir))
+        client = mlflow.MlflowClient(tracking_uri=tracking_uri)
         run = client.get_run(run_id)
         assert "missing_files_count" in run.data.params
         assert run.data.params["missing_files_count"] == "12"
@@ -524,15 +590,18 @@ class TestDataLineageTracking:
 
 def test_mlflow_experiment_organization(test_mlflow_dir):
     """Test that experiments are properly organized."""
-    mlflow.set_tracking_uri(str(test_mlflow_dir))
+    tracking_uri = test_mlflow_dir["tracking_uri"]
+    artifact_location = test_mlflow_dir["artifact_location"]
 
     # Create data generation experiment
-    data_exp = mlflow.set_experiment("model-a-data-generation")
+    set_experiment_with_artifact_location("model-a-data-generation", artifact_location)
+    data_exp = mlflow.get_experiment_by_name("model-a-data-generation")
     with mlflow.start_run(run_name="data-gen-1"):
         mlflow.log_param("test", "value")
 
     # Create training experiment
-    train_exp = mlflow.set_experiment("model-a-training")
+    set_experiment_with_artifact_location("model-a-training", artifact_location)
+    train_exp = mlflow.get_experiment_by_name("model-a-training")
     with mlflow.start_run(run_name="training-1") as run:
         mlflow.set_tag("data_generation_experiment_id", data_exp.experiment_id)
         mlflow.log_param("test", "value")
@@ -542,7 +611,7 @@ def test_mlflow_experiment_organization(test_mlflow_dir):
     assert data_exp.experiment_id != train_exp.experiment_id
 
     # Verify training run links to data generation
-    client = mlflow.MlflowClient(tracking_uri=str(test_mlflow_dir))
+    client = mlflow.MlflowClient(tracking_uri=tracking_uri)
     training_run = client.get_run(training_run_id)
     assert (
         training_run.data.tags["data_generation_experiment_id"]
@@ -645,13 +714,13 @@ class TestMLflowEdgeCases:
         """Test graceful handling of invalid data generation experiment ID."""
         from lanfactory.utils import get_files_from_data_generation_experiment
 
-        mlflow.set_tracking_uri(str(test_mlflow_dir))
+        tracking_uri = test_mlflow_dir["tracking_uri"]
 
         # Try to get files from non-existent experiment
         # Should return empty result, not crash
         result = get_files_from_data_generation_experiment(
             experiment_id="999999999999",  # Non-existent
-            tracking_uri=str(test_mlflow_dir),
+            tracking_uri=tracking_uri,
         )
 
         # Should handle gracefully

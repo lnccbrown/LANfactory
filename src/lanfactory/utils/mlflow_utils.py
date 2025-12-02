@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_files_from_data_generation_experiment(
-    experiment_id: str, tracking_uri: str = "./mlruns"
+    experiment_id: str, tracking_uri: str = "sqlite:///mlflow.db"
 ) -> dict:
     """Get all files generated across all runs in a data generation experiment.
 
@@ -20,7 +20,7 @@ def get_files_from_data_generation_experiment(
         experiment_id : str
             The MLflow experiment ID for data generation
         tracking_uri : str
-            MLflow tracking URI (default: "./mlruns")
+            MLflow tracking URI (default: "sqlite:///mlflow.db")
 
     Returns
     -------
@@ -148,7 +148,7 @@ def log_training_data_lineage(
         return {}
 
     if tracking_uri is None:
-        tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "./mlruns")
+        tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db")
 
     try:
         # Get expected files from data generation experiment

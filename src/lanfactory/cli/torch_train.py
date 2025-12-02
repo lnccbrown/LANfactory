@@ -64,6 +64,18 @@ def main(
         "All runs in this experiment generated the training data. "
         "If provided, training data location will be derived from MLflow and lineage will be logged.",
     ),
+    mlflow_tracking_uri: str = typer.Option(
+        None,
+        "--mlflow-tracking-uri",
+        help="MLflow tracking URI (e.g., 'sqlite:///path/to/mlflow.db' or 'http://mlflow-server:5000'). "
+        "Defaults to MLFLOW_TRACKING_URI env var, then 'sqlite:///mlflow.db'.",
+    ),
+    mlflow_artifact_location: str = typer.Option(
+        None,
+        "--mlflow-artifact-location",
+        help="Root directory for MLflow artifacts. "
+        "Defaults to MLFLOW_ARTIFACT_LOCATION env var, then './mlruns'.",
+    ),
     log_level: str = typer.Option(
         "WARNING",
         "--log-level",
@@ -149,13 +161,47 @@ def main(
             import mlflow
             import os
 
-            tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "./mlruns")
-            mlflow.set_tracking_uri(tracking_uri)
+            # Set tracking URI with priority: CLI arg > env var > default
+            if mlflow_tracking_uri:
+                tracking_uri = mlflow_tracking_uri
+            else:
+                tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db")
 
-            # Set experiment if provided
+            mlflow.set_tracking_uri(tracking_uri)
+            logger.info("MLflow tracking URI: %s", tracking_uri)
+
+            # Set experiment with optional artifact location
             mlflow_experiment = os.getenv("MLFLOW_EXPERIMENT_NAME")
             if mlflow_experiment:
-                mlflow.set_experiment(mlflow_experiment)
+                # Determine artifact location with priority: CLI arg > env var > None (default)
+                if mlflow_artifact_location:
+                    artifact_location = mlflow_artifact_location
+                else:
+                    artifact_location = os.getenv("MLFLOW_ARTIFACT_LOCATION", None)
+
+                if artifact_location:
+                    # Ensure artifact location is absolute path
+                    artifact_location = str(Path(artifact_location).absolute())
+
+                    # Try to get existing experiment, or create new one with artifact location
+                    experiment = mlflow.get_experiment_by_name(mlflow_experiment)
+                    if experiment is None:
+                        # Create new experiment with artifact location
+                        mlflow.create_experiment(
+                            mlflow_experiment, artifact_location=artifact_location
+                        )
+                        logger.info(
+                            "Created MLflow experiment: %s (artifacts: %s)",
+                            mlflow_experiment,
+                            artifact_location,
+                        )
+                    mlflow.set_experiment(mlflow_experiment)
+                else:
+                    mlflow.set_experiment(mlflow_experiment)
+                    logger.info(
+                        "Set MLflow experiment: %s (default artifact location)",
+                        mlflow_experiment,
+                    )
 
             # Start/resume run if provided, otherwise create new run
             if mlflow_run_id:
@@ -178,7 +224,13 @@ def main(
                 import mlflow
                 import os
 
-                tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "./mlruns")
+                # Use same logic as above for tracking URI
+                if mlflow_tracking_uri:
+                    tracking_uri = mlflow_tracking_uri
+                else:
+                    tracking_uri = os.getenv(
+                        "MLFLOW_TRACKING_URI", "sqlite:///mlflow.db"
+                    )
                 mlflow.set_tracking_uri(tracking_uri)
 
             # Get file information from MLflow
