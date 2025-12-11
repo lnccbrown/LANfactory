@@ -74,10 +74,10 @@ class DatasetTorch(torch.utils.data.Dataset):
 
     def __len__(self) -> int:
         # Number of batches per epoch
-        return (
-            len(self.file_ids)
-            * ((self.file_shape_dict["inputs"][0] // self.batch_size) * self.batch_size)
-        ) // self.batch_size
+        # When batch_size > samples_per_file, we still have 1 batch per file
+        samples_per_file = self.file_shape_dict["inputs"][0]
+        batches_per_file = max(1, samples_per_file // self.batch_size)
+        return len(self.file_ids) * batches_per_file
 
     def __getitem__(self, index: int) -> tuple[np.ndarray, np.ndarray]:
         # Check if it is time to load the next file
@@ -85,11 +85,9 @@ class DatasetTorch(torch.utils.data.Dataset):
             self.__load_file(file_index=self.indexes[index // self.batches_per_file])
 
         # Generate and return a batch
-        batch_ids = np.arange(
-            ((index % self.batches_per_file) * self.batch_size),
-            ((index % self.batches_per_file) + 1) * self.batch_size,
-            1,
-        )
+        start_idx = (index % self.batches_per_file) * self.batch_size
+        end_idx = min(start_idx + self.batch_size, self.file_shape_dict["inputs"][0])
+        batch_ids = np.arange(start_idx, end_idx, 1)
         X, y = self.__data_generation(batch_ids)
         return X, y
 
@@ -114,10 +112,13 @@ class DatasetTorch(torch.utils.data.Dataset):
             "inputs": init_file[self.features_key].shape,
             "labels": init_file[self.label_key].shape,
         }
-        self.batches_per_file = int(self.file_shape_dict["inputs"][0] / self.batch_size)
+        # Ensure at least 1 batch per file even when batch_size > samples_per_file
+        self.batches_per_file = max(
+            1, int(self.file_shape_dict["inputs"][0] / self.batch_size)
+        )
         self.input_dim = self.file_shape_dict["inputs"][1]
 
-        if "generator_config" in init_file.keys():
+        if "generator_config" in init_file:
             self.data_generator_config = init_file["generator_config"]
 
         if len(self.file_shape_dict["labels"]) > 1:
@@ -176,7 +177,7 @@ class TorchMLP(nn.Module):
         self.input_shape = input_shape
         self.network_config = network_config
 
-        if "train_output_type" in self.network_config.keys():
+        if "train_output_type" in self.network_config:
             self.train_output_type = self.network_config["train_output_type"]
         else:
             self.train_output_type = "logprob"
@@ -393,25 +394,24 @@ class ModelTrainerTorchMLP:
                     mode="min",
                     factor=(
                         self.train_config["lr_scheduler_params"]["factor"]
-                        if "factor" in self.train_config["lr_scheduler_params"].keys()
+                        if "factor" in self.train_config["lr_scheduler_params"]
                         else 0.1
                     ),
                     patience=(
                         self.train_config["lr_scheduler_params"]["patience"]
-                        if "patience" in self.train_config["lr_scheduler_params"].keys()
+                        if "patience" in self.train_config["lr_scheduler_params"]
                         else 2
                     ),
                     threshold=(
                         self.train_config["lr_scheduler_params"]["threshold"]
-                        if "threshold"
-                        in self.train_config["lr_scheduler_params"].keys()
+                        if "threshold" in self.train_config["lr_scheduler_params"]
                         else 0.001
                     ),
                     threshold_mode="rel",
                     cooldown=0,
                     min_lr=(
                         self.train_config["lr_scheduler_params"]["min_lr"]
-                        if "min_lr" in self.train_config["lr_scheduler_params"].keys()
+                        if "min_lr" in self.train_config["lr_scheduler_params"]
                         else 0.00000001
                     ),
                 )
@@ -420,7 +420,7 @@ class ModelTrainerTorchMLP:
                     self.optimizer,
                     gamma=(
                         self.train_config["lr_scheduler_params"]["factor"]
-                        if "factor" in self.train_config["lr_scheduler_params"].keys()
+                        if "factor" in self.train_config["lr_scheduler_params"]
                         else 0.1
                     ),
                     last_epoch=-1,
