@@ -370,6 +370,29 @@ def test_dataset_torch_3d_labels_raises_error(tmp_path):
         X, y = dataset[0]
 
 
+def test_dataset_torch_batch_size_not_divisible_raises_error(tmp_path):
+    """Test DatasetTorch raises ValueError when batch_size doesn't divide samples_per_file."""
+    file_path = tmp_path / "training_data.pickle"
+    data = {
+        "lan_data": np.random.randn(1000, 6).astype(np.float32),
+        "lan_labels": np.random.randn(1000).astype(np.float32),
+    }
+    with open(file_path, "wb") as f:
+        pickle.dump(data, f)
+
+    # batch_size=128 doesn't divide 1000 evenly (remainder 104)
+    with pytest.raises(
+        ValueError,
+        match=r"samples_per_file \(1000\) must be divisible by batch_size \(128\)\. Current remainder: 104",
+    ):
+        DatasetTorch(
+            file_ids=[str(file_path)],
+            batch_size=128,
+            features_key="lan_data",
+            label_key="lan_labels",
+        )
+
+
 def test_model_trainer_torch_mlp_init_with_dict():
     """Test ModelTrainerTorchMLP initialization with dict train_config."""
     train_config = {
