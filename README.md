@@ -4,7 +4,7 @@
 ![PyPI](https://img.shields.io/pypi/v/lanfactory)
 ![PyPI_dl](https://img.shields.io/pypi/dm/lanfactory)
 [![GitHub pull requests](https://img.shields.io/github/issues-pr/lnccbrown/LANfactory)](https://github.com/lnccbrown/LANfactory/pulls)
-![Python Version](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)
+![Python Version](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)
 [![Run tests](https://github.com/lnccbrown/LANfactory/actions/workflows/run_tests.yml/badge.svg)](https://github.com/lnccbrown/LANfactory/actions/workflows/run_tests.yml)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![codecov](https://codecov.io/gh/lnccbrown/LANfactory/branch/main/graph/badge.svg)](https://codecov.io/gh/lnccbrown/LANfactory)
