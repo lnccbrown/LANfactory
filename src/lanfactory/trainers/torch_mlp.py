@@ -74,10 +74,7 @@ class DatasetTorch(torch.utils.data.Dataset):
 
     def __len__(self) -> int:
         # Number of batches per epoch
-        # When batch_size > samples_per_file, we still have 1 batch per file
-        samples_per_file = self.file_shape_dict["inputs"][0]
-        batches_per_file = max(1, samples_per_file // self.batch_size)
-        return len(self.file_ids) * batches_per_file
+        return len(self.file_ids) * self.batches_per_file
 
     def __getitem__(self, index: int) -> tuple[np.ndarray, np.ndarray]:
         # Check if it is time to load the next file
@@ -86,7 +83,7 @@ class DatasetTorch(torch.utils.data.Dataset):
 
         # Generate and return a batch
         start_idx = (index % self.batches_per_file) * self.batch_size
-        end_idx = min(start_idx + self.batch_size, self.file_shape_dict["inputs"][0])
+        end_idx = start_idx + self.batch_size
         batch_ids = np.arange(start_idx, end_idx, 1)
         X, y = self.__data_generation(batch_ids)
         return X, y
@@ -112,10 +109,17 @@ class DatasetTorch(torch.utils.data.Dataset):
             "inputs": init_file[self.features_key].shape,
             "labels": init_file[self.label_key].shape,
         }
-        # Ensure at least 1 batch per file even when batch_size > samples_per_file
-        self.batches_per_file = max(
-            1, self.file_shape_dict["inputs"][0] // self.batch_size
-        )
+
+        # Validate that samples_per_file is divisible by batch_size
+        samples_per_file = self.file_shape_dict["inputs"][0]
+        if samples_per_file % self.batch_size != 0:
+            raise ValueError(
+                f"samples_per_file ({samples_per_file}) must be divisible by "
+                f"batch_size ({self.batch_size}). Current remainder: "
+                f"{samples_per_file % self.batch_size}"
+            )
+
+        self.batches_per_file = samples_per_file // self.batch_size
 
         self.input_dim = self.file_shape_dict["inputs"][1]
 
