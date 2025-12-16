@@ -114,8 +114,9 @@ class DatasetTorch(torch.utils.data.Dataset):
         }
         # Ensure at least 1 batch per file even when batch_size > samples_per_file
         self.batches_per_file = max(
-            1, int(self.file_shape_dict["inputs"][0] / self.batch_size)
+            1, self.file_shape_dict["inputs"][0] // self.batch_size
         )
+
         self.input_dim = self.file_shape_dict["inputs"][1]
 
         if "generator_config" in init_file:
