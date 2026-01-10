@@ -3,6 +3,7 @@
 notebooks/data/
 notebooks/jax_nb_data/
 notebooks/torch_nb_data/
+hssm_paper/
 
 notebooks/test_notebooks/data/
 
