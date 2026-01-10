@@ -338,6 +338,7 @@ class TestMLflowIntegrationWithTrainers:
         network_config = dummy_network_train_config_lan["network_config"]
         train_config = dummy_network_train_config_lan["train_config"]
         train_config["n_epochs"] = 2  # Fast test
+        train_config["cpu_batch_size"] = 1000  # Small batch size for test data
 
         # Create dataloaders
         file_list = list(output_folder.rglob("*.pickle"))
@@ -432,6 +433,7 @@ class TestMLflowIntegrationWithTrainers:
         network_config = dummy_network_train_config_lan["network_config"]
         train_config = dummy_network_train_config_lan["train_config"]
         train_config["n_epochs"] = 2  # Fast test
+        train_config["cpu_batch_size"] = 1000  # Small batch size for test data
 
         # Create dataloaders
         file_list = list(output_folder.rglob("*.pickle"))
@@ -662,6 +664,7 @@ class TestMLflowEdgeCases:
         network_config = dummy_network_train_config_lan["network_config"]
         train_config = dummy_network_train_config_lan["train_config"]
         train_config["n_epochs"] = 2  # Need at least 2 epochs for proper training
+        train_config["cpu_batch_size"] = 1000  # Small batch size for test data
 
         # Create dataloaders
         file_list = list(output_folder.rglob("*.pickle"))
