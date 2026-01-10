@@ -42,17 +42,17 @@ def test_dataset_torch_init(create_mock_data_files):  # pylint: disable=redefine
 
     dataset = DatasetTorch(
         file_ids=file_list,
-        batch_size=128,
+        batch_size=100,
         label_lower_bound=-16.0,
         features_key="lan_data",
         label_key="lan_labels",
     )
 
     # Verify attributes are set
-    assert dataset.batch_size == 128
+    assert dataset.batch_size == 100
     assert len(dataset.file_ids) == 2
     assert dataset.input_dim == 6
-    assert dataset.batches_per_file == 1000 // 128  # 7 batches per file
+    assert dataset.batches_per_file == 1000 // 100  # 10 batches per file
 
 
 def test_dataset_torch_len(create_mock_data_files):  # pylint: disable=redefined-outer-name
@@ -80,7 +80,7 @@ def test_dataset_torch_getitem_single_batch(
 
     dataset = DatasetTorch(
         file_ids=file_list,
-        batch_size=128,
+        batch_size=100,
         features_key="lan_data",
         label_key="lan_labels",
     )
@@ -88,8 +88,8 @@ def test_dataset_torch_getitem_single_batch(
     # Get first batch
     X, y = dataset[0]
 
-    assert X.shape == (128, 6)  # batch_size x features
-    assert y.shape == (128, 1)  # batch_size x 1 (expanded)
+    assert X.shape == (100, 6)  # batch_size x features
+    assert y.shape == (100, 1)  # batch_size x 1 (expanded)
     assert isinstance(X, np.ndarray)
     assert isinstance(y, np.ndarray)
 
@@ -193,7 +193,7 @@ def test_dataset_torch_getitem_with_label_bounds(
 
     dataset = DatasetTorch(
         file_ids=file_list,
-        batch_size=128,
+        batch_size=100,
         label_lower_bound=-10.0,
         label_upper_bound=10.0,
         features_key="lan_data",
@@ -221,7 +221,7 @@ def test_dataset_torch_with_2d_labels(tmp_path):
 
     dataset = DatasetTorch(
         file_ids=[str(file_path)],
-        batch_size=128,
+        batch_size=100,
         features_key="lan_data",
         label_key="lan_labels",
     )
@@ -229,8 +229,8 @@ def test_dataset_torch_with_2d_labels(tmp_path):
     X, y = dataset[0]
 
     # 2D labels should remain 2D
-    assert X.shape == (128, 6)
-    assert y.shape == (128, 3)
+    assert X.shape == (100, 6)
+    assert y.shape == (100, 3)
 
 
 def test_dataset_torch_sequential_access_pattern(
@@ -286,7 +286,7 @@ def test_dataset_torch_with_jax_output(
 
     dataset = DatasetTorch(
         file_ids=file_list,
-        batch_size=128,
+        batch_size=100,
         features_key="lan_data",
         label_key="lan_labels",
         out_framework="jax",
@@ -368,6 +368,29 @@ def test_dataset_torch_3d_labels_raises_error(tmp_path):
 
     with pytest.raises(ValueError, match="Label data has unexpected shape"):
         X, y = dataset[0]
+
+
+def test_dataset_torch_batch_size_not_divisible_raises_error(tmp_path):
+    """Test DatasetTorch raises ValueError when batch_size doesn't divide samples_per_file."""
+    file_path = tmp_path / "training_data.pickle"
+    data = {
+        "lan_data": np.random.randn(1000, 6).astype(np.float32),
+        "lan_labels": np.random.randn(1000).astype(np.float32),
+    }
+    with open(file_path, "wb") as f:
+        pickle.dump(data, f)
+
+    # batch_size=128 doesn't divide 1000 evenly (remainder 104)
+    with pytest.raises(
+        ValueError,
+        match=r"samples_per_file \(1000\) must be divisible by batch_size \(128\)\. Current remainder: 104",
+    ):
+        DatasetTorch(
+            file_ids=[str(file_path)],
+            batch_size=128,
+            features_key="lan_data",
+            label_key="lan_labels",
+        )
 
 
 def test_model_trainer_torch_mlp_init_with_dict():
@@ -723,14 +746,14 @@ def test_model_trainer_torch_mlp_with_mse_loss(create_mock_data_files):
     # Create datasets
     train_dataset = DatasetTorch(
         file_ids=file_list,
-        batch_size=16,
+        batch_size=20,
         label_lower_bound=-16.0,
         features_key="lan_data",
         label_key="lan_labels",
     )
     valid_dataset = DatasetTorch(
         file_ids=file_list,
-        batch_size=16,
+        batch_size=20,
         label_lower_bound=-16.0,
         features_key="lan_data",
         label_key="lan_labels",
@@ -790,14 +813,14 @@ def test_model_trainer_torch_mlp_with_bce_loss(create_mock_data_files):
     # Create datasets
     train_dataset = DatasetTorch(
         file_ids=file_list,
-        batch_size=16,
+        batch_size=20,
         label_lower_bound=-16.0,
         features_key="lan_data",
         label_key="lan_labels",
     )
     valid_dataset = DatasetTorch(
         file_ids=file_list,
-        batch_size=16,
+        batch_size=20,
         label_lower_bound=-16.0,
         features_key="lan_data",
         label_key="lan_labels",
@@ -857,14 +880,14 @@ def test_model_trainer_torch_mlp_with_sgd_optimizer(create_mock_data_files):
     # Create datasets
     train_dataset = DatasetTorch(
         file_ids=file_list,
-        batch_size=16,
+        batch_size=20,
         label_lower_bound=-16.0,
         features_key="lan_data",
         label_key="lan_labels",
     )
     valid_dataset = DatasetTorch(
         file_ids=file_list,
-        batch_size=16,
+        batch_size=20,
         label_lower_bound=-16.0,
         features_key="lan_data",
         label_key="lan_labels",
@@ -993,7 +1016,7 @@ def test_model_trainer_torch_mlp_with_none_train_config(create_mock_data_files):
 
     train_dataset = DatasetTorch(
         file_ids=file_list,
-        batch_size=16,
+        batch_size=20,
         label_lower_bound=-16.0,
         features_key="lan_data",
         label_key="lan_labels",

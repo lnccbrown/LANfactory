@@ -41,8 +41,8 @@ class TestTrainConstantsLAN:
     """Test training constants."""
 
     N_EPOCHS: int = 2
-    CPU_BATCH_SIZE: int = 4196
-    GPU_BATCH_SIZE: int = 4196
+    CPU_BATCH_SIZE: int = 100000
+    GPU_BATCH_SIZE: int = 100000
     OPTIMIZER: str = "adam"
     LEARNING_RATE: float = 2e-06
     LR_SCHEDULER: str = "reduce_on_plateau"
@@ -57,8 +57,8 @@ class TestTrainConstantsCPN:
     """Test training constants."""
 
     N_EPOCHS: int = 2
-    CPU_BATCH_SIZE: int = 32
-    GPU_BATCH_SIZE: int = 32
+    CPU_BATCH_SIZE: int = 250
+    GPU_BATCH_SIZE: int = 250
     OPTIMIZER: str = "adam"
     LEARNING_RATE: float = 2e-06
     LR_SCHEDULER: str = "reduce_on_plateau"
@@ -73,8 +73,8 @@ class TestTrainConstantsOPN:
     """Test training constants."""
 
     N_EPOCHS: int = 2
-    CPU_BATCH_SIZE: int = 32
-    GPU_BATCH_SIZE: int = 32
+    CPU_BATCH_SIZE: int = 250
+    GPU_BATCH_SIZE: int = 250
     OPTIMIZER: str = "adam"
     LEARNING_RATE: float = 2e-06
     LR_SCHEDULER: str = "reduce_on_plateau"
