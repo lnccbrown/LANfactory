@@ -6,6 +6,8 @@ notebooks/torch_nb_data/
 
 notebooks/test_notebooks/data/
 
+hssm_paper/
+
 ssms_data/
 ssms_data_configs/
 network_data/

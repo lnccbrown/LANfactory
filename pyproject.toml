@@ -49,7 +49,7 @@ keywords = [
 ]
 
 [project.optional-dependencies]
-viz = ["wandb>=0.19.11"]
+mlflow = ["mlflow>=3.6.0"]
 
 [dependency-groups]
 dev = [
@@ -68,6 +68,7 @@ dev = [
     "pytest-xdist>=3.6.1",
     "pytest>=8.3.1",
     "ruff>=0.14.4",
+    "mlflow>=3.6.0",
 ]
 
 [tool.setuptools.packages.find]

@@ -19,9 +19,9 @@ from frozendict import frozendict
 from jax import numpy as jnp
 
 try:
-    import wandb
+    import mlflow
 except ImportError:
-    print("wandb not available")
+    print("mlflow not available")
 
 
 def MLPJaxFactory(network_config: dict | str = {}, train: bool = True) -> "MLPJax":
@@ -153,7 +153,7 @@ class MLPJax(nn.Module):
                 The state dictionary.
         """
 
-        if file_path is None:
+        if file_path is None:  # pragma: no cover
             raise ValueError(
                 "file_path argument needs to be specified! "
                 + "(Currently Set to its default: None)"
@@ -167,7 +167,7 @@ class MLPJax(nn.Module):
             # but also works without ....
             loaded_state = flax.serialization.from_bytes(None, loaded_state_bytes)
 
-        else:
+        else:  # pragma: no cover
             # potentially safer since we provide a reference
             # to flax.serialization.from_bytes
             rng_, key1_ = jax.random.split(jax.random.PRNGKey(42), 2)
@@ -294,7 +294,7 @@ class ModelTrainerJaxMLP:
         else:
             self.seed = seed
         self.allow_abs_path_folder_generation = allow_abs_path_folder_generation
-        self.wandb_on: int = 0
+        self.mlflow_on: bool = False
 
         self.__get_loss()
         self.apply_model_train = self.__make_apply_model(train=True)
@@ -347,40 +347,26 @@ class ModelTrainerJaxMLP:
 
         return update_model
 
-    def __try_wandb(
-        self,
-        wandb_project_id: str = "projectid",
-        file_id: str = "fileid",
-        run_id: str = "runid",
-    ) -> None:
-        """Helper function to initialize wandb
+    def __try_mlflow(self, run_id: str = "runid") -> None:
+        """Helper function to initialize mlflow
 
         Arguments
         ---------
-            wandb_project_id (str):
-                The wandb project id.
-            file_id (str):
-                The file id.
             run_id (str):
                 The run id.
-
         """
-        try:  # pragma: no cover
-            wandb.init(
-                project=wandb_project_id,
-                name=(
-                    "wd_"
-                    + str(self.train_config["weight_decay"])
-                    + "_optim_"
-                    + str(self.train_config["optimizer"])
-                    + "_"
-                    + run_id
-                ),
-                config=self.train_config,
-            )
-            self.wandb_on = 1
-        except ModuleNotFoundError:  # pragma: no cover
-            print("No wandb found, proceeding without logging")
+        try:
+            if mlflow.active_run() is None:
+                mlflow.start_run(run_id=run_id)
+            self.mlflow_on = True
+
+            # Log params
+            mlflow.log_params(self.train_config)
+
+        except NameError:  # pragma: no cover
+            print("No mlflow found, proceeding without logging")
+        except Exception as e:  # pragma: no cover
+            print(f"MLflow initialization failed: {e}")
 
     def create_train_state(self, rng: jax.random.PRNGKey) -> train_state.TrainState:
         """Create initial train state"""
@@ -450,13 +436,8 @@ class ModelTrainerJaxMLP:
 
             epoch_loss.append(loss)
 
-            # Log wandb and print progress if verbose
+            # Log training progress
             if (step % 100) == 0:
-                if self.wandb_on:  # pragma: no cover
-                    try:
-                        wandb.log({"loss": loss}, step=int(state.step))
-                    except ModuleNotFoundError:
-                        pass
                 if verbose == 2:  # pragma: no cover
                     print(
                         train_str
@@ -467,6 +448,13 @@ class ModelTrainerJaxMLP:
                         + " - Loss: "
                         + str(loss)
                     )
+
+                if self.mlflow_on:
+                    try:
+                        mlflow.log_metric("loss", float(loss), step=int(state.step))
+                    except Exception:
+                        pass
+
                 elif verbose == 1:  # pragma: no cover
                     if (step % 1000) == 0:
                         print(
@@ -502,8 +490,7 @@ class ModelTrainerJaxMLP:
         output_folder: str | Path = "data/",
         output_file_id: str = "fileid",
         run_id: str = "runid",
-        wandb_on: bool = True,
-        wandb_project_id: str = "projectid",
+        mlflow_on: bool = False,
         save_outputs: bool = True,
         verbose: int = 1,
     ) -> train_state.TrainState:
@@ -517,10 +504,8 @@ class ModelTrainerJaxMLP:
                 The file id.
             run_id (str):
                 The run id.
-            wandb_on (bool):
-                Whether to use wandb or not.
-            wandb_project_id (str):
-                Project id for wandb.
+            mlflow_on (bool):
+                Whether to use mlflow or not.
             save_outputs (bool):
                 Whether to save all files or not.
             verbose (int):
@@ -533,9 +518,8 @@ class ModelTrainerJaxMLP:
         output_folder = Path(output_folder)
         output_folder.mkdir(parents=True, exist_ok=True)
 
-        # TODO: make wandb functionality optional
-        # if wandb_on:
-        #     self.__try_wandb(wandb_project_id=wandb_project_id, file_id=output_file_id, run_id=run_id)
+        if mlflow_on:
+            self.__try_mlflow(run_id=run_id)
 
         # Identify network type:
         if self.model.train_output_type == "logprob":
@@ -634,5 +618,21 @@ class ModelTrainerJaxMLP:
                 open(data_details_path, "wb"),
             )
             print("Saving training data details to: " + data_details_path)
+
+            if self.mlflow_on:
+                try:
+                    mlflow.log_artifact(
+                        training_history_path, artifact_path="training_output"
+                    )
+                    mlflow.log_artifact(
+                        train_state_path, artifact_path="training_output"
+                    )
+                    mlflow.log_artifact(config_path, artifact_path="training_output")
+                    mlflow.log_artifact(
+                        data_details_path, artifact_path="training_output"
+                    )
+                    mlflow.end_run()
+                except Exception as e:
+                    print(f"Failed to log artifacts to MLflow: {e}")
 
         return state
