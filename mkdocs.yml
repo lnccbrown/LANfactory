@@ -6,14 +6,13 @@ edit_uri: edit/main/docs
 nav:
   - Home:
       - Overview: index.md
-  - LAN Tutorial JAX:
-      - Installation: basic_tutorial/basic_tutorial_lan_jax.ipynb
-  - LAN Tutorial Torch:
-      - Installation: basic_tutorial/basic_tutorial_lan_torch.ipynb
-  - LAN Tutorial CPN Torch:
-      - Installation: basic_tutorial/basic_tutorial_cpn_torch.ipynb
-  - LAN Tutorial OPN Torch:
-      - Installation: basic_tutorial/basic_tutorial_opn_torch.ipynb
+  - Tutorials:
+      - LAN (JAX): basic_tutorial/basic_tutorial_lan_jax.ipynb
+      - LAN (PyTorch): basic_tutorial/basic_tutorial_lan_torch.ipynb
+      - CPN (PyTorch): basic_tutorial/basic_tutorial_cpn_torch.ipynb
+      - OPN (PyTorch): basic_tutorial/basic_tutorial_opn_torch.ipynb
+  - Guides:
+      - MLflow Integration: using_mlflow.md
   - API:
       - lanfactory: api/lanfactory.md
       - config: api/config.md

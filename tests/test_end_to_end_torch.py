@@ -167,8 +167,7 @@ def test_end_to_end_lan_mlp(
         output_folder=MODEL_FOLDER,
         output_file_id=model_config["name"],
         run_id="runid",
-        wandb_on=False,
-        wandb_project_id="torch",
+        mlflow_on=False,
         verbose=1,
         save_outputs=True,
     )

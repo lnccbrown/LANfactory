@@ -46,16 +46,26 @@ def main(
     networks_path_base: Path = typer.Option(..., help="Base path for networks"),
     network_id: int = typer.Option(0, help="Network ID to train"),
     dl_workers: int = typer.Option(1, help="Number of workers for DataLoader"),
-    mlflow_on: bool = typer.Option(
+    dry_run: bool = typer.Option(
         False,
-        "--mlflow-on",
-        help="Enable MLflow tracking for this training run.",
+        "--dry-run",
+        help="Validate the pipeline without training. Useful for testing configurations.",
+        is_flag=True,
+    ),
+    mlflow_run_name: str = typer.Option(
+        None,
+        "--mlflow-run-name",
+        help="MLflow run name. If provided, enables MLflow tracking.",
+    ),
+    mlflow_experiment_name: str = typer.Option(
+        None,
+        "--mlflow-experiment-name",
+        help="MLflow experiment name. Defaults to MLFLOW_EXPERIMENT_NAME env var.",
     ),
     mlflow_run_id: str = typer.Option(
         None,
         "--mlflow-run-id",
-        help="(Advanced) MLflow Run ID to resume. If provided, will continue logging to existing run. "
-        "Automatically enables --mlflow-on.",
+        help="(Advanced) MLflow Run ID to resume. If provided, will continue logging to existing run.",
     ),
     data_generation_experiment_id: str = typer.Option(
         None,
@@ -145,9 +155,9 @@ def main(
         )
 
     # Determine if MLflow tracking should be enabled
-    # Enable if: explicit --mlflow-on OR --mlflow-run-id provided OR --data-generation-experiment-id provided
+    # Enable if: --mlflow-run-name provided OR --mlflow-run-id provided OR --data-generation-experiment-id provided
     mlflow_tracking_enabled = (
-        mlflow_on
+        mlflow_run_name is not None
         or mlflow_run_id is not None
         or data_generation_experiment_id is not None
     )
@@ -171,7 +181,10 @@ def main(
             logger.info("MLflow tracking URI: %s", tracking_uri)
 
             # Set experiment with optional artifact location
-            mlflow_experiment = os.getenv("MLFLOW_EXPERIMENT_NAME")
+            # Priority: CLI arg > env var
+            mlflow_experiment = mlflow_experiment_name or os.getenv(
+                "MLFLOW_EXPERIMENT_NAME"
+            )
             if mlflow_experiment:
                 # Determine artifact location with priority: CLI arg > env var > None (default)
                 if mlflow_artifact_location:
@@ -208,8 +221,12 @@ def main(
                 mlflow.start_run(run_id=mlflow_run_id)
                 logger.info("Resumed MLflow run: %s", mlflow_run_id)
             else:
-                run = mlflow.start_run()
-                logger.info("Started new MLflow run: %s", run.info.run_id)
+                run = mlflow.start_run(run_name=mlflow_run_name)
+                logger.info(
+                    "Started new MLflow run: %s (name: %s)",
+                    run.info.run_id,
+                    mlflow_run_name,
+                )
         except Exception as e:
             logger.error("Failed to initialize MLflow: %s", e)
             mlflow_tracking_enabled = False
@@ -390,6 +407,43 @@ def main(
         num_workers=n_workers,
         pin_memory=True,
     )
+    # -------------------------------------------------------------
+
+    # Dry run validation ------------------------------------------
+    if dry_run:
+        logger.info("DRY RUN: Validating training pipeline...")
+        try:
+            # Validate we can load a batch from the dataloader
+            batch = next(iter(dataloader_train))
+            logger.info("✓ DRY RUN: DataLoader validation successful!")
+            logger.info(
+                "✓ DRY RUN: Batch shape: features=%s, labels=%s",
+                batch[0].shape,
+                batch[1].shape,
+            )
+            logger.info("✓ DRY RUN: Would train with %d training files", val_idx_cutoff)
+            logger.info(
+                "✓ DRY RUN: Would train with %d validation files",
+                n_training_files - val_idx_cutoff,
+            )
+            logger.info("✓ DRY RUN: Network config: %s", network_config)
+            logger.info("✓ DRY RUN: Train config: %s", train_config)
+
+            if mlflow_tracking_enabled:
+                import mlflow
+
+                mlflow.log_param("dry_run", True)
+                mlflow.end_run()
+
+            logger.info("DRY RUN complete - no training was performed")
+            return
+        except Exception as e:
+            logger.error("✗ DRY RUN: Pipeline validation failed: %s", e)
+            if mlflow_tracking_enabled:
+                import mlflow
+
+                mlflow.end_run(status="FAILED")
+            raise typer.Exit(code=1)
     # -------------------------------------------------------------
 
     # Training and Saving -----------------------------------------

@@ -162,8 +162,7 @@ def test_end_to_end_lan_mlp(
         output_folder=MODEL_FOLDER,
         output_file_id=model_config["name"],
         run_id="jax",
-        wandb_on=False,
-        wandb_project_id="jax",
+        mlflow_on=False,
         save_outputs=True,
         verbose=1,
     )
