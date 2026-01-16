@@ -24,8 +24,8 @@ except ImportError:
     print("mlflow not available")
 
 
-def MLPJaxFactory(network_config: dict | str = {}, train: bool = True) -> "MLPJax":
-    """Factory function to create a MLPJax object.
+def JaxMLPFactory(network_config: dict | str = {}, train: bool = True) -> "JaxMLP":
+    """Factory function to create a JaxMLP object.
     Arguments
     ---------
         network_config (dict | str):
@@ -34,7 +34,7 @@ def MLPJaxFactory(network_config: dict | str = {}, train: bool = True) -> "MLPJa
             Whether the model should be trained or not.
     Returns
     -------
-        MLPJax class initialized with the correct network configuration.
+        JaxMLP class initialized with the correct network configuration.
     """
 
     if isinstance(network_config, str):
@@ -46,7 +46,7 @@ def MLPJaxFactory(network_config: dict | str = {}, train: bool = True) -> "MLPJa
             "network_config argument is not passed as either a dictionary or a string (path to a file)!"
         )
 
-    return MLPJax(
+    return JaxMLP(
         layer_sizes=network_config_internal["layer_sizes"],
         activations=network_config_internal["activations"],
         train_output_type=network_config_internal["train_output_type"],
@@ -54,7 +54,7 @@ def MLPJaxFactory(network_config: dict | str = {}, train: bool = True) -> "MLPJa
     )
 
 
-class MLPJax(nn.Module):
+class JaxMLP(nn.Module):
     """JaxMLP class.
     Arguments
     ---------
@@ -233,7 +233,7 @@ class ModelTrainerJaxMLP:
     def __init__(
         self,
         train_config: dict,
-        model: MLPJax,
+        model: JaxMLP,
         train_dl: Any,
         valid_dl: Any,
         allow_abs_path_folder_generation: bool = False,
@@ -246,8 +246,8 @@ class ModelTrainerJaxMLP:
         ---------
             train_config (dict):
                 Dictionary containing the training configuration.
-            model (MLPJax):
-                The MLPJax model to be trained.
+            model (JaxMLP):
+                The JaxMLP model to be trained.
             train_dl (torch.utils.data.DataLoader):
                 The training data loader.
             valid_dl (torch.utils.data.DataLoader):

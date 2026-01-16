@@ -107,6 +107,8 @@ omit = [
     "*/tests/*",
     "*/__init__.py",
     "*/conftest.py",
+    "*/cli/jax_train.py",          # CLI entry points are tested via smoke tests
+    "*/cli/torch_train.py",        # CLI entry points are tested via smoke tests
 ]
 
 [tool.coverage.report]

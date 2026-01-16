@@ -154,6 +154,198 @@ class DatasetTorch(torch.utils.data.Dataset):
         return X, y
 
 
+# --- Helper Functions for DataLoader Creation ---
+
+
+def make_dataloader(
+    file_ids: list[str] | list[Path],
+    batch_size: int,
+    network_type: str = "lan",
+    label_lower_bound: float | None = None,
+    shuffle: bool = True,
+    num_workers: int = 1,
+    pin_memory: bool = True,
+) -> DataLoader:
+    """Create a DataLoader for LAN/CPN/OPN training.
+
+    This is a convenience function that creates a DatasetTorch and wraps it
+    in a PyTorch DataLoader with sensible defaults.
+
+    Arguments
+    ---------
+        file_ids: List of paths to training data pickle files.
+        batch_size: Batch size for training.
+        network_type: Type of network ("lan", "cpn", or "opn").
+            Determines the feature/label keys in the data files.
+        label_lower_bound: Lower bound for labels. If None and network_type
+            is "lan", defaults to log(1e-10).
+        shuffle: Whether to shuffle data (default: True).
+        num_workers: Number of worker processes for data loading (default: 1).
+        pin_memory: Whether to pin memory for faster GPU transfer (default: True).
+
+    Returns
+    -------
+        torch.utils.data.DataLoader configured for training.
+
+    Example
+    -------
+        >>> file_list = list(Path("data/lan_mlp/ddm").glob("*.pickle"))
+        >>> train_dl = make_dataloader(
+        ...     file_ids=file_list,
+        ...     batch_size=4096,
+        ...     network_type="lan",
+        ... )
+    """
+    # Set sensible defaults based on network type
+    if label_lower_bound is None and network_type == "lan":
+        label_lower_bound = np.log(1e-10)
+
+    dataset = DatasetTorch(
+        file_ids=file_ids,
+        batch_size=batch_size,
+        features_key=f"{network_type}_data",
+        label_key=f"{network_type}_labels",
+        label_lower_bound=label_lower_bound,
+    )
+
+    return DataLoader(
+        dataset,
+        shuffle=shuffle,
+        batch_size=None,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+    )
+
+
+def make_train_valid_dataloaders(
+    file_ids: list[str] | list[Path],
+    batch_size: int,
+    network_type: str = "lan",
+    train_val_split: float = 0.9,
+    shuffle_files: bool = True,
+    label_lower_bound: float | None = None,
+    num_workers: int = 1,
+    pin_memory: bool = True,
+) -> tuple[DataLoader, DataLoader, int]:
+    """Create train and validation DataLoaders with automatic file splitting.
+
+    This is a convenience function that splits the file list into train/validation
+    sets and creates DataLoaders for each.
+
+    Arguments
+    ---------
+        file_ids: List of paths to training data pickle files.
+        batch_size: Batch size for training.
+        network_type: Type of network ("lan", "cpn", or "opn").
+        train_val_split: Fraction of files to use for training (default: 0.9).
+        shuffle_files: Whether to shuffle files before splitting (default: True).
+        label_lower_bound: Lower bound for labels. If None and network_type
+            is "lan", defaults to log(1e-10).
+        num_workers: Number of worker processes for data loading (default: 1).
+        pin_memory: Whether to pin memory for faster GPU transfer (default: True).
+
+    Returns
+    -------
+        tuple of (train_dataloader, valid_dataloader, input_dim)
+
+    Example
+    -------
+        >>> file_list = list(Path("data/lan_mlp/ddm").glob("*.pickle"))
+        >>> train_dl, valid_dl, input_dim = make_train_valid_dataloaders(
+        ...     file_ids=file_list,
+        ...     batch_size=4096,
+        ...     network_type="lan",
+        ...     train_val_split=0.9,
+        ... )
+    """
+    import random
+
+    file_list = [str(f) for f in file_ids]  # Ensure strings for consistency
+    if shuffle_files:
+        random.shuffle(file_list)
+
+    split_idx = int(len(file_list) * train_val_split)
+    train_files = file_list[:split_idx]
+    valid_files = file_list[split_idx:]
+
+    if len(train_files) == 0:
+        raise ValueError(
+            f"No training files after split. Got {len(file_list)} files "
+            f"with train_val_split={train_val_split}"
+        )
+    if len(valid_files) == 0:
+        raise ValueError(
+            f"No validation files after split. Got {len(file_list)} files "
+            f"with train_val_split={train_val_split}"
+        )
+
+    train_dl = make_dataloader(
+        file_ids=train_files,
+        batch_size=batch_size,
+        network_type=network_type,
+        label_lower_bound=label_lower_bound,
+        shuffle=True,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+    )
+
+    valid_dl = make_dataloader(
+        file_ids=valid_files,
+        batch_size=batch_size,
+        network_type=network_type,
+        label_lower_bound=label_lower_bound,
+        shuffle=True,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+    )
+
+    return train_dl, valid_dl, train_dl.dataset.input_dim
+
+
+# --- Factory Functions ---
+
+
+def TorchMLPFactory(
+    network_config: dict | str,
+    input_dim: int,
+    network_type: str | None = None,
+) -> "TorchMLP":
+    """Factory function to create a TorchMLP object.
+
+    This provides a consistent API with JaxMLPFactory and handles
+    loading network configs from pickle files.
+
+    Arguments
+    ---------
+        network_config: Dictionary containing the network configuration,
+            or path to a pickled config file.
+        input_dim: Input dimension (typically from dataloader.dataset.input_dim).
+        network_type: Network type ("lan", "cpn", "opn"). If not provided,
+            will be inferred from train_output_type in network_config.
+
+    Returns
+    -------
+        TorchMLP instance ready for training.
+
+    Example
+    -------
+        >>> train_dl, valid_dl, input_dim = make_train_valid_dataloaders(...)
+        >>> net = TorchMLPFactory(
+        ...     network_config=network_config,
+        ...     input_dim=input_dim,
+        ... )
+    """
+    if isinstance(network_config, str):
+        with open(network_config, "rb") as f:
+            network_config = pickle.load(f)
+
+    return TorchMLP(
+        network_config=network_config,
+        input_shape=input_dim,
+        network_type=network_type,
+    )
+
+
 class TorchMLP(nn.Module):
     """TorchMLP class.
 
@@ -167,15 +359,11 @@ class TorchMLP(nn.Module):
             Network type.
     """
 
-    # AF-TODO: Potentially split this via super-class
-    # In the end I want 'eval', but differentiable
-    # w.r.t to input ...., might be a problem
     def __init__(
         self,
         network_config: dict,
         input_shape: int = 10,
         network_type: str | None = None,
-        **kwargs,
     ) -> None:
         super(TorchMLP, self).__init__()
 
@@ -649,116 +837,37 @@ class ModelTrainerTorchMLP:
         logger.info(f"Saving model to ONNX format to: {path}")
 
 
-class LoadTorchMLPInfer:
-    """Class to load TorchMLP models for inference. (This
-    was originally useful directly for application in the
-    HDDM toolbox).
+class LoadTorchMLP:
+    """General-purpose class to load TorchMLP models.
+
+    Does NOT call eval() by default - suitable for fine-tuning or further training.
+    For inference with eval() enabled, use LoadTorchMLPInfer instead.
 
     Arguments
     ---------
         model_file_path (str):
-            Path to the model file.
-        network_config (dict):
-            Network configuration.
+            Path to the model state dict file.
+        network_config (dict | str):
+            Network configuration dictionary or path to a pickled config file.
         input_dim (int):
             Input dimension.
-
+        network_type (str | None):
+            Network type ("lan", "cpn", "opn"). If not provided, will be
+            inferred from train_output_type in network_config.
+        inference_mode (bool):
+            If True, sets network to eval mode. Default is False for general use.
+            Use LoadTorchMLPInfer for inference with eval() enabled by default.
     """
-
-    def __init__(
-        self,
-        model_file_path: str | None = None,
-        network_config: dict | str | None = None,
-        input_dim: int | None = None,
-        network_type: str | None = None,
-    ) -> None:
-        if input_dim is None:
-            raise ValueError("input_dim is required")
-        if model_file_path is None:
-            raise ValueError("model_file_path is required")
-
-        self.model_file_path = model_file_path
-        torch.backends.cudnn.benchmark = True
-        self.dev = (
-            torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-        )
-
-        if isinstance(network_config, str):
-            with open(network_config, "rb") as f:
-                self.network_config = pickle.load(f)
-        elif isinstance(network_config, dict):
-            self.network_config = network_config
-        else:
-            raise ValueError("network config is neither a string nor a dictionary")
-
-        self.input_dim = input_dim
-
-        self.net = TorchMLP(
-            network_config=self.network_config,
-            input_shape=self.input_dim,
-            generative_model_id=None,
-            network_type=network_type,
-        )
-        if not torch.cuda.is_available():
-            self.net.load_state_dict(
-                torch.load(self.model_file_path, map_location=torch.device("cpu"))
-            )
-        else:
-            self.net.load_state_dict(torch.load(self.model_file_path))
-        self.net.to(self.dev)
-        self.net.eval()
-
-    @torch.no_grad()
-    def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        return self.net(x.to(self.dev))
-
-    @torch.no_grad()
-    def predict_on_batch(self, x: np.ndarray | None = None) -> np.ndarray:
-        """
-        Intended as function that computes trial wise log-likelihoods
-        from a matrix input.
-        To be used primarily through the HDDM toolbox.
-
-        Arguments
-        ---------
-            x (numpy.ndarray(dtype=numpy.float32)):
-                Matrix which will be passed through the network.
-                LANs expect the matrix columns to follow a specific order.
-                When used in HDDM, x will be passed as follows.
-                The first few columns are trial wise model parameters
-                (order specified in the model_config file under the 'params' key).
-                The last two columns are filled with trial wise
-                reaction times and choices.
-                When not used via HDDM, no such restriction applies.
-        Output
-        ------
-            numpy.ndarray(dtype = numpy.float32):
-                Output of the network. When called through HDDM,
-                this is expected as trial-wise log likelihoods
-                of a given generative model.
-
-        """
-        return self.net(torch.from_numpy(x).to(self.dev)).cpu().numpy()
-
-
-class LoadTorchMLP:
-    """Class to load TorchMLP models.
-
-    Arguments
-    ---------
-        model_file_path (str):
-            Path to the model file.
-        network_config (dict):
-            Network configuration.
-        input_dim (int):
-            Input dimension."""
 
     def __init__(
         self,
         model_file_path: str,
         network_config: dict | str,
         input_dim: int,
+        network_type: str | None = None,
+        inference_mode: bool = False,
     ) -> None:
+        torch.backends.cudnn.benchmark = True
         self.dev = (
             torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         )
@@ -773,36 +882,99 @@ class LoadTorchMLP:
 
         self.input_dim = input_dim
 
+        # Create model
         self.net = TorchMLP(
             network_config=self.network_config,
             input_shape=self.input_dim,
-            generative_model_id=None,
+            network_type=network_type,
         )
+
+        # Load state dict
         if not torch.cuda.is_available():
             self.net.load_state_dict(
                 torch.load(self.model_file_path, map_location=torch.device("cpu"))
             )
-        else:  # pragma: no cover
+        else:
             self.net.load_state_dict(torch.load(self.model_file_path))
+
         self.net.to(self.dev)
+
+        # Set eval mode if requested
+        if inference_mode:
+            self.net.eval()
 
     @torch.no_grad()
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass through the network.
+
+        Arguments
+        ---------
+            x: Input tensor.
+
+        Returns
+        -------
+            Output tensor.
+        """
         return self.net(x.to(self.dev))
 
     @torch.no_grad()
     def predict_on_batch(self, x: np.ndarray | None = None) -> np.ndarray:
-        """Makes predictions on a batch of data.
+        """Make predictions on a batch of data.
 
-        Args:
-            x: Input data as numpy array.
+        This method is intended for computing trial-wise log-likelihoods
+        from a matrix input, and is commonly used through the HDDM toolbox.
 
-        Returns:
-            numpy.ndarray: Model predictions as numpy array.
+        Arguments
+        ---------
+            x (numpy.ndarray):
+                Input matrix (dtype should be numpy.float32).
+                For LANs, columns should follow a specific order:
+                model parameters followed by reaction times and choices.
 
-        Note:
-            Input data is automatically converted to torch tensor and moved to the
-            appropriate device (CPU/GPU). Output is converted back to numpy array
-            on CPU.
+        Returns
+        -------
+            numpy.ndarray:
+                Network output as numpy array.
         """
         return self.net(torch.from_numpy(x).to(self.dev)).cpu().numpy()
+
+
+class LoadTorchMLPInfer(LoadTorchMLP):
+    """Model loader with inference mode enabled by default.
+
+    Calls eval() on the network, suitable for inference/prediction.
+    For fine-tuning or further training, use LoadTorchMLP instead.
+
+    This class was originally useful directly for application in the
+    HDDM toolbox.
+
+    Arguments
+    ---------
+        model_file_path (str):
+            Path to the model state dict file.
+        network_config (dict | str):
+            Network configuration dictionary or path to a pickled config file.
+        input_dim (int):
+            Input dimension.
+        network_type (str | None):
+            Network type ("lan", "cpn", "opn"). If not provided, will be
+            inferred from train_output_type in network_config.
+        inference_mode (bool):
+            If True, sets network to eval mode. Default is True for inference.
+    """
+
+    def __init__(
+        self,
+        model_file_path: str,
+        network_config: dict | str,
+        input_dim: int,
+        network_type: str | None = None,
+        inference_mode: bool = True,
+    ) -> None:
+        super().__init__(
+            model_file_path=model_file_path,
+            network_config=network_config,
+            input_dim=input_dim,
+            network_type=network_type,
+            inference_mode=inference_mode,
+        )

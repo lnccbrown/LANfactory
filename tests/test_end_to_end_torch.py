@@ -149,7 +149,6 @@ def test_end_to_end_lan_mlp(
         network_config=network_config,
         input_shape=torch_training_dataset.input_dim,
         network_type=train_type,
-        train=True,
     )
 
     logger.info(f"torch_net: {torch_net} \n")

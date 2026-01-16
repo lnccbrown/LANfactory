@@ -412,9 +412,7 @@ def test_model_trainer_torch_mlp_init_with_dict():
     }
 
     # Create mock model and dataloaders
-    mock_model = TorchMLP(
-        network_config=network_config, input_shape=6, generative_model_id=None
-    )
+    mock_model = TorchMLP(network_config=network_config, input_shape=6)
     mock_train_dl = MagicMock()
     mock_valid_dl = MagicMock()
 
@@ -453,9 +451,7 @@ def test_model_trainer_torch_mlp_init_with_path(tmp_path):
         pickle.dump(train_config, f)
 
     # Create mock model and dataloaders
-    mock_model = TorchMLP(
-        network_config=network_config, input_shape=6, generative_model_id=None
-    )
+    mock_model = TorchMLP(network_config=network_config, input_shape=6)
     mock_train_dl = MagicMock()
     mock_valid_dl = MagicMock()
 
@@ -479,9 +475,7 @@ def test_load_torch_mlp_infer_with_dict_config(tmp_path):
     }
 
     # Create a simple model and save its state dict
-    model = TorchMLP(
-        network_config=network_config, input_shape=6, generative_model_id=None
-    )
+    model = TorchMLP(network_config=network_config, input_shape=6)
     model_file = tmp_path / "model.pt"
     torch.save(model.state_dict(), model_file)
 
@@ -510,9 +504,7 @@ def test_load_torch_mlp_infer_with_string_config(tmp_path):
         pickle.dump(network_config, f)
 
     # Create a simple model and save its state dict
-    model = TorchMLP(
-        network_config=network_config, input_shape=6, generative_model_id=None
-    )
+    model = TorchMLP(network_config=network_config, input_shape=6)
     model_file = tmp_path / "model.pt"
     torch.save(model.state_dict(), model_file)
 
@@ -536,9 +528,7 @@ def test_load_torch_mlp_infer_call_method(tmp_path):
     }
 
     # Create a simple model and save its state dict
-    model = TorchMLP(
-        network_config=network_config, input_shape=6, generative_model_id=None
-    )
+    model = TorchMLP(network_config=network_config, input_shape=6)
     model_file = tmp_path / "model.pt"
     torch.save(model.state_dict(), model_file)
 
@@ -566,9 +556,7 @@ def test_load_torch_mlp_infer_predict_on_batch(tmp_path):
     }
 
     # Create a simple model and save its state dict
-    model = TorchMLP(
-        network_config=network_config, input_shape=6, generative_model_id=None
-    )
+    model = TorchMLP(network_config=network_config, input_shape=6)
     model_file = tmp_path / "model.pt"
     torch.save(model.state_dict(), model_file)
 

@@ -98,7 +98,6 @@ def test_transform_to_onnx_loads_network_config(mock_network_config):
         call_kwargs = mock_torch_mlp.call_args[1]
         assert call_kwargs["network_config"] == mock_network_config
         assert call_kwargs["input_shape"] == 6
-        assert call_kwargs["generative_model_id"] is None
 
 
 def test_transform_to_onnx_loads_state_dict(mock_network_config, mock_state_dict):

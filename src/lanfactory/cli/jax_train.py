@@ -472,7 +472,7 @@ def main(
     )
 
     # Load network
-    net = lanfactory.trainers.MLPJaxFactory(
+    net = lanfactory.trainers.JaxMLPFactory(
         network_config=deepcopy(network_config),
         train=True,
     )

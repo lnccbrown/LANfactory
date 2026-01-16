@@ -307,7 +307,7 @@ class TestMLflowIntegrationWithTrainers:
     ):
         """Test that JAX trainer logs to MLflow correctly."""
         from torch.utils.data import DataLoader
-        from lanfactory.trainers.jax_mlp import MLPJaxFactory, ModelTrainerJaxMLP
+        from lanfactory.trainers.jax_mlp import JaxMLPFactory, ModelTrainerJaxMLP
         from lanfactory.trainers.torch_mlp import DatasetTorch
 
         tracking_uri = test_mlflow_dir["tracking_uri"]
@@ -354,7 +354,7 @@ class TestMLflowIntegrationWithTrainers:
         dataloader_val = DataLoader(train_dataset, shuffle=False, batch_size=None)
 
         # Create model and trainer
-        net = MLPJaxFactory(network_config=network_config, train=True)
+        net = JaxMLPFactory(network_config=network_config, train=True)
 
         trainer = ModelTrainerJaxMLP(
             train_config=train_config,

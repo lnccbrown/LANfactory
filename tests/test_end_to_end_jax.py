@@ -145,7 +145,7 @@ def test_end_to_end_lan_mlp(
         pin_memory=True,
     )
 
-    jax_net = lanfactory.trainers.MLPJaxFactory(
+    jax_net = lanfactory.trainers.JaxMLPFactory(
         network_config=network_config, train=True
     )
 
@@ -167,7 +167,7 @@ def test_end_to_end_lan_mlp(
         verbose=1,
     )
 
-    jax_infer = lanfactory.trainers.MLPJaxFactory(
+    jax_infer = lanfactory.trainers.JaxMLPFactory(
         network_config=network_config,
         train=False,
     )
