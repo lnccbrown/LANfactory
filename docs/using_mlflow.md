@@ -198,6 +198,9 @@ jaxtrain \
 ```bash
 mlflow ui
 # Opens http://localhost:5000
+
+# Sets up UI with tracking from .db
+mlflow server --backend-store-uri <path/to/tracking.db>
 ```
 
 
@@ -381,6 +384,9 @@ jaxtrain \
 # View experiments
 mlflow ui
 
+# Sets up UI with tracking from .db
+mlflow server --backend-store-uri <path/to/tracking.db>
+
 # Python queries
 python -c "
 import mlflow
@@ -423,6 +429,9 @@ jaxtrain \
 
 # 4. Review in UI
 mlflow ui
+
+# Sets up UI with tracking from .db
+mlflow server --backend-store-uri <path/to/tracking.db>
 ```
 
 ## 🔧 Troubleshooting
@@ -450,6 +459,15 @@ print(experiment.artifact_location)
 ### Missing data files in validation mode
 
 Ensure all files tracked in the data generation experiment exist in your training data folder. Check the error message for the list of missing files.
+
+### MLflow revision error
+```bash
+alembic.util.exc.CommandError: Can't locate revision identified by <revision number>
+```
+### Solution:
+```bash
+pip install --upgrade mlflow
+```
 
 ## 📚 See Also
 
