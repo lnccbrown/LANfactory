@@ -9,6 +9,15 @@ from lanfactory.hf.download import (
     download_model,
 )
 
+try:
+    import huggingface_hub  # noqa: F401
+
+    HAS_HF = True
+except ImportError:
+    HAS_HF = False
+
+requires_hf = pytest.mark.skipif(not HAS_HF, reason="huggingface_hub not installed")
+
 
 class TestDownloadModel:
     """Tests for download_model function."""
@@ -35,6 +44,7 @@ class TestDownloadModel:
                 force=False,
             )
 
+    @requires_hf
     @patch("huggingface_hub.list_repo_files")
     @patch("huggingface_hub.hf_hub_download")
     def test_downloads_files_to_output_folder(
@@ -67,6 +77,7 @@ class TestDownloadModel:
         # Check that download was called for correct files
         assert mock_download.call_count == 2
 
+    @requires_hf
     @patch("huggingface_hub.list_repo_files")
     def test_raises_if_no_files_found(self, mock_list_files, tmp_path):
         """Test raises FileNotFoundError if no files match."""
@@ -84,6 +95,7 @@ class TestDownloadModel:
                 output_folder=output_folder,
             )
 
+    @requires_hf
     @patch("huggingface_hub.list_repo_files")
     @patch("huggingface_hub.hf_hub_download")
     def test_applies_include_patterns(self, mock_download, mock_list_files, tmp_path):
@@ -109,6 +121,7 @@ class TestDownloadModel:
         # Only .onnx file should be downloaded
         assert mock_download.call_count == 1
 
+    @requires_hf
     @patch("huggingface_hub.list_repo_files")
     @patch("huggingface_hub.hf_hub_download")
     def test_applies_exclude_patterns(self, mock_download, mock_list_files, tmp_path):
@@ -134,6 +147,7 @@ class TestDownloadModel:
         # Only .onnx file should be downloaded
         assert mock_download.call_count == 1
 
+    @requires_hf
     @patch("huggingface_hub.list_repo_files")
     @patch("huggingface_hub.hf_hub_download")
     def test_force_overwrites_existing(self, mock_download, mock_list_files, tmp_path):

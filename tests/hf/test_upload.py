@@ -12,6 +12,15 @@ from lanfactory.hf.upload import (
     upload_model,
 )
 
+try:
+    import huggingface_hub  # noqa: F401
+
+    HAS_HF = True
+except ImportError:
+    HAS_HF = False
+
+requires_hf = pytest.mark.skipif(not HAS_HF, reason="huggingface_hub not installed")
+
 
 class TestCollectFiles:
     """Tests for _collect_files function."""
@@ -118,6 +127,7 @@ class TestUploadModel:
 
         assert result is None
 
+    @requires_hf
     @patch("huggingface_hub.HfApi")
     @patch("huggingface_hub.create_repo")
     def test_creates_repo_when_requested(
@@ -144,6 +154,7 @@ class TestUploadModel:
 
         mock_create_repo.assert_called_once()
 
+    @requires_hf
     @patch("huggingface_hub.HfApi")
     @patch("huggingface_hub.create_repo")
     def test_uploads_to_correct_path(self, mock_create_repo, mock_api_class, tmp_path):
