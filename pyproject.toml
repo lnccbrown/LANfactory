@@ -50,6 +50,8 @@ keywords = [
 
 [project.optional-dependencies]
 mlflow = ["mlflow>=3.6.0"]
+hf = ["huggingface-hub>=0.20.0"]
+all = ["mlflow>=3.6.0", "huggingface-hub>=0.20.0"]
 
 [dependency-groups]
 dev = [
@@ -109,6 +111,8 @@ omit = [
     "*/conftest.py",
     "*/cli/jax_train.py",          # CLI entry points are tested via smoke tests
     "*/cli/torch_train.py",        # CLI entry points are tested via smoke tests
+    "*/cli/upload_hf.py",          # CLI entry points are tested via smoke tests
+    "*/cli/download_hf.py",        # CLI entry points are tested via smoke tests
 ]
 
 [tool.coverage.report]
@@ -133,6 +137,8 @@ line-length = 120
 jaxtrain = "lanfactory.cli.jax_train:app"
 torchtrain = "lanfactory.cli.torch_train:app"
 transform-onnx = "lanfactory.onnx.transform_onnx:app"
+upload-hf = "lanfactory.cli.upload_hf:app"
+download-hf = "lanfactory.cli.download_hf:app"
 
 [tool.setuptools.package-data]
 "lanfactory.cli" = ["config_network_training_lan.yaml"]
