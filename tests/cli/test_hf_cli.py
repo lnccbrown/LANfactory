@@ -1,8 +1,11 @@
 """CLI smoke tests for upload-hf and download-hf commands."""
 
+import os
 import subprocess
 
 import yaml
+
+_PLAIN_TEXT_ENV = {**os.environ, "NO_COLOR": "1", "COLUMNS": "200"}
 
 
 class TestUploadHfCliHelp:
@@ -15,6 +18,7 @@ class TestUploadHfCliHelp:
             capture_output=True,
             text=True,
             check=False,
+            env=_PLAIN_TEXT_ENV,
         )
         assert result.returncode == 0
         assert "Upload a trained LANfactory model" in result.stdout
@@ -67,6 +71,7 @@ class TestDownloadHfCliHelp:
             capture_output=True,
             text=True,
             check=False,
+            env=_PLAIN_TEXT_ENV,
         )
         assert result.returncode == 0
         assert "Download a LANfactory model" in result.stdout
