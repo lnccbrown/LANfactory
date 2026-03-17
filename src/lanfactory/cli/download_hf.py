@@ -13,10 +13,9 @@ from pathlib import Path
 
 import typer
 
-app = typer.Typer()
+from lanfactory.hf import DEFAULT_REPO_ID, VALID_NETWORK_TYPES
 
-# Default repository for official HSSM models
-DEFAULT_REPO_ID = "franklab/HSSM"
+app = typer.Typer()
 
 
 @app.command()
@@ -97,10 +96,9 @@ def main(
     logger = logging.getLogger(__name__)
 
     # Validate network_type
-    valid_network_types = ["lan", "cpn", "opn"]
-    if network_type not in valid_network_types:
+    if network_type not in VALID_NETWORK_TYPES:
         raise typer.BadParameter(
-            f"network_type must be one of {valid_network_types}, got: {network_type}"
+            f"network_type must be one of {list(VALID_NETWORK_TYPES)}, got: {network_type}"
         )
 
     # Parse patterns

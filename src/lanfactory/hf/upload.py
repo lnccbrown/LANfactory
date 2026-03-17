@@ -9,10 +9,9 @@ import shutil
 import tempfile
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
+from lanfactory.hf import DEFAULT_REPO_ID, VALID_NETWORK_TYPES
 
-# Default repository for official HSSM models
-DEFAULT_REPO_ID = "franklab/HSSM"
+logger = logging.getLogger(__name__)
 
 # Default file patterns to include in uploads
 DEFAULT_INCLUDE_PATTERNS = [
@@ -82,23 +81,14 @@ def upload_model(
     ValueError
         If network_type is not valid.
     """
-    try:
-        from huggingface_hub import HfApi, create_repo as hf_create_repo
-    except ImportError:
-        raise ImportError(
-            "huggingface_hub is required for HuggingFace uploads. "
-            "Install it with: pip install lanfactory[hf]"
-        )
-
     # Validate inputs
     model_folder = Path(model_folder)
     if not model_folder.exists():
         raise FileNotFoundError(f"Model folder does not exist: {model_folder}")
 
-    valid_network_types = ["lan", "cpn", "opn"]
-    if network_type not in valid_network_types:
+    if network_type not in VALID_NETWORK_TYPES:
         raise ValueError(
-            f"network_type must be one of {valid_network_types}, got: {network_type}"
+            f"network_type must be one of {list(VALID_NETWORK_TYPES)}, got: {network_type}"
         )
 
     # Check for model_card.yaml
@@ -136,6 +126,14 @@ def upload_model(
         for f in files_to_upload:
             print(f"  - {f.name}")
         return None
+
+    try:
+        from huggingface_hub import HfApi, create_repo as hf_create_repo
+    except ImportError as exc:
+        raise ImportError(
+            "huggingface_hub is required for HuggingFace uploads. "
+            "Install it with: pip install lanfactory[hf]"
+        ) from exc
 
     # Initialize API
     api = HfApi(token=token)

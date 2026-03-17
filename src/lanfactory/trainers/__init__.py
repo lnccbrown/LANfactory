@@ -1,3 +1,5 @@
+import warnings
+
 from .torch_mlp import (
     DatasetTorch,
     TorchMLP,
@@ -26,3 +28,20 @@ __all__ = [
     "JaxMLP",
     "ModelTrainerJaxMLP",
 ]
+
+_DEPRECATED_ALIASES = {
+    "MLPJax": "JaxMLP",
+    "MLPJaxFactory": "JaxMLPFactory",
+}
+
+
+def __getattr__(name: str):
+    if name in _DEPRECATED_ALIASES:
+        new_name = _DEPRECATED_ALIASES[name]
+        warnings.warn(
+            f"{name} is deprecated, use {new_name} instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return globals()[new_name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

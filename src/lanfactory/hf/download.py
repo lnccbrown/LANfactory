@@ -8,10 +8,9 @@ import logging
 import shutil
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
+from lanfactory.hf import DEFAULT_REPO_ID, VALID_NETWORK_TYPES
 
-# Default repository for official HSSM models
-DEFAULT_REPO_ID = "franklab/HSSM"
+logger = logging.getLogger(__name__)
 
 
 def download_model(
@@ -71,10 +70,9 @@ def download_model(
         )
 
     # Validate inputs
-    valid_network_types = ["lan", "cpn", "opn"]
-    if network_type not in valid_network_types:
+    if network_type not in VALID_NETWORK_TYPES:
         raise ValueError(
-            f"network_type must be one of {valid_network_types}, got: {network_type}"
+            f"network_type must be one of {list(VALID_NETWORK_TYPES)}, got: {network_type}"
         )
 
     output_folder = Path(output_folder)
