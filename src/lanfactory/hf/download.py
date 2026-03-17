@@ -61,14 +61,6 @@ def download_model(
     FileExistsError
         If output_folder exists and force is False.
     """
-    try:
-        from huggingface_hub import hf_hub_download, list_repo_files
-    except ImportError:
-        raise ImportError(
-            "huggingface_hub is required for HuggingFace downloads. "
-            "Install it with: pip install lanfactory[hf]"
-        )
-
     # Validate inputs
     if network_type not in VALID_NETWORK_TYPES:
         raise ValueError(
@@ -82,6 +74,14 @@ def download_model(
         raise FileExistsError(
             f"Output folder already exists: {output_folder}. Use --force to overwrite."
         )
+
+    try:
+        from huggingface_hub import hf_hub_download, list_repo_files
+    except ImportError as exc:
+        raise ImportError(
+            "huggingface_hub is required for HuggingFace downloads. "
+            "Install it with: pip install lanfactory[hf]"
+        ) from exc
 
     # Create output folder
     output_folder.mkdir(parents=True, exist_ok=True)
