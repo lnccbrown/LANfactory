@@ -1,11 +1,17 @@
 """CLI smoke tests for upload-hf and download-hf commands."""
 
 import os
+import re
 import subprocess
 
 import yaml
 
-_PLAIN_TEXT_ENV = {**os.environ, "NO_COLOR": "1", "COLUMNS": "200"}
+_ANSI_RE = re.compile(r"\x1b\[[\d;]*m")
+_WIDE_ENV = {**os.environ, "COLUMNS": "200"}
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI_RE.sub("", text)
 
 
 class TestUploadHfCliHelp:
@@ -18,13 +24,14 @@ class TestUploadHfCliHelp:
             capture_output=True,
             text=True,
             check=False,
-            env=_PLAIN_TEXT_ENV,
+            env=_WIDE_ENV,
         )
         assert result.returncode == 0
-        assert "Upload a trained LANfactory model" in result.stdout
-        assert "--model-folder" in result.stdout
-        assert "--network-type" in result.stdout
-        assert "--model-name" in result.stdout
+        stdout = _strip_ansi(result.stdout)
+        assert "Upload a trained LANfactory model" in stdout
+        assert "--model-folder" in stdout
+        assert "--network-type" in stdout
+        assert "--model-name" in stdout
 
     def test_missing_required_args(self):
         """Test that missing required args causes error."""
@@ -71,13 +78,14 @@ class TestDownloadHfCliHelp:
             capture_output=True,
             text=True,
             check=False,
-            env=_PLAIN_TEXT_ENV,
+            env=_WIDE_ENV,
         )
         assert result.returncode == 0
-        assert "Download a LANfactory model" in result.stdout
-        assert "--network-type" in result.stdout
-        assert "--model-name" in result.stdout
-        assert "--output-folder" in result.stdout
+        stdout = _strip_ansi(result.stdout)
+        assert "Download a LANfactory model" in stdout
+        assert "--network-type" in stdout
+        assert "--model-name" in stdout
+        assert "--output-folder" in stdout
 
     def test_missing_required_args(self):
         """Test that missing required args causes error."""
