@@ -19,23 +19,20 @@ LEN_FORWARD_PASS_DUMMY = 2000
 
 def dummy_training_data_files(generator_config, model_config, save=True):
     """Fixture providing a dummy training data for testing."""
-    os.makedirs(generator_config["output_folder"], exist_ok=True)
+    output_folder = generator_config["output"]["folder"]
+    os.makedirs(output_folder, exist_ok=True)
     for i in range(TEST_GENERATOR_CONSTANTS.N_DATA_FILES):
-        # log progress
         logger.info(
             "Generating training data for file %d of %d",
             i + 1,
             TEST_GENERATOR_CONSTANTS.N_DATA_FILES,
         )
-        my_dataset_generator = ssms.dataset_generators.lan_mlp.data_generator(
-            generator_config=generator_config, model_config=model_config
+        my_dataset_generator = ssms.dataset_generators.lan_mlp.TrainingDataGenerator(
+            config=generator_config, model_config=model_config
         )
-        _ = my_dataset_generator.generate_data_training_uniform(save=save)
+        _ = my_dataset_generator.generate_data_training(save=save)
 
-    return [
-        os.path.join(generator_config["output_folder"], file_)
-        for file_ in os.listdir(generator_config["output_folder"])
-    ]
+    return [os.path.join(output_folder, file_) for file_ in os.listdir(output_folder)]
 
 
 @pytest.mark.flaky(reruns=2)

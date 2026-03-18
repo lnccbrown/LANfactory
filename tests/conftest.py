@@ -113,26 +113,21 @@ def dummy_generator_config(model_selector):
     """Fixture providing a dummy model config for testing."""
 
     def _dummy_generator_config(mode="random"):
-        # Initialize the generator config (for MLP LANs)
         simulator_param_mapping = True
         while simulator_param_mapping:
-            # TODO: #35 use this after ssms v1.0.0 release
-            # generator_config = ssms.config.get_default_generator_config("lan")
-            # and delete the line below
-            generator_config = deepcopy(ssms.config.data_generator_config["lan"])
-            # Specify generative model (one from the list of included models mentioned above)
+            generator_config = ssms.config.get_default_generator_config("lan")
             generator_config["model"] = model_selector(mode=mode)
-            # Specify number of parameter sets to simulate
-            generator_config["n_parameter_sets"] = (
+            generator_config["pipeline"]["n_parameter_sets"] = (
                 TEST_GENERATOR_CONSTANTS.N_PARAMETER_SETS
             )
-            # Specify how many samples a simulation run should entail
-            generator_config["n_samples"] = TEST_GENERATOR_CONSTANTS.N_SAMPLES
-            # Specify folder in which to save generated data
-            generator_config["output_folder"] = os.path.join(
+            generator_config["pipeline"]["n_cpus"] = 1
+            generator_config["simulator"]["n_samples"] = (
+                TEST_GENERATOR_CONSTANTS.N_SAMPLES
+            )
+            generator_config["output"]["folder"] = os.path.join(
                 TEST_GENERATOR_CONSTANTS.OUT_FOLDER, str(uuid.uuid4())
             )
-            generator_config["n_training_samples_by_parameter_set"] = (
+            generator_config["training"]["n_samples_per_param"] = (
                 TEST_GENERATOR_CONSTANTS.N_SAMPLES_BY_PARAMETER_SET
             )
             model_config = deepcopy(ssms.config.model_config[generator_config["model"]])
@@ -153,30 +148,23 @@ def dummy_generator_config(model_selector):
 def dummy_generator_config_simple_two_choices(model_selector):
     """Fixture providing a dummy model config for testing."""
 
-    # TODO: replace use of ssms.config.data_generator_config with ssms.config.get_default_generator_config
-    # after ssms v1.0.0 release
     def _dummy_generator_config_simple_two_choices(mode="random"):
         two_choices = False
         simulator_param_mapping = True
         while (not two_choices) or (simulator_param_mapping):
-            # Initialize the generator config (for MLP LANs)
-            # TODO: use this after ssms v1.0.0 release
-            # generator_config = ssms.config.get_default_generator_config("lan")
-            # and delete the line below
-            generator_config = deepcopy(ssms.config.data_generator_config["lan"])
-            # Specify generative model (one from the list of included models mentioned above)
+            generator_config = ssms.config.get_default_generator_config("lan")
             generator_config["model"] = model_selector(mode=mode)
-            # Specify number of parameter sets to simulate
-            generator_config["n_parameter_sets"] = (
+            generator_config["pipeline"]["n_parameter_sets"] = (
                 TEST_GENERATOR_CONSTANTS.N_PARAMETER_SETS
             )
-            # Specify how many samples a simulation run should entail
-            generator_config["n_samples"] = TEST_GENERATOR_CONSTANTS.N_SAMPLES
-            # Specify folder in which to save generated data
-            generator_config["output_folder"] = os.path.join(
+            generator_config["pipeline"]["n_cpus"] = 1
+            generator_config["simulator"]["n_samples"] = (
+                TEST_GENERATOR_CONSTANTS.N_SAMPLES
+            )
+            generator_config["output"]["folder"] = os.path.join(
                 TEST_GENERATOR_CONSTANTS.OUT_FOLDER, str(uuid.uuid4())
             )
-            generator_config["n_training_samples_by_parameter_set"] = (
+            generator_config["training"]["n_samples_per_param"] = (
                 TEST_GENERATOR_CONSTANTS.N_SAMPLES_BY_PARAMETER_SET
             )
             model_config = deepcopy(ssms.config.model_config[generator_config["model"]])

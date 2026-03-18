@@ -322,17 +322,19 @@ class TestMLflowIntegrationWithTrainers:
         # Set small output folder
         output_folder = tmp_path / "data"
         output_folder.mkdir()
-        generator_config["output_folder"] = str(output_folder)
-        generator_config["n_parameter_sets"] = 20  # Must be >= n_subruns (default 10)
-        generator_config["n_subruns"] = 2  # Reduce subruns for faster test
+        generator_config["output"]["folder"] = str(output_folder)
+        generator_config["pipeline"]["n_parameter_sets"] = (
+            20  # Must be >= n_subruns (default 10)
+        )
+        generator_config["pipeline"]["n_subruns"] = 2  # Reduce subruns for faster test
 
         # Generate one file
         import ssms
 
-        gen = ssms.dataset_generators.lan_mlp.data_generator(
-            generator_config=generator_config, model_config=model_config
+        gen = ssms.dataset_generators.lan_mlp.TrainingDataGenerator(
+            config=generator_config, model_config=model_config
         )
-        gen.generate_data_training_uniform(save=True, verbose=False)
+        gen.generate_data_training(save=True, verbose=False)
 
         # Set up training (dummy_network_train_config_lan is already a dict, not a function)
         network_config = dummy_network_train_config_lan["network_config"]
@@ -417,17 +419,19 @@ class TestMLflowIntegrationWithTrainers:
         # Set small output folder
         output_folder = tmp_path / "data"
         output_folder.mkdir()
-        generator_config["output_folder"] = str(output_folder)
-        generator_config["n_parameter_sets"] = 20  # Must be >= n_subruns (default 10)
-        generator_config["n_subruns"] = 2  # Reduce subruns for faster test
+        generator_config["output"]["folder"] = str(output_folder)
+        generator_config["pipeline"]["n_parameter_sets"] = (
+            20  # Must be >= n_subruns (default 10)
+        )
+        generator_config["pipeline"]["n_subruns"] = 2  # Reduce subruns for faster test
 
         # Generate one file
         import ssms
 
-        gen = ssms.dataset_generators.lan_mlp.data_generator(
-            generator_config=generator_config, model_config=model_config
+        gen = ssms.dataset_generators.lan_mlp.TrainingDataGenerator(
+            config=generator_config, model_config=model_config
         )
-        gen.generate_data_training_uniform(save=True, verbose=False)
+        gen.generate_data_training(save=True, verbose=False)
 
         # Set up training (dummy_network_train_config_lan is already a dict, not a function)
         network_config = dummy_network_train_config_lan["network_config"]
@@ -649,16 +653,16 @@ class TestMLflowEdgeCases:
 
         output_folder = tmp_path / "data"
         output_folder.mkdir()
-        generator_config["output_folder"] = str(output_folder)
-        generator_config["n_parameter_sets"] = 20
-        generator_config["n_subruns"] = 2
+        generator_config["output"]["folder"] = str(output_folder)
+        generator_config["pipeline"]["n_parameter_sets"] = 20
+        generator_config["pipeline"]["n_subruns"] = 2
 
         import ssms
 
-        gen = ssms.dataset_generators.lan_mlp.data_generator(
-            generator_config=generator_config, model_config=model_config
+        gen = ssms.dataset_generators.lan_mlp.TrainingDataGenerator(
+            config=generator_config, model_config=model_config
         )
-        gen.generate_data_training_uniform(save=True, verbose=False)
+        gen.generate_data_training(save=True, verbose=False)
 
         # Set up training
         network_config = dummy_network_train_config_lan["network_config"]
