@@ -194,6 +194,88 @@ class TestGenerateReadme:
 
         assert "custom_code_here()" in readme
 
+    def test_includes_training_loss_field(self):
+        """Test that training loss field is rendered when provided."""
+        config = ModelCardConfig(
+            training={
+                "epochs": 10,
+                "optimizer": "adam",
+                "learning_rate": 0.001,
+                "loss": "huber",
+            }
+        )
+
+        readme = generate_readme(config)
+
+        assert "**Loss:** huber" in readme
+
+    def test_partial_architecture_missing_fields(self):
+        """Test architecture section with only layer_sizes (no network_type or activations)."""
+        config = ModelCardConfig(
+            architecture={
+                "layer_sizes": [100, 100, 1],
+            }
+        )
+
+        readme = generate_readme(config)
+
+        assert "## Architecture" in readme
+        assert "[100, 100, 1]" in readme
+        assert "Network Type" not in readme
+        assert "Activations" not in readme
+
+
+class TestLoadModelCardYamlPickleIntegration:
+    """Tests for _fill_from_pickle_configs integration."""
+
+    def test_fills_training_from_pickle(self, tmp_path):
+        """Test that training config is filled from train_config pickle."""
+        yaml_content = {"title": "Test Model"}
+        with open(tmp_path / "model_card.yaml", "w") as f:
+            yaml.dump(yaml_content, f)
+
+        train_config = {
+            "n_epochs": 20,
+            "optimizer": "adam",
+            "learning_rate": 0.001,
+            "loss": "huber",
+        }
+        with open(tmp_path / "test_train_config.pickle", "wb") as f:
+            pickle.dump(train_config, f)
+
+        config = load_model_card_yaml(tmp_path)
+
+        assert config.training is not None
+        assert config.training["epochs"] == 20
+        assert config.training["optimizer"] == "adam"
+        assert config.training["loss"] == "huber"
+
+    def test_handles_corrupt_network_pickle(self, tmp_path):
+        """Test graceful fallback when network config pickle is corrupt."""
+        yaml_content = {"title": "Test Model"}
+        with open(tmp_path / "model_card.yaml", "w") as f:
+            yaml.dump(yaml_content, f)
+
+        with open(tmp_path / "bad_network_config.pickle", "wb") as f:
+            f.write(b"not a valid pickle")
+
+        config = load_model_card_yaml(tmp_path)
+
+        assert config.architecture is None
+
+    def test_handles_corrupt_train_pickle(self, tmp_path):
+        """Test graceful fallback when train config pickle is corrupt."""
+        yaml_content = {"title": "Test Model"}
+        with open(tmp_path / "model_card.yaml", "w") as f:
+            yaml.dump(yaml_content, f)
+
+        with open(tmp_path / "bad_train_config.pickle", "wb") as f:
+            f.write(b"not a valid pickle")
+
+        config = load_model_card_yaml(tmp_path)
+
+        assert config.training is None
+
 
 class TestWriteReadme:
     """Tests for write_readme function."""

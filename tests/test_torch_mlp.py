@@ -1020,3 +1020,128 @@ def test_model_trainer_torch_mlp_with_none_train_config(create_mock_data_files):
             train_dl=train_dl,
             valid_dl=train_dl,
         )
+
+
+# --- Tests for helper / factory functions ---
+
+
+def test_make_dataloader(create_mock_data_files):
+    """Test make_dataloader creates a working DataLoader."""
+    from lanfactory.trainers.torch_mlp import make_dataloader
+
+    file_list = create_mock_data_files(n_files=2)
+
+    dl = make_dataloader(
+        file_ids=file_list,
+        batch_size=100,
+        network_type="lan",
+    )
+
+    assert dl is not None
+    assert dl.dataset.input_dim == 6
+    assert dl.dataset.batch_size == 100
+
+
+def test_make_dataloader_cpn_no_default_lower_bound(create_mock_data_files):
+    """Test make_dataloader with cpn does not auto-set label_lower_bound."""
+    from lanfactory.trainers.torch_mlp import make_dataloader
+
+    file_list = create_mock_data_files(n_files=1)
+
+    data = {
+        "cpn_data": np.random.randn(1000, 4).astype(np.float32),
+        "cpn_labels": np.random.randn(1000).astype(np.float32),
+    }
+    with open(file_list[0], "wb") as f:
+        pickle.dump(data, f)
+
+    dl = make_dataloader(
+        file_ids=file_list,
+        batch_size=100,
+        network_type="cpn",
+    )
+
+    assert dl.dataset.input_dim == 4
+
+
+def test_make_train_valid_dataloaders(create_mock_data_files):
+    """Test make_train_valid_dataloaders splits files correctly."""
+    from lanfactory.trainers.torch_mlp import make_train_valid_dataloaders
+
+    file_list = create_mock_data_files(n_files=4)
+
+    train_dl, valid_dl, input_dim = make_train_valid_dataloaders(
+        file_ids=file_list,
+        batch_size=100,
+        network_type="lan",
+        train_val_split=0.5,
+        shuffle_files=False,
+    )
+
+    assert input_dim == 6
+    assert len(train_dl.dataset.file_ids) == 2
+    assert len(valid_dl.dataset.file_ids) == 2
+
+
+def test_make_train_valid_dataloaders_raises_no_train_files(create_mock_data_files):
+    """Test raises ValueError when split leaves no training files."""
+    from lanfactory.trainers.torch_mlp import make_train_valid_dataloaders
+
+    file_list = create_mock_data_files(n_files=1)
+
+    with pytest.raises(ValueError, match="No training files after split"):
+        make_train_valid_dataloaders(
+            file_ids=file_list,
+            batch_size=100,
+            train_val_split=0.0,
+        )
+
+
+def test_make_train_valid_dataloaders_raises_no_valid_files(create_mock_data_files):
+    """Test raises ValueError when split leaves no validation files."""
+    from lanfactory.trainers.torch_mlp import make_train_valid_dataloaders
+
+    file_list = create_mock_data_files(n_files=1)
+
+    with pytest.raises(ValueError, match="No validation files after split"):
+        make_train_valid_dataloaders(
+            file_ids=file_list,
+            batch_size=100,
+            train_val_split=1.0,
+        )
+
+
+def test_torch_mlp_factory_with_dict():
+    """Test TorchMLPFactory with dict config."""
+    from lanfactory.trainers.torch_mlp import TorchMLPFactory, TorchMLP
+
+    network_config = {
+        "layer_sizes": [10, 10, 1],
+        "activations": ["tanh", "tanh", "linear"],
+        "train_output_type": "logprob",
+    }
+
+    model = TorchMLPFactory(network_config=network_config, input_dim=6)
+
+    assert isinstance(model, TorchMLP)
+    assert model.input_shape == 6
+
+
+def test_torch_mlp_factory_with_pickle_path(tmp_path):
+    """Test TorchMLPFactory with path to pickled config."""
+    from lanfactory.trainers.torch_mlp import TorchMLPFactory, TorchMLP
+
+    network_config = {
+        "layer_sizes": [10, 10, 1],
+        "activations": ["tanh", "tanh", "linear"],
+        "train_output_type": "logprob",
+    }
+
+    config_path = tmp_path / "network_config.pickle"
+    with open(config_path, "wb") as f:
+        pickle.dump(network_config, f)
+
+    model = TorchMLPFactory(network_config=str(config_path), input_dim=6)
+
+    assert isinstance(model, TorchMLP)
+    assert model.input_shape == 6

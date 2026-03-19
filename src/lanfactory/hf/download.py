@@ -75,7 +75,7 @@ def download_model(
             f"Output folder already exists: {output_folder}. Use --force to overwrite."
         )
 
-    try:
+    try:  # pragma: no cover (requires huggingface_hub optional dependency)
         from huggingface_hub import hf_hub_download, list_repo_files
     except ImportError as exc:
         raise ImportError(

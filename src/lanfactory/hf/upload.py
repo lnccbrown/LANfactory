@@ -127,7 +127,7 @@ def upload_model(
             print(f"  - {f.name}")
         return None
 
-    try:
+    try:  # pragma: no cover (requires huggingface_hub optional dependency)
         from huggingface_hub import HfApi, create_repo as hf_create_repo
     except ImportError as exc:
         raise ImportError(
