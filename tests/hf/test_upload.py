@@ -104,6 +104,20 @@ class TestUploadModel:
                 model_name="ddm",
             )
 
+    def test_raises_if_no_matching_files(self, tmp_path):
+        """Test raises FileNotFoundError when no files match patterns."""
+        yaml_content = {"title": "Test Model"}
+        with open(tmp_path / "model_card.yaml", "w") as f:
+            yaml.dump(yaml_content, f)
+
+        with pytest.raises(FileNotFoundError, match="No files matching patterns"):
+            upload_model(
+                model_folder=tmp_path,
+                network_type="lan",
+                model_name="ddm",
+                include_patterns=["*.nonexistent"],
+            )
+
     def test_dry_run_does_not_upload(self, tmp_path):
         """Test dry_run shows files but doesn't upload."""
         # Create model_card.yaml

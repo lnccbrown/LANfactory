@@ -127,7 +127,34 @@ def upload_model(
             print(f"  - {f.name}")
         return None
 
-    try:  # pragma: no cover (requires huggingface_hub optional dependency)
+    return _upload_to_hf(  # pragma: no cover
+        model_folder=model_folder,
+        model_name=model_name,
+        files_to_upload=files_to_upload,
+        path_in_repo=path_in_repo,
+        repo_id=repo_id,
+        commit_message=commit_message,
+        private=private,
+        create_repo=create_repo,
+        revision=revision,
+        token=token,
+    )
+
+
+def _upload_to_hf(  # pragma: no cover
+    model_folder: Path,
+    model_name: str,
+    files_to_upload: list[Path],
+    path_in_repo: str,
+    repo_id: str,
+    commit_message: str,
+    private: bool,
+    create_repo: bool,
+    revision: str | None,
+    token: str | None,
+) -> str:
+    """HF-dependent implementation of upload_model."""
+    try:
         from huggingface_hub import HfApi, create_repo as hf_create_repo
     except ImportError as exc:
         raise ImportError(
@@ -135,10 +162,8 @@ def upload_model(
             "Install it with: pip install lanfactory[hf]"
         ) from exc
 
-    # Initialize API
     api = HfApi(token=token)
 
-    # Create repo if requested
     if create_repo:
         try:
             hf_create_repo(
@@ -153,23 +178,19 @@ def upload_model(
             logger.error(f"Failed to create repository: {e}")
             raise
 
-    # Generate README.md from model_card.yaml
     from lanfactory.hf.model_card import load_model_card_yaml, write_readme
 
     config = load_model_card_yaml(model_folder)
     readme_path = write_readme(model_folder, config, model_name)
     files_to_upload.append(readme_path)
 
-    # Create a temporary directory with files organized for upload
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
 
-        # Copy files to temp directory
         for file_path in files_to_upload:
             dest = tmp_path / file_path.name
             shutil.copy2(file_path, dest)
 
-        # Upload the folder
         try:
             api.upload_folder(
                 folder_path=str(tmp_path),
@@ -183,7 +204,6 @@ def upload_model(
             logger.error(f"Upload failed: {e}")
             raise
 
-    # Construct URL
     url = f"https://huggingface.co/{repo_id}/tree/main/{path_in_repo}"
     logger.info(f"Upload successful: {url}")
     print("\nUpload successful!")

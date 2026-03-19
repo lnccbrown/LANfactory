@@ -75,7 +75,30 @@ def download_model(
             f"Output folder already exists: {output_folder}. Use --force to overwrite."
         )
 
-    try:  # pragma: no cover (requires huggingface_hub optional dependency)
+    return _download_model_hf(  # pragma: no cover
+        network_type=network_type,
+        model_name=model_name,
+        output_folder=output_folder,
+        repo_id=repo_id,
+        revision=revision,
+        include_patterns=include_patterns,
+        exclude_patterns=exclude_patterns,
+        token=token,
+    )
+
+
+def _download_model_hf(  # pragma: no cover
+    network_type: str,
+    model_name: str,
+    output_folder: Path,
+    repo_id: str,
+    revision: str | None,
+    include_patterns: list[str] | None,
+    exclude_patterns: list[str] | None,
+    token: str | None,
+) -> Path:
+    """HF-dependent implementation of download_model."""
+    try:
         from huggingface_hub import hf_hub_download, list_repo_files
     except ImportError as exc:
         raise ImportError(
@@ -83,13 +106,10 @@ def download_model(
             "Install it with: pip install lanfactory[hf]"
         ) from exc
 
-    # Create output folder
     output_folder.mkdir(parents=True, exist_ok=True)
 
-    # Build the path prefix for this model
     path_prefix = f"{network_type}/{model_name}/"
 
-    # List files in the repository
     try:
         all_files = list_repo_files(
             repo_id=repo_id,
@@ -100,7 +120,6 @@ def download_model(
         logger.error(f"Failed to list repository files: {e}")
         raise
 
-    # Filter files by path prefix
     model_files = [f for f in all_files if f.startswith(path_prefix)]
 
     if not model_files:
@@ -109,7 +128,6 @@ def download_model(
             f"Available paths: {set(f.split('/')[0] for f in all_files if '/' in f)}"
         )
 
-    # Apply include/exclude patterns
     if include_patterns:
         filtered_files = []
         for f in model_files:
@@ -140,7 +158,6 @@ def download_model(
 
     logger.info(f"Downloading {len(model_files)} files from {repo_id}/{path_prefix}")
 
-    # Download each file
     downloaded_files = []
     for file_path in model_files:
         filename = Path(file_path).name
@@ -154,7 +171,6 @@ def download_model(
                 token=token,
             )
 
-            # Copy to output folder
             dest_path = output_folder / filename
             shutil.copy2(local_path, dest_path)
             downloaded_files.append(dest_path)

@@ -224,9 +224,63 @@ class TestGenerateReadme:
         assert "Network Type" not in readme
         assert "Activations" not in readme
 
+    def test_architecture_all_fields_empty(self):
+        """Test architecture section where all fields are None/falsy."""
+        config = ModelCardConfig(
+            architecture={
+                "network_type": None,
+                "layer_sizes": None,
+                "activations": None,
+            }
+        )
+
+        readme = generate_readme(config)
+
+        assert "## Architecture" in readme
+        assert "Network Type" not in readme
+        assert "Layer Sizes" not in readme
+        assert "Activations" not in readme
+
+    def test_training_all_fields_empty(self):
+        """Test training section where all fields are None/falsy."""
+        config = ModelCardConfig(
+            training={
+                "epochs": None,
+                "optimizer": None,
+                "learning_rate": None,
+                "loss": None,
+            }
+        )
+
+        readme = generate_readme(config)
+
+        assert "## Training" in readme
+        assert "Epochs" not in readme
+        assert "Optimizer" not in readme
+        assert "Learning Rate" not in readme
+        assert "Loss" not in readme
+
 
 class TestLoadModelCardYamlPickleIntegration:
     """Tests for _fill_from_pickle_configs integration."""
+
+    def test_skips_pickle_when_yaml_has_data(self, tmp_path):
+        """Test that pickle loading is skipped when YAML already has architecture and training."""
+        yaml_content = {
+            "title": "Pre-filled Model",
+            "architecture": {"layer_sizes": [50, 50, 1], "network_type": "lan"},
+            "training": {"epochs": 5, "optimizer": "sgd"},
+        }
+        with open(tmp_path / "model_card.yaml", "w") as f:
+            yaml.dump(yaml_content, f)
+
+        config = load_model_card_yaml(tmp_path)
+
+        assert config.architecture == {
+            "layer_sizes": [50, 50, 1],
+            "network_type": "lan",
+        }
+        assert config.training == {"epochs": 5, "optimizer": "sgd"}
 
     def test_fills_training_from_pickle(self, tmp_path):
         """Test that training config is filled from train_config pickle."""
