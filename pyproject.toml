@@ -11,7 +11,7 @@ version = "0.5.3"
 authors = [
     { name = "Alexander Fengler", email = "alexander_fengler@brown.edu" },
     { name = "Carlos Paniagua", email = "carlos_paniagua@brown.edu" },
-    { name = "Hannah Hafner", email = "hhafner@smith.edu"}
+    { name = "Hannah Hafner", email = "hhafner@smith.edu" },
 ]
 description = "Package with convenience functions to train LANs"
 readme = "README.md"
