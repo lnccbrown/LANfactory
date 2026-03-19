@@ -24,11 +24,13 @@ except ImportError:
     print("mlflow not available")
 
 
-def JaxMLPFactory(network_config: dict | str = {}, train: bool = True) -> "JaxMLP":
+def JaxMLPFactory(
+    network_config: dict | str | None = None, train: bool = True
+) -> "JaxMLP":
     """Factory function to create a JaxMLP object.
     Arguments
     ---------
-        network_config (dict | str):
+        network_config (dict | str | None):
             Dictionary containing the network configuration or path to pickled config.
         train (bool):
             Whether the model should be trained or not.
@@ -36,9 +38,14 @@ def JaxMLPFactory(network_config: dict | str = {}, train: bool = True) -> "JaxML
     -------
         JaxMLP class initialized with the correct network configuration.
     """
+    if network_config is None:
+        raise ValueError(
+            "network_config must be provided (dict or path to pickle file)"
+        )
 
     if isinstance(network_config, str):
-        network_config_internal = pickle.load(open(network_config, "rb"))
+        with open(network_config, "rb") as f:
+            network_config_internal = pickle.load(f)
     elif isinstance(network_config, dict):
         network_config_internal = network_config
     else:

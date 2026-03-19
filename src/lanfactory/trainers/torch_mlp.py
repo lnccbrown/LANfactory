@@ -294,7 +294,7 @@ def make_train_valid_dataloaders(
         batch_size=batch_size,
         network_type=network_type,
         label_lower_bound=label_lower_bound,
-        shuffle=True,
+        shuffle=False,
         num_workers=num_workers,
         pin_memory=pin_memory,
     )

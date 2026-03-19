@@ -204,7 +204,7 @@ def _upload_to_hf(  # pragma: no cover
             logger.error(f"Upload failed: {e}")
             raise
 
-    url = f"https://huggingface.co/{repo_id}/tree/main/{path_in_repo}"
+    url = f"https://huggingface.co/{repo_id}/tree/{revision or 'main'}/{path_in_repo}"
     logger.info(f"Upload successful: {url}")
     print("\nUpload successful!")
     print(f"View your model at: {url}")
