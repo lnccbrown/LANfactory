@@ -6,26 +6,26 @@ import pytest
 import jax
 import jax.numpy as jnp
 
-from lanfactory.trainers.jax_mlp import MLPJaxFactory, MLPJax
+from lanfactory.trainers.jax_mlp import JaxMLPFactory, JaxMLP
 
 
 def test_mlp_jax_factory_with_dict():
-    """Test MLPJaxFactory with dict network_config."""
+    """Test JaxMLPFactory with dict network_config."""
     network_config = {
         "layer_sizes": [100, 100, 1],
         "activations": ["tanh", "tanh", "linear"],
         "train_output_type": "logprob",
     }
 
-    model = MLPJaxFactory(network_config=network_config, train=True)
+    model = JaxMLPFactory(network_config=network_config, train=True)
 
-    assert isinstance(model, MLPJax)
+    assert isinstance(model, JaxMLP)
     assert model.layer_sizes == [100, 100, 1]
     assert model.activations == ["tanh", "tanh", "linear"]
 
 
 def test_mlp_jax_factory_with_string_path(tmp_path):
-    """Test MLPJaxFactory with string path to network_config."""
+    """Test JaxMLPFactory with string path to network_config."""
     network_config = {
         "layer_sizes": [100, 100, 1],
         "activations": ["tanh", "tanh", "linear"],
@@ -38,21 +38,21 @@ def test_mlp_jax_factory_with_string_path(tmp_path):
         pickle.dump(network_config, f)
 
     # Load using string path
-    model = MLPJaxFactory(network_config=str(config_file), train=True)
+    model = JaxMLPFactory(network_config=str(config_file), train=True)
 
-    assert isinstance(model, MLPJax)
+    assert isinstance(model, JaxMLP)
     assert model.layer_sizes == [100, 100, 1]
 
 
 def test_mlp_jax_factory_raises_value_error():
-    """Test MLPJaxFactory raises ValueError for invalid network_config type."""
+    """Test JaxMLPFactory raises ValueError for invalid network_config type."""
     with pytest.raises(ValueError, match="network_config argument is not passed"):
-        MLPJaxFactory(network_config=123, train=True)  # Invalid type
+        JaxMLPFactory(network_config=123, train=True)  # Invalid type
 
 
 def test_mlp_jax_class_initialization():
-    """Test MLPJax class initialization."""
-    model = MLPJax(
+    """Test JaxMLP class initialization."""
+    model = JaxMLP(
         layer_sizes=[100, 100, 1],
         activations=["tanh", "tanh", "linear"],
         train_output_type="logprob",
@@ -66,8 +66,8 @@ def test_mlp_jax_class_initialization():
 
 
 def test_mlp_jax_forward_pass():
-    """Test MLPJax forward pass."""
-    model = MLPJax(
+    """Test JaxMLP forward pass."""
+    model = JaxMLP(
         layer_sizes=[10, 10, 1],
         activations=["tanh", "tanh", "linear"],
         train_output_type="logprob",
@@ -87,8 +87,8 @@ def test_mlp_jax_forward_pass():
 
 
 def test_mlp_jax_with_different_activations():
-    """Test MLPJax with different activation functions."""
-    model = MLPJax(
+    """Test JaxMLP with different activation functions."""
+    model = JaxMLP(
         layer_sizes=[10, 10, 1],
         activations=["relu", "sigmoid", "linear"],
         train_output_type="logits",
@@ -100,22 +100,22 @@ def test_mlp_jax_with_different_activations():
 
 
 def test_mlp_jax_factory_train_false():
-    """Test MLPJaxFactory with train=False."""
+    """Test JaxMLPFactory with train=False."""
     network_config = {
         "layer_sizes": [100, 100, 1],
         "activations": ["tanh", "tanh", "linear"],
         "train_output_type": "logprob",
     }
 
-    model = MLPJaxFactory(network_config=network_config, train=False)
+    model = JaxMLPFactory(network_config=network_config, train=False)
 
-    assert isinstance(model, MLPJax)
+    assert isinstance(model, JaxMLP)
     assert model.train is False
 
 
 def test_mlp_jax_forward_with_non_linear_output_activation():
-    """Test MLPJax forward pass with non-linear output activation."""
-    from lanfactory.trainers.jax_mlp import MLPJaxFactory
+    """Test JaxMLP forward pass with non-linear output activation."""
+    from lanfactory.trainers.jax_mlp import JaxMLPFactory
 
     network_config = {
         "layer_sizes": [10, 10, 1],
@@ -123,7 +123,7 @@ def test_mlp_jax_forward_with_non_linear_output_activation():
         "train_output_type": "logprob",
     }
 
-    model = MLPJaxFactory(network_config=network_config, train=True)
+    model = JaxMLPFactory(network_config=network_config, train=True)
     key = jax.random.PRNGKey(0)
     x = jax.random.normal(key, (5, 5))
 
@@ -138,8 +138,8 @@ def test_mlp_jax_forward_with_non_linear_output_activation():
 
 
 def test_mlp_jax_inference_mode_with_logits():
-    """Test MLPJax forward pass in inference mode with logits output."""
-    from lanfactory.trainers.jax_mlp import MLPJaxFactory
+    """Test JaxMLP forward pass in inference mode with logits output."""
+    from lanfactory.trainers.jax_mlp import JaxMLPFactory
 
     network_config = {
         "layer_sizes": [10, 10, 1],
@@ -147,7 +147,7 @@ def test_mlp_jax_inference_mode_with_logits():
         "train_output_type": "logits",
     }
 
-    model = MLPJaxFactory(network_config=network_config, train=False)
+    model = JaxMLPFactory(network_config=network_config, train=False)
     key = jax.random.PRNGKey(0)
     x = jax.random.normal(key, (5, 5))
 
@@ -162,8 +162,8 @@ def test_mlp_jax_inference_mode_with_logits():
 
 
 def test_mlp_jax_load_state_from_file_error():
-    """Test MLPJax load_state_from_file raises error when file_path is None."""
-    from lanfactory.trainers.jax_mlp import MLPJaxFactory
+    """Test JaxMLP load_state_from_file raises error when file_path is None."""
+    from lanfactory.trainers.jax_mlp import JaxMLPFactory
     import pytest
 
     network_config = {
@@ -172,15 +172,15 @@ def test_mlp_jax_load_state_from_file_error():
         "train_output_type": "logprob",
     }
 
-    model = MLPJaxFactory(network_config=network_config, train=True)
+    model = JaxMLPFactory(network_config=network_config, train=True)
 
     with pytest.raises(ValueError, match="file_path argument needs to be specified"):
         model.load_state_from_file(seed=42, input_dim=5, file_path=None)
 
 
 def test_mlp_jax_load_state_from_file_without_input_dim(tmp_path):
-    """Test MLPJax load_state_from_file without providing input_dim."""
-    from lanfactory.trainers.jax_mlp import MLPJaxFactory
+    """Test JaxMLP load_state_from_file without providing input_dim."""
+    from lanfactory.trainers.jax_mlp import JaxMLPFactory
     import flax.serialization
 
     network_config = {
@@ -189,7 +189,7 @@ def test_mlp_jax_load_state_from_file_without_input_dim(tmp_path):
         "train_output_type": "logprob",
     }
 
-    model = MLPJaxFactory(network_config=network_config, train=True)
+    model = JaxMLPFactory(network_config=network_config, train=True)
     key = jax.random.PRNGKey(0)
     x = jax.random.normal(key, (5, 5))
 
@@ -210,8 +210,8 @@ def test_mlp_jax_load_state_from_file_without_input_dim(tmp_path):
 
 
 def test_mlp_jax_make_forward_partial_with_dict_state(tmp_path):
-    """Test MLPJax make_forward_partial with dict state."""
-    from lanfactory.trainers.jax_mlp import MLPJaxFactory
+    """Test JaxMLP make_forward_partial with dict state."""
+    from lanfactory.trainers.jax_mlp import JaxMLPFactory
 
     network_config = {
         "layer_sizes": [10, 10, 1],
@@ -219,7 +219,7 @@ def test_mlp_jax_make_forward_partial_with_dict_state(tmp_path):
         "train_output_type": "logprob",
     }
 
-    model = MLPJaxFactory(network_config=network_config, train=True)
+    model = JaxMLPFactory(network_config=network_config, train=True)
     key = jax.random.PRNGKey(0)
     x = jax.random.normal(key, (5, 5))
 
@@ -241,8 +241,8 @@ def test_mlp_jax_make_forward_partial_with_dict_state(tmp_path):
 
 
 def test_mlp_jax_make_forward_partial_without_jit(tmp_path):
-    """Test MLPJax make_forward_partial without JIT compilation."""
-    from lanfactory.trainers.jax_mlp import MLPJaxFactory
+    """Test JaxMLP make_forward_partial without JIT compilation."""
+    from lanfactory.trainers.jax_mlp import JaxMLPFactory
     import flax.serialization
 
     network_config = {
@@ -251,7 +251,7 @@ def test_mlp_jax_make_forward_partial_without_jit(tmp_path):
         "train_output_type": "logprob",
     }
 
-    model = MLPJaxFactory(network_config=network_config, train=True)
+    model = JaxMLPFactory(network_config=network_config, train=True)
     key = jax.random.PRNGKey(0)
     x = jax.random.normal(key, (5, 5))
 
@@ -275,8 +275,8 @@ def test_mlp_jax_make_forward_partial_without_jit(tmp_path):
 
 
 def test_mlp_jax_make_forward_partial_invalid_state_type():
-    """Test MLPJax make_forward_partial raises error with invalid state type."""
-    from lanfactory.trainers.jax_mlp import MLPJaxFactory
+    """Test JaxMLP make_forward_partial raises error with invalid state type."""
+    from lanfactory.trainers.jax_mlp import JaxMLPFactory
     import pytest
 
     network_config = {
@@ -285,7 +285,7 @@ def test_mlp_jax_make_forward_partial_invalid_state_type():
         "train_output_type": "logprob",
     }
 
-    model = MLPJaxFactory(network_config=network_config, train=True)
+    model = JaxMLPFactory(network_config=network_config, train=True)
 
     # Test with invalid state type (list instead of dict or string)
     with pytest.raises(
@@ -297,7 +297,7 @@ def test_mlp_jax_make_forward_partial_invalid_state_type():
 
 
 def test_mlp_jax_with_logits_inference():
-    """Test MLPJax forward pass with logits output in inference mode."""
+    """Test JaxMLP forward pass with logits output in inference mode."""
     import jax.numpy as jnp
 
     network_config = {
@@ -306,7 +306,7 @@ def test_mlp_jax_with_logits_inference():
         "train_output_type": "logits",
     }
 
-    model = MLPJaxFactory(network_config=network_config, train=False)
+    model = JaxMLPFactory(network_config=network_config, train=False)
 
     # Create dummy input
     rng = jax.random.PRNGKey(0)
@@ -323,7 +323,7 @@ def test_mlp_jax_with_logits_inference():
 
 
 def test_mlp_jax_with_non_linear_output_activation():
-    """Test MLPJax with non-linear output activation."""
+    """Test JaxMLP with non-linear output activation."""
     import jax.numpy as jnp
 
     network_config = {
@@ -332,7 +332,7 @@ def test_mlp_jax_with_non_linear_output_activation():
         "train_output_type": "logprob",
     }
 
-    model = MLPJaxFactory(network_config=network_config, train=True)
+    model = JaxMLPFactory(network_config=network_config, train=True)
 
     # Create dummy input
     rng = jax.random.PRNGKey(0)

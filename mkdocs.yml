@@ -13,9 +13,11 @@ nav:
       - OPN (PyTorch): basic_tutorial/basic_tutorial_opn_torch.ipynb
   - Guides:
       - MLflow Integration: using_mlflow.md
+      - HuggingFace Hub: using_huggingface.md
   - API:
       - lanfactory: api/lanfactory.md
       - config: api/config.md
+      - hf: api/hf.md
       - onnx: api/onnx.md
       - trainers: api/trainers.md
       - utils: api/utils.md

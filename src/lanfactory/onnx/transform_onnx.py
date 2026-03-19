@@ -36,7 +36,6 @@ def transform_to_onnx(
     mynet = TorchMLP(
         network_config=network_config_mlp,
         input_shape=input_shape,
-        generative_model_id=None,
     )
 
     mynet.load_state_dict(
