@@ -233,19 +233,17 @@ def _collect_files(
     list[Path]
         List of file paths to upload.
     """
-    files = set()
+    matched: set[Path] = set()
 
     # Collect files matching include patterns
     for pattern in include_patterns:
-        files.update(folder.glob(pattern))
+        matched.update(folder.glob(pattern))
 
     # Remove files matching exclude patterns
     if exclude_patterns:
         for pattern in exclude_patterns:
             excluded = set(folder.glob(pattern))
-            files -= excluded
+            matched -= excluded
 
     # Filter to only regular files (not directories)
-    files = [f for f in files if f.is_file()]
-
-    return sorted(files)
+    return sorted(f for f in matched if f.is_file())

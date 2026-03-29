@@ -72,6 +72,7 @@ dev = [
     "pytest-xdist>=3.6.1",
     "pytest>=8.3.1",
     "ruff>=0.14.4",
+    "types-PyYAML",
     "mlflow>=3.6.0",
 ]
 
@@ -94,11 +95,11 @@ addopts = [
 ]
 
 [tool.ruff]
-# Specify the directories to check
+line-length = 88
 src = ["src/lanfactory", "tests"]
 exclude = [
     "notebooks/*",
-    "docs/*",                                   # Exclude the entire docs folder
+    "docs/*",
     "docs/basic_tutorial/basic_tutorial.ipynb",
 ]
 
@@ -131,8 +132,6 @@ exclude_lines = [
     "logger.error",
 ]
 
-# Add any additional configuration options for ruff
-line-length = 120
 
 
 [project.scripts]
