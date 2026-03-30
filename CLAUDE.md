@@ -24,7 +24,7 @@ notebooks/                     # Test notebooks
 - **Build system:** setuptools (pure Python, no compiled extensions)
 - **Package manager:** uv (with `uv.lock`)
 - **Python:** >3.10, <3.14 (classifiers target 3.11, 3.12, 3.13)
-- **Linting:** ruff (line length 120, via pre-commit)
+- **Linting:** ruff (line length 88, via pre-commit)
 - **Type checking:** mypy
 - **No system dependencies** — unlike ssm-simulators, this is pure Python + PyTorch/Flax
 
