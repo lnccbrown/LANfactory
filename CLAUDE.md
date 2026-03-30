@@ -31,7 +31,7 @@ notebooks/                     # Test notebooks
 ## Common Commands
 
 ```bash
-# Install all dependencies (dev + optional)
+# Install all dependency groups (e.g. dev)
 uv sync --all-groups
 
 # Run tests
@@ -107,8 +107,8 @@ Default configs available in `lanfactory.config.network_configs`.
 
 ### MLflow Integration
 
-Optional experiment tracking via MLflow. CLI flags: `--run-name`, `--experiment-name`,
-`--tracking-uri`, `--artifact-location`. Supports resuming runs via `--run-id`.
+Optional experiment tracking via MLflow. CLI flags: `--mlflow-run-name`, `--mlflow-experiment-name`,
+`--mlflow-tracking-uri`, `--mlflow-artifact-location`. Supports resuming runs via `--mlflow-run-id`.
 
 ## CLI Entry Points
 
