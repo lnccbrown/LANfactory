@@ -337,8 +337,9 @@ def TorchMLPFactory(
     """
     if isinstance(network_config, str):
         with open(network_config, "rb") as f:
-            network_config = pickle.load(f)
+            network_config = pickle.load(f)  # noqa: S301
 
+    assert isinstance(network_config, dict)
     return TorchMLP(
         network_config=network_config,
         input_shape=input_dim,
@@ -506,7 +507,7 @@ class ModelTrainerTorchMLP:
         elif isinstance(train_config, dict):
             print("train_config is passed as dictionary: \n")
             print(train_config)
-            self.train_config: dict = train_config
+            self.train_config = train_config
 
         self.model: TorchMLP = model.to(self.dev)
         self.allow_abs_path_folder_generation: bool = allow_abs_path_folder_generation
