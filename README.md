@@ -13,6 +13,11 @@
 
 Lightweight python package to help with training [LANs](https://elifesciences.org/articles/65074) (Likelihood approximation networks).
 
+LANfactory also ships an ONNX exporter for [`sbi`](https://github.com/sbi-dev/sbi)-trained
+neural likelihood (NLE) and neural ratio (NRE) estimators, producing files
+HSSM can consume via its `loglik_kind="approx_differentiable"` path. See the
+[Exporting sbi Models guide](docs/exporting_sbi_models.md).
+
 Please find the original [documentation here](https://alexanderfengler.github.io/LANfactory/).
 
 ### Cite LANfactory
