@@ -60,7 +60,8 @@ def _three_way_agreement(
     """Shared assertion: torch / onnxruntime / jaxonnxruntime all agree."""
     theta_t = torch.tensor([[0.3, -0.4]], dtype=torch.float32)
     x_t = torch.randn(1, _X_DIM, dtype=torch.float32)
-    combined = torch.cat([theta_t, x_t], dim=-1).numpy()
+    # Exported graph is rank-1; pass a 1D concatenated vector.
+    combined = torch.cat([theta_t, x_t], dim=-1).squeeze(0).numpy()
 
     with torch.no_grad():
         y_torch = trained_classifier(theta_t, x_t).detach().numpy().flatten()

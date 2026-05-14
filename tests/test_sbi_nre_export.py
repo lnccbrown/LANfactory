@@ -81,7 +81,8 @@ def test_nre_export_three_way_numerical_agreement(
 
     theta_t = torch.tensor([[0.5, -0.2]], dtype=torch.float32)
     x_t = torch.tensor([[0.7, 0.3]], dtype=torch.float32)
-    combined = torch.cat([theta_t, x_t], dim=-1).numpy()
+    # Exported graph is rank-1; pass a 1D concatenated vector.
+    combined = torch.cat([theta_t, x_t], dim=-1).squeeze(0).numpy()
 
     with torch.no_grad():
         y_torch = trained_nre(theta_t, x_t).detach().numpy()
@@ -133,16 +134,17 @@ def test_nre_export_gradient_agreement(
     (grad_torch,) = torch.autograd.grad(logr.sum(), theta_t)
     grad_torch_np = grad_torch.detach().numpy().flatten()
 
-    theta_np = theta_t.detach().numpy()
-    x_np = x_t.numpy()
-    combined_init = np.concatenate([theta_np, x_np], axis=-1).astype(np.float32)
+    # Rank-1 vectors throughout — matches the new exporter contract.
+    theta_np_1d = theta_t.detach().numpy().squeeze(0)
+    x_np_1d = x_t.numpy().squeeze(0)
+    combined_init = np.concatenate([theta_np_1d, x_np_1d], axis=-1).astype(np.float32)
     run_func, input_name = _load_jax_runner(onnx_path, combined_init)
 
     def jax_logr_of_theta(theta_arr: jnp.ndarray) -> jnp.ndarray:
-        combined = jnp.concatenate([theta_arr, jnp.asarray(x_np)], axis=-1)
+        combined = jnp.concatenate([theta_arr, jnp.asarray(x_np_1d)], axis=-1)
         return run_func({input_name: combined})[0].sum()
 
-    grad_jax = jax.grad(jax_logr_of_theta)(jnp.asarray(theta_np))
+    grad_jax = jax.grad(jax_logr_of_theta)(jnp.asarray(theta_np_1d))
     grad_jax_np = np.asarray(grad_jax).flatten()
 
     atol = 1e-4

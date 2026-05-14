@@ -9,11 +9,14 @@ This module is a sibling of :mod:`lanfactory.onnx.transform_onnx` (the LAN
 exporter): "train a network and emit an ONNX HSSM can read" stays a single
 conceptual home in LANfactory regardless of which library trained the network.
 
-The exported graph follows the LAN convention: a single concatenated input
-of shape ``(1, theta_dim + x_dim)``. Inside the graph the input is split into
-``theta`` and ``x`` and routed through the trained estimator's ``log_prob``
-(NLE mode) or classifier logit (NRE mode, lands in C4). HSSM vmaps this graph
-over trials.
+The exported graph follows the LAN-and-HSSM convention: a single concatenated
+input of **rank 1, shape ``(theta_dim + x_dim,)``**. Inside the graph the
+input is split into ``theta`` and ``x``, upranked to ``(1, …)`` to satisfy
+sbi's batched ``log_prob`` API, and routed through the trained estimator.
+HSSM vmaps this graph over trials, so the per-call input rank from HSSM is 1
+— matching the export. Tracing with a 2D ``(1, D)`` dummy would emit ``Slice``
+ops with ``axes=[1]`` that fail under HSSM's vmap (``IndexError: list
+assignment index out of range`` inside ``jaxonnxruntime`` Slice handler).
 """
 
 from __future__ import annotations
@@ -124,7 +127,9 @@ def transform_sbi_to_onnx(
 
     wrapper.eval()
     combined_input_dim = example_theta_dim + example_x_dim
-    dummy_input = torch.randn(1, combined_input_dim, requires_grad=True)
+    # Trace with a rank-1 dummy so the resulting Slice ops use axes=[0],
+    # which survives HSSM's per-trial vmap (where the input arrives as 1D).
+    dummy_input = torch.randn(combined_input_dim, requires_grad=True)
     torch.onnx.export(
         wrapper,
         dummy_input,
@@ -153,9 +158,13 @@ class _NLELogProbWrapper(nn.Module):
         self.x_dim = x_dim
 
     def forward(self, combined: torch.Tensor) -> torch.Tensor:
-        theta = combined[..., : self.theta_dim]
-        x = combined[..., self.theta_dim :]
-        return self.estimator.log_prob(x, condition=theta)
+        # combined: 1D, shape (theta_dim + x_dim,) — matches HSSM's per-trial
+        # vmap input. Split on axis 0 (rank-friendly), then unsqueeze for
+        # sbi's batched log_prob contract, and reshape the (1, 1) output back
+        # to a scalar so HSSM's downstream .squeeze() leaves it as ().
+        theta = combined[: self.theta_dim].unsqueeze(0)
+        x = combined[self.theta_dim :].unsqueeze(0)
+        return self.estimator.log_prob(x, condition=theta).reshape(())
 
 
 class _NRELogRatioWrapper(nn.Module):
@@ -178,6 +187,8 @@ class _NRELogRatioWrapper(nn.Module):
         self.x_dim = x_dim
 
     def forward(self, combined: torch.Tensor) -> torch.Tensor:
-        theta = combined[..., : self.theta_dim]
-        x = combined[..., self.theta_dim :]
-        return self.estimator(theta, x)
+        # combined: 1D, shape (theta_dim + x_dim,) — see _NLELogProbWrapper for
+        # the rationale around rank-1 tracing and vmap compatibility.
+        theta = combined[: self.theta_dim].unsqueeze(0)
+        x = combined[self.theta_dim :].unsqueeze(0)
+        return self.estimator(theta, x).reshape(())
