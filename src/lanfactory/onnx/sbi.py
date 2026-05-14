@@ -105,8 +105,19 @@ def transform_sbi_to_onnx(
             estimator, example_theta_dim, example_x_dim
         )
     elif mode == "nre":
-        raise NotImplementedError(
-            "NRE export lands in commit C4; see plans/sbi-onnx-integration.md."
+        # NRE classifiers expose forward(theta, x) returning a logit; they do
+        # NOT have .log_prob. If the user passes a density estimator with
+        # mode="nre", surface the mismatch loudly — silently exporting
+        # estimator.forward of an NLE flow would produce a graph that is not
+        # a log-ratio.
+        if hasattr(estimator, "log_prob"):
+            raise TypeError(
+                f"NRE mode expects a ratio classifier without .log_prob; "
+                f"got {estimator_cls} which has .log_prob. If this is an NLE "
+                f"density estimator, use mode='nle' instead."
+            )
+        wrapper = _NRELogRatioWrapper(
+            estimator, example_theta_dim, example_x_dim
         )
     else:
         raise ValueError(f"mode must be 'nle' or 'nre', got {mode!r}")
@@ -145,3 +156,28 @@ class _NLELogProbWrapper(nn.Module):
         theta = combined[..., : self.theta_dim]
         x = combined[..., self.theta_dim :]
         return self.estimator.log_prob(x, condition=theta)
+
+
+class _NRELogRatioWrapper(nn.Module):
+    """Wrap an NRE ratio classifier so forward(combined) returns log r(x, θ).
+
+    For NRE, the classifier logit IS the log-ratio log p(x, θ) / p(x) p(θ),
+    which equals log p(x | θ) − log p(x). The θ-independent term log p(x)
+    drops out under MCMC's accept ratios and under HSSM's posterior path, so
+    we treat the raw logit as the exportable log-likelihood (up to a constant).
+    No Jacobian correction is needed — the ratio is invariant to z-score
+    standardization of inputs.
+    """
+
+    def __init__(
+        self, estimator: nn.Module, theta_dim: int, x_dim: int
+    ) -> None:
+        super().__init__()
+        self.estimator = estimator
+        self.theta_dim = theta_dim
+        self.x_dim = x_dim
+
+    def forward(self, combined: torch.Tensor) -> torch.Tensor:
+        theta = combined[..., : self.theta_dim]
+        x = combined[..., self.theta_dim :]
+        return self.estimator(theta, x)

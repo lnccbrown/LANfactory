@@ -219,17 +219,19 @@ def test_transform_rejects_missing_log_prob(tmp_path: Path) -> None:
         )
 
 
-def test_transform_nre_mode_not_yet_implemented(tmp_path: Path) -> None:
-    """NRE mode lands in C4 — until then, raise NotImplementedError."""
+def test_nle_estimator_in_nre_mode_rejected(
+    trained_nle: torch.nn.Module, tmp_path: Path
+) -> None:
+    """Passing an NLE density estimator with mode='nre' should raise.
 
-    class FakeClassifier(torch.nn.Module):
-        pass
-
-    with pytest.raises(NotImplementedError, match="C4"):
+    The presence of .log_prob is the signal that this is a density estimator
+    rather than a ratio classifier.
+    """
+    with pytest.raises(TypeError, match=r"expects a ratio classifier"):
         transform_sbi_to_onnx(
-            FakeClassifier(),
+            trained_nle,
             str(tmp_path / "should_not_exist.onnx"),
             mode="nre",
-            example_theta_dim=1,
-            example_x_dim=1,
+            example_theta_dim=_THETA_DIM,
+            example_x_dim=_X_DIM,
         )
