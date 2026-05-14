@@ -4,6 +4,9 @@ notebooks/data/
 notebooks/jax_nb_data/
 notebooks/torch_nb_data/
 
+# sbi training tensorboard logs (sbi auto-writes here during NLE_A.train() etc.)
+sbi-logs/
+
 notebooks/test_notebooks/data/
 
 hssm_paper/
