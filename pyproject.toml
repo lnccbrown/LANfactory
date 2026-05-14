@@ -80,6 +80,8 @@ dev = [
     "types-PyYAML",
     "mlflow>=3.6.0",
     "jaxonnxruntime>=0.3",
+    "onnxruntime>=1.17",
+    "nflows>=0.14",
 ]
 
 [tool.setuptools.packages.find]
