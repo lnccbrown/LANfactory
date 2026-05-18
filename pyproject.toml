@@ -53,11 +53,15 @@ keywords = [
 [project.optional-dependencies]
 mlflow = ["mlflow>=3.6.0"]
 hf = ["huggingface-hub>=0.20.0"]
+sbi = ["sbi>=0.26", "nflows>=0.14"]
+bayesflow = ["bayesflow>=2.0.8", "keras>=3.12"]
 all = [
     "mlflow>=3.6.0",
     "huggingface-hub>=0.20.0",
     "sbi>=0.26",
     "nflows>=0.14",
+    "bayesflow>=2.0.8",
+    "keras>=3.12",
 ]
 
 [dependency-groups]
@@ -82,6 +86,8 @@ dev = [
     "jaxonnxruntime>=0.3",
     "onnxruntime>=1.17",
     "nflows>=0.14",
+    "bayesflow>=2.0.8",
+    "keras>=3.12",
 ]
 
 [tool.setuptools.packages.find]
