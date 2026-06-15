@@ -4,5 +4,6 @@ from . import config
 from . import trainers
 from . import utils
 from . import onnx
+from . import network_inspectors
 
-__all__ = ["config", "trainers", "utils", "onnx"]
+__all__ = ["config", "trainers", "utils", "onnx", "network_inspectors"]
