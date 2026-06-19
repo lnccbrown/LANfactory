@@ -92,8 +92,9 @@ def transform_sbi_to_onnx(
             f"transform_sbi_to_onnx does not support {estimator_cls}. "
             "Score-based, flow-matching, and TabPFN estimators are out of v1 "
             "scope; neural spline flows are blocked on a missing SearchSorted "
-            "op in jaxonnxruntime (queued as a v1.x upstream PR). See "
-            "plans/sbi-onnx-integration.md in HSSMSpine for the full matrix."
+            "op in jaxonnxruntime (queued as a v1.x upstream PR). See the "
+            "'Explicitly out of scope (v1)' section of "
+            "docs/exporting_sbi_models.md for the full matrix."
         )
 
     if mode == "nle":
