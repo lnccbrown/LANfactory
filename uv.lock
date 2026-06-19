@@ -1845,6 +1845,7 @@ dev = [
     { name = "pytest-timer" },
     { name = "pytest-xdist" },
     { name = "ruff" },
+    { name = "sbi" },
     { name = "types-pyyaml" },
 ]
 
@@ -1890,6 +1891,7 @@ dev = [
     { name = "pytest-timer", specifier = ">=1.0.0" },
     { name = "pytest-xdist", specifier = ">=3.6.1" },
     { name = "ruff", specifier = ">=0.14.4" },
+    { name = "sbi", specifier = ">=0.26" },
     { name = "types-pyyaml" },
 ]
 
