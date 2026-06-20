@@ -88,6 +88,7 @@ dev = [
     "nflows>=0.14",
     "bayesflow>=2.0.8",
     "keras>=3.12",
+    "sbi>=0.26",
 ]
 
 [tool.setuptools.packages.find]

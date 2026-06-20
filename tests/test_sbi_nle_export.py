@@ -112,12 +112,10 @@ def test_nle_export_three_way_numerical_agreement(
     y_jax_flat = y_jax.flatten()
 
     assert np.allclose(y_torch_flat, y_ort_flat, atol=atol), (
-        f"torch vs onnxruntime: max |Δ| = "
-        f"{np.abs(y_torch_flat - y_ort_flat).max()}"
+        f"torch vs onnxruntime: max |Δ| = {np.abs(y_torch_flat - y_ort_flat).max()}"
     )
     assert np.allclose(y_torch_flat, y_jax_flat, atol=atol), (
-        f"torch vs jaxonnxruntime: max |Δ| = "
-        f"{np.abs(y_torch_flat - y_jax_flat).max()}"
+        f"torch vs jaxonnxruntime: max |Δ| = {np.abs(y_torch_flat - y_jax_flat).max()}"
     )
     assert np.allclose(y_ort_flat, y_jax_flat, atol=atol), (
         f"onnxruntime vs jaxonnxruntime: max |Δ| = "
@@ -236,4 +234,36 @@ def test_nle_estimator_in_nre_mode_rejected(
             mode="nre",
             example_theta_dim=_THETA_DIM,
             example_x_dim=_X_DIM,
+        )
+
+
+def test_transform_rejects_invalid_mode(tmp_path: Path) -> None:
+    """An unrecognized mode should raise a clear ValueError, not export."""
+
+    class DummyEstimator(torch.nn.Module):
+        pass
+
+    with pytest.raises(ValueError, match="mode must be 'nle' or 'nre'"):
+        transform_sbi_to_onnx(
+            DummyEstimator(),
+            str(tmp_path / "should_not_exist.onnx"),
+            mode="bogus",  # type: ignore[arg-type]
+            example_theta_dim=1,
+            example_x_dim=1,
+        )
+
+
+def test_transform_rejects_nonpositive_dims(tmp_path: Path) -> None:
+    """Zero or negative example dims should raise a clear ValueError."""
+
+    class DummyEstimator(torch.nn.Module):
+        pass
+
+    with pytest.raises(ValueError, match="must be positive"):
+        transform_sbi_to_onnx(
+            DummyEstimator(),
+            str(tmp_path / "should_not_exist.onnx"),
+            mode="nle",
+            example_theta_dim=0,
+            example_x_dim=2,
         )

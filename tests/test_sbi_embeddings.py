@@ -54,9 +54,7 @@ def _simulator(theta: torch.Tensor) -> torch.Tensor:
     return torch.cat([first_half, second_half], dim=-1)
 
 
-def _three_way_agreement(
-    trained_classifier: torch.nn.Module, onnx_path: Path
-) -> None:
+def _three_way_agreement(trained_classifier: torch.nn.Module, onnx_path: Path) -> None:
     """Shared assertion: torch / onnxruntime / jaxonnxruntime all agree."""
     theta_t = torch.tensor([[0.3, -0.4]], dtype=torch.float32)
     x_t = torch.randn(1, _X_DIM, dtype=torch.float32)

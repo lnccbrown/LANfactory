@@ -86,14 +86,22 @@ def transform_sbi_to_onnx(
     missing ``SearchSorted`` in ``jaxonnxruntime``) are rejected with a clear
     error.
     """
+    if example_theta_dim <= 0 or example_x_dim <= 0:
+        raise ValueError(
+            "example_theta_dim and example_x_dim must be positive, got "
+            f"example_theta_dim={example_theta_dim}, "
+            f"example_x_dim={example_x_dim}."
+        )
+
     estimator_cls = type(estimator).__name__
     if estimator_cls in _UNSUPPORTED_ESTIMATORS:
         raise ValueError(
             f"transform_sbi_to_onnx does not support {estimator_cls}. "
             "Score-based, flow-matching, and TabPFN estimators are out of v1 "
             "scope; neural spline flows are blocked on a missing SearchSorted "
-            "op in jaxonnxruntime (queued as a v1.x upstream PR). See "
-            "plans/sbi-onnx-integration.md in HSSMSpine for the full matrix."
+            "op in jaxonnxruntime (queued as a v1.x upstream PR). See the "
+            "'Explicitly out of scope (v1)' section of "
+            "docs/exporting_sbi_models.md for the full matrix."
         )
 
     if mode == "nle":
@@ -119,9 +127,7 @@ def transform_sbi_to_onnx(
                 f"got {estimator_cls} which has .log_prob. If this is an NLE "
                 f"density estimator, use mode='nle' instead."
             )
-        wrapper = _NRELogRatioWrapper(
-            estimator, example_theta_dim, example_x_dim
-        )
+        wrapper = _NRELogRatioWrapper(estimator, example_theta_dim, example_x_dim)
     else:
         raise ValueError(f"mode must be 'nle' or 'nre', got {mode!r}")
 
@@ -149,9 +155,7 @@ class _NLELogProbWrapper(nn.Module):
     likelihood.
     """
 
-    def __init__(
-        self, estimator: nn.Module, theta_dim: int, x_dim: int
-    ) -> None:
+    def __init__(self, estimator: nn.Module, theta_dim: int, x_dim: int) -> None:
         super().__init__()
         self.estimator = estimator
         self.theta_dim = theta_dim
@@ -178,9 +182,7 @@ class _NRELogRatioWrapper(nn.Module):
     standardization of inputs.
     """
 
-    def __init__(
-        self, estimator: nn.Module, theta_dim: int, x_dim: int
-    ) -> None:
+    def __init__(self, estimator: nn.Module, theta_dim: int, x_dim: int) -> None:
         super().__init__()
         self.estimator = estimator
         self.theta_dim = theta_dim

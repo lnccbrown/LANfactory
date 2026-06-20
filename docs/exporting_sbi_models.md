@@ -98,10 +98,13 @@ clear `ValueError`. If you encounter an unsupported architecture, please open an
 Three constraints arose during validation and apply to anyone training their
 own sbi estimators for export:
 
-1. **Use ≥2D for both θ and x.** sbi's `density_estimator="maf"` collapses to
-   a degenerate Gaussian path in 1D that emits zero-width Gemm contractions
-   `jaxonnxruntime` cannot translate. Use 2D or higher (this is the realistic
-   case anyway).
+1. **For NLE with `density_estimator="maf"`, use ≥2D for both θ and x.** A 1D
+   MAF in sbi collapses to a degenerate Gaussian path that emits zero-width Gemm
+   contractions `jaxonnxruntime` cannot translate. This is a training-time
+   limitation of sbi/nflows, **not** something `transform_sbi_to_onnx` enforces,
+   and it is MAF-specific — NRE ratio classifiers export fine in 1D, and other
+   density estimators (MDN, MoG) may not share it (untested at v1). Use 2D or
+   higher for MAF NLE (this is the realistic case anyway).
 
 2. **Disable LayerNorm in NRE MLP classifiers.** `jaxonnxruntime` does not
    implement the `LayerNormalization` op. When using `classifier_nn(model="mlp", ...)`,
