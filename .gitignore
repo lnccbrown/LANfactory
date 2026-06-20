@@ -152,3 +152,6 @@ dmypy.json
 mynetworks/
 mygenfiles_data/
 explorations/
+
+# marimo session/layout cache (notebook source .py is the artifact we track)
+__marimo__/
