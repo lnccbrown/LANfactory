@@ -58,7 +58,12 @@ def _simulate_ddm(theta: torch.Tensor) -> torch.Tensor:
 
 def _build_observed_dataframe(rng: np.random.Generator) -> pd.DataFrame:
     """Generate N_OBS trials at the true theta as an HSSM-shaped DataFrame."""
-    out = simulator(theta=_TRUE_THETA[None, :], model="ddm", n_samples=_N_OBS)
+    out = simulator(
+        theta=_TRUE_THETA[None, :],
+        model="ddm",
+        n_samples=_N_OBS,
+        random_state=int(rng.integers(0, 2**32 - 1)),
+    )
     rts = out["rts"].squeeze().astype(np.float32)
     choices = out["choices"].squeeze().astype(np.float32)
     return pd.DataFrame({"rt": rts, "response": choices})

@@ -86,6 +86,13 @@ def transform_sbi_to_onnx(
     missing ``SearchSorted`` in ``jaxonnxruntime``) are rejected with a clear
     error.
     """
+    if example_theta_dim <= 0 or example_x_dim <= 0:
+        raise ValueError(
+            "example_theta_dim and example_x_dim must be positive, got "
+            f"example_theta_dim={example_theta_dim}, "
+            f"example_x_dim={example_x_dim}."
+        )
+
     estimator_cls = type(estimator).__name__
     if estimator_cls in _UNSUPPORTED_ESTIMATORS:
         raise ValueError(

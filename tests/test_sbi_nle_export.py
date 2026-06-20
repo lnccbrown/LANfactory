@@ -251,3 +251,19 @@ def test_transform_rejects_invalid_mode(tmp_path: Path) -> None:
             example_theta_dim=1,
             example_x_dim=1,
         )
+
+
+def test_transform_rejects_nonpositive_dims(tmp_path: Path) -> None:
+    """Zero or negative example dims should raise a clear ValueError."""
+
+    class DummyEstimator(torch.nn.Module):
+        pass
+
+    with pytest.raises(ValueError, match="must be positive"):
+        transform_sbi_to_onnx(
+            DummyEstimator(),
+            str(tmp_path / "should_not_exist.onnx"),
+            mode="nle",
+            example_theta_dim=0,
+            example_x_dim=2,
+        )
