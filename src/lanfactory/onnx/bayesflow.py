@@ -120,8 +120,16 @@ def transform_bayesflow_to_onnx(
         and the approximator does not have a ``projector``.
     ValueError
         If the approximator's ``adapter`` contains any non-trivial transforms,
-        or if ``mode`` is not one of ``"nle"``/``"nre"``.
+        if ``example_theta_dim`` or ``example_x_dim`` is not positive, or if
+        ``mode`` is not one of ``"nle"``/``"nre"``.
     """
+    if example_theta_dim <= 0 or example_x_dim <= 0:
+        raise ValueError(
+            "example_theta_dim and example_x_dim must be positive, got "
+            f"example_theta_dim={example_theta_dim}, "
+            f"example_x_dim={example_x_dim}."
+        )
+
     # The plan only ships KERAS_BACKEND=torch as a hard requirement; the
     # device note is advisory and only matters on Apple silicon.
     import keras  # local import: don't force keras at LANfactory import time

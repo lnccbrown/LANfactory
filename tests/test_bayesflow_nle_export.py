@@ -290,3 +290,101 @@ def test_nle_approximator_in_nre_mode_rejected(
             example_theta_dim=_THETA_DIM,
             example_x_dim=_X_DIM,
         )
+
+
+def test_transform_rejects_invalid_mode(tmp_path: Path) -> None:
+    """An unrecognized mode raises ValueError before building a wrapper."""
+
+    class _FakeApprox:
+        adapter = None
+
+    with pytest.raises(ValueError, match="mode must be 'nle' or 'nre'"):
+        transform_bayesflow_to_onnx(
+            _FakeApprox(),
+            str(tmp_path / "should_not_exist.onnx"),
+            mode="bogus",  # type: ignore[arg-type]
+            example_theta_dim=_THETA_DIM,
+            example_x_dim=_X_DIM,
+        )
+
+
+def test_transform_rejects_nonpositive_dims(tmp_path: Path) -> None:
+    """Zero or negative example dims raise a clear ValueError."""
+
+    class _FakeApprox:
+        adapter = None
+
+    with pytest.raises(ValueError, match="must be positive"):
+        transform_bayesflow_to_onnx(
+            _FakeApprox(),
+            str(tmp_path / "should_not_exist.onnx"),
+            mode="nle",
+            example_theta_dim=0,
+            example_x_dim=_X_DIM,
+        )
+
+
+def test_nle_wrapper_rejects_missing_inference_network() -> None:
+    """The NLE wrapper requires an approximator exposing .inference_network."""
+    from lanfactory.onnx.bayesflow import _BayesflowNLELogProbWrapper
+
+    class _NoNetwork:
+        pass
+
+    with pytest.raises(TypeError, match="inference_network"):
+        _BayesflowNLELogProbWrapper(_NoNetwork(), _THETA_DIM, _X_DIM)
+
+
+class _FakeStandardizeLayer:
+    """Minimal stand-in for a keras Standardize layer (moving_mean / moving_std).
+
+    Lets the standardization branches be exercised without training a real
+    approximator (which always standardizes only one slot in the fixtures).
+    """
+
+    def __init__(self, dim: int, std: float = 2.0) -> None:
+        self.moving_mean = [np.zeros(dim, dtype=np.float32)]
+        self._std = np.full(dim, std, dtype=np.float32)
+
+    def moving_std(self, _index):
+        return self._std
+
+
+def test_nle_wrapper_standardizes_conditions_only() -> None:
+    """Cover the NLE branch where θ (conditions) is standardized but x is not.
+
+    The trained fixture standardizes only ``inference_variables`` (x); this
+    exercises the opposite combination with a lightweight stand-in approximator.
+    """
+    from lanfactory.onnx.bayesflow import _BayesflowNLELogProbWrapper
+
+    class _Network:
+        def log_prob(self, samples, conditions):
+            # Echo (possibly standardized) inputs so the assertion can confirm
+            # standardization was applied to θ but not to x.
+            return (samples.sum() + conditions.sum()).reshape(1)
+
+    class _Standardizer:
+        standardize_layers = {"inference_conditions": _FakeStandardizeLayer(_THETA_DIM)}
+
+    class _Approx:
+        adapter = None
+
+        def __init__(self):
+            self.inference_network = _Network()
+            self.standardizer = _Standardizer()
+
+    wrapper = _BayesflowNLELogProbWrapper(_Approx(), _THETA_DIM, _X_DIM)
+    wrapper.eval()
+
+    # θ standardized → buffer registered; x not → None.
+    assert wrapper._th_mean is not None
+    assert wrapper._x_mean is None
+
+    theta = torch.tensor([2.0, 4.0])  # standardized by /2 → [1.0, 2.0]
+    x = torch.tensor([1.0, 1.0])  # left as-is
+    out = wrapper(torch.cat([theta, x]))
+
+    assert out.ndim == 0
+    # echo: x.sum()=2 (raw) + θ_std.sum()=3 → 5; x carries no Jacobian term.
+    assert torch.isclose(out, torch.tensor(5.0))

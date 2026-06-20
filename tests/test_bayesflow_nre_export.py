@@ -230,3 +230,55 @@ def test_nre_approximator_in_nle_mode_rejected(
             example_theta_dim=_THETA_DIM,
             example_x_dim=_X_DIM,
         )
+
+
+class _FakeStandardizeLayer:
+    """Minimal stand-in for a keras Standardize layer (moving_mean / moving_std)."""
+
+    def __init__(self, dim: int, std: float = 2.0) -> None:
+        self.moving_mean = [np.zeros(dim, dtype=np.float32)]
+        self._std = np.full(dim, std, dtype=np.float32)
+
+    def moving_std(self, _index):
+        return self._std
+
+
+def test_nre_wrapper_standardizes_conditions_only() -> None:
+    """Cover the NRE branch where x (conditions) is standardized but θ is not.
+
+    The trained fixture standardizes only ``inference_variables`` (θ for NRE);
+    this exercises the opposite combination with a stand-in approximator.
+    """
+    from lanfactory.onnx.bayesflow import _BayesflowNRELogRatioWrapper
+
+    class _Network:
+        def __call__(self, classifier_input, training=False):
+            return classifier_input  # echo so the assertion can check x scaling
+
+    class _Projector:
+        def __call__(self, hidden):
+            return hidden.sum().reshape(1, 1)
+
+    class _Standardizer:
+        standardize_layers = {"inference_conditions": _FakeStandardizeLayer(_X_DIM)}
+
+    class _Approx:
+        def __init__(self):
+            self.inference_network = _Network()
+            self.projector = _Projector()
+            self.standardizer = _Standardizer()
+
+    wrapper = _BayesflowNRELogRatioWrapper(_Approx(), _THETA_DIM, _X_DIM)
+    wrapper.eval()
+
+    # NRE: inference_variables=θ (not standardized here), inference_conditions=x.
+    assert wrapper._th_mean is None
+    assert wrapper._x_mean is not None
+
+    theta = torch.tensor([2.0, 4.0])  # raw
+    x = torch.tensor([2.0, 2.0])  # standardized by /2 → [1.0, 1.0]
+    out = wrapper(torch.cat([theta, x]))
+
+    assert out.ndim == 0
+    # echo: θ.sum()=6 (raw) + x_std.sum()=2 → 8.
+    assert torch.isclose(out, torch.tensor(8.0))
