@@ -53,7 +53,12 @@ keywords = [
 [project.optional-dependencies]
 mlflow = ["mlflow>=3.6.0"]
 hf = ["huggingface-hub>=0.20.0"]
-all = ["mlflow>=3.6.0", "huggingface-hub>=0.20.0"]
+all = [
+    "mlflow>=3.6.0",
+    "huggingface-hub>=0.20.0",
+    "sbi>=0.26",
+    "nflows>=0.14",
+]
 
 [dependency-groups]
 dev = [
@@ -74,6 +79,10 @@ dev = [
     "ruff>=0.14.4",
     "types-PyYAML",
     "mlflow>=3.6.0",
+    "jaxonnxruntime>=0.3",
+    "onnxruntime>=1.17",
+    "nflows>=0.14",
+    "sbi>=0.26",
 ]
 
 [tool.setuptools.packages.find]
