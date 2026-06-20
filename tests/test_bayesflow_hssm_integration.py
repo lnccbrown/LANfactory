@@ -16,10 +16,12 @@ own CI does not currently install HSSM, so this test is a no-op locally —
 it's intended for the coordinated cross-repo CI matrix.
 """
 
-# KERAS_BACKEND must be set BEFORE any keras / bayesflow import.
+# KERAS_BACKEND must be torch (the exporter requires it) and set BEFORE any
+# keras / bayesflow import — force it rather than setdefault so a stray
+# KERAS_BACKEND in the environment can't silently run these tests on jax.
 import os
 
-os.environ.setdefault("KERAS_BACKEND", "torch")
+os.environ["KERAS_BACKEND"] = "torch"
 os.environ.setdefault("KERAS_TORCH_DEVICE", "cpu")
 
 from pathlib import Path  # noqa: E402

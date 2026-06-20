@@ -6,11 +6,12 @@ The classifier logit IS log p(x|θ) - log p(x); HSSM only cares about the
 correction is needed — ratios are invariant under z-score standardization.
 """
 
-# KERAS_BACKEND must precede any keras / bayesflow import. See nle test for
-# why; same reasoning here.
+# KERAS_BACKEND must be torch and precede any keras / bayesflow import. See the
+# nle test for why; force it (not setdefault) so a stray KERAS_BACKEND in the
+# environment can't silently run these tests on jax.
 import os
 
-os.environ.setdefault("KERAS_BACKEND", "torch")
+os.environ["KERAS_BACKEND"] = "torch"
 os.environ.setdefault("KERAS_TORCH_DEVICE", "cpu")
 
 from pathlib import Path  # noqa: E402

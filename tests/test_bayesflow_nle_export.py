@@ -7,12 +7,14 @@ constraints (permutation=None, AffineTransform(clamp=False), silu activation,
 no actnorm) — see lanfactory.onnx.bayesflow module docstring for the full list.
 """
 
-# KERAS_BACKEND must be set BEFORE importing keras / bayesflow; torch.onnx.export
-# cannot trace a JAX-backed Keras model. KERAS_TORCH_DEVICE=cpu avoids the
+# KERAS_BACKEND must be torch and set BEFORE importing keras / bayesflow;
+# torch.onnx.export cannot trace a JAX-backed Keras model. Force it (not
+# setdefault) so a stray KERAS_BACKEND in the environment can't silently run
+# these tests on jax. KERAS_TORCH_DEVICE=cpu (a default) avoids the
 # Apple-silicon MPS missing-op error in the orthogonal initializer (qr).
 import os
 
-os.environ.setdefault("KERAS_BACKEND", "torch")
+os.environ["KERAS_BACKEND"] = "torch"
 os.environ.setdefault("KERAS_TORCH_DEVICE", "cpu")
 
 from pathlib import Path  # noqa: E402

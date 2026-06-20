@@ -85,6 +85,13 @@ transform_bayesflow_to_onnx(
 )
 
 # 4. Hand it to HSSM exactly like an sbi or LAN file.
+# Enable JAX x64 BEFORE HSSM imports jax: ONNX graphs carry int64 index
+# tensors that JAX's default 32-bit mode silently truncates, producing wrong
+# log-probs (see "Known constraints" below).
+import jax
+
+jax.config.update("jax_enable_x64", True)
+
 import hssm
 model = hssm.HSSM(
     data=obs_data,
