@@ -235,3 +235,19 @@ def test_nle_estimator_in_nre_mode_rejected(
             example_theta_dim=_THETA_DIM,
             example_x_dim=_X_DIM,
         )
+
+
+def test_transform_rejects_invalid_mode(tmp_path: Path) -> None:
+    """An unrecognized mode should raise a clear ValueError, not export."""
+
+    class DummyEstimator(torch.nn.Module):
+        pass
+
+    with pytest.raises(ValueError, match="mode must be 'nle' or 'nre'"):
+        transform_sbi_to_onnx(
+            DummyEstimator(),
+            str(tmp_path / "should_not_exist.onnx"),
+            mode="bogus",  # type: ignore[arg-type]
+            example_theta_dim=1,
+            example_x_dim=1,
+        )
