@@ -15,6 +15,7 @@ nav:
       - MLflow Integration: using_mlflow.md
       - HuggingFace Hub: using_huggingface.md
       - Exporting sbi Models: exporting_sbi_models.md
+      - Exporting bayesflow Models: exporting_bayesflow_models.md
   - API:
       - lanfactory: api/lanfactory.md
       - config: api/config.md
