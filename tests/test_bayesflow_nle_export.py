@@ -93,10 +93,12 @@ def trained_nle() -> bf.ContinuousApproximator:
     x = _gaussian_xs_for_theta(rng, theta)
 
     approximator = _build_nle_approximator()
-    approximator.build({
-        "inference_variables": (None, _X_DIM),
-        "inference_conditions": (None, _THETA_DIM),
-    })
+    approximator.build(
+        {
+            "inference_variables": (None, _X_DIM),
+            "inference_conditions": (None, _THETA_DIM),
+        }
+    )
     approximator.compile(optimizer=keras.optimizers.Adam(learning_rate=1e-3))
 
     dataset = OfflineDataset(
@@ -198,7 +200,7 @@ def test_nle_export_gradient_agreement(
     with torch.enable_grad():
         y = wrapper(combined_t)
     (grad_torch,) = torch.autograd.grad(y, combined_t)
-    grad_theta_torch = grad_torch[: _THETA_DIM].detach().numpy()
+    grad_theta_torch = grad_torch[:_THETA_DIM].detach().numpy()
 
     combined_init = torch.cat([theta_init, x_init], dim=-1).numpy().astype(np.float32)
     run_func, input_name = _load_jax_runner(onnx_path, combined_init)

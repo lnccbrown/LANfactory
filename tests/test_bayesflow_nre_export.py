@@ -73,10 +73,12 @@ def trained_nre() -> bf.RatioApproximator:
     x = (theta + 0.5 * rng.standard_normal(size=(n_train, _X_DIM))).astype(np.float32)
 
     approximator = _build_nre_approximator()
-    approximator.build({
-        "inference_variables": (None, _THETA_DIM),    # NRE: θ here
-        "inference_conditions": (None, _X_DIM),       # NRE: x here
-    })
+    approximator.build(
+        {
+            "inference_variables": (None, _THETA_DIM),  # NRE: θ here
+            "inference_conditions": (None, _X_DIM),  # NRE: x here
+        }
+    )
     approximator.compile(optimizer=keras.optimizers.Adam(learning_rate=1e-3))
 
     dataset = OfflineDataset(
@@ -175,7 +177,7 @@ def test_nre_export_gradient_agreement(
     with torch.enable_grad():
         y = wrapper(combined_t)
     (grad_torch,) = torch.autograd.grad(y, combined_t)
-    grad_theta_torch = grad_torch[: _THETA_DIM].detach().numpy()
+    grad_theta_torch = grad_torch[:_THETA_DIM].detach().numpy()
 
     combined_init = torch.cat([theta_init, x_init], dim=-1).numpy().astype(np.float32)
     run_func, input_name = _load_jax_runner(onnx_path, combined_init)

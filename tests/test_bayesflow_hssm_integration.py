@@ -82,19 +82,21 @@ def trained_bayesflow_for_ddm(tmp_path_factory) -> Path:
             depth=4,
             subnet_kwargs={
                 "widths": (64, 64),
-                "activation": "silu",   # see lanfactory.onnx.bayesflow on hard_silu
+                "activation": "silu",  # see lanfactory.onnx.bayesflow on hard_silu
                 "dropout": None,
             },
-            permutation=None,           # avoids aten::ravel in ONNX trace
+            permutation=None,  # avoids aten::ravel in ONNX trace
             use_actnorm=False,
             transform=AffineTransform(clamp=False),
         ),
         standardize="inference_variables",  # standardize x (rt, choice)
     )
-    approximator.build({
-        "inference_variables": (None, 2),
-        "inference_conditions": (None, len(_DDM_PARAM_NAMES)),
-    })
+    approximator.build(
+        {
+            "inference_variables": (None, 2),
+            "inference_conditions": (None, len(_DDM_PARAM_NAMES)),
+        }
+    )
     approximator.compile(optimizer=keras.optimizers.Adam(learning_rate=5e-4))
 
     dataset = OfflineDataset(
@@ -155,6 +157,7 @@ def test_hssm_mcmc_recovers_ddm_parameters_via_bayesflow(
         summary = hssm.utils.summary(idata)
     else:
         import arviz as az
+
         summary = az.summary(idata, var_names=_DDM_PARAM_NAMES)
 
     posterior_means = summary.loc[_DDM_PARAM_NAMES, "mean"].to_numpy()

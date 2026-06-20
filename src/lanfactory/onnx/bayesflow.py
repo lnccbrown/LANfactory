@@ -223,9 +223,7 @@ class _BayesflowNLELogProbWrapper(nn.Module):
     :meth:`approximator.log_prob` (modulo the adapter, which v1 forbids).
     """
 
-    def __init__(
-        self, approximator: Any, theta_dim: int, x_dim: int
-    ) -> None:
+    def __init__(self, approximator: Any, theta_dim: int, x_dim: int) -> None:
         super().__init__()
         if not hasattr(approximator, "inference_network"):
             raise TypeError(
@@ -295,9 +293,7 @@ class _BayesflowNRELogRatioWrapper(nn.Module):
     constant, which drops out of any MCMC accept ratio HSSM evaluates.
     """
 
-    def __init__(
-        self, approximator: Any, theta_dim: int, x_dim: int
-    ) -> None:
+    def __init__(self, approximator: Any, theta_dim: int, x_dim: int) -> None:
         super().__init__()
         if not hasattr(approximator, "projector"):
             raise TypeError(
