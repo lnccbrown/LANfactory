@@ -120,9 +120,7 @@ def transform_sbi_to_onnx(
                 f"got {estimator_cls} which has .log_prob. If this is an NLE "
                 f"density estimator, use mode='nle' instead."
             )
-        wrapper = _NRELogRatioWrapper(
-            estimator, example_theta_dim, example_x_dim
-        )
+        wrapper = _NRELogRatioWrapper(estimator, example_theta_dim, example_x_dim)
     else:
         raise ValueError(f"mode must be 'nle' or 'nre', got {mode!r}")
 
@@ -150,9 +148,7 @@ class _NLELogProbWrapper(nn.Module):
     likelihood.
     """
 
-    def __init__(
-        self, estimator: nn.Module, theta_dim: int, x_dim: int
-    ) -> None:
+    def __init__(self, estimator: nn.Module, theta_dim: int, x_dim: int) -> None:
         super().__init__()
         self.estimator = estimator
         self.theta_dim = theta_dim
@@ -179,9 +175,7 @@ class _NRELogRatioWrapper(nn.Module):
     standardization of inputs.
     """
 
-    def __init__(
-        self, estimator: nn.Module, theta_dim: int, x_dim: int
-    ) -> None:
+    def __init__(self, estimator: nn.Module, theta_dim: int, x_dim: int) -> None:
         super().__init__()
         self.estimator = estimator
         self.theta_dim = theta_dim

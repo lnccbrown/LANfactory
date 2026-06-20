@@ -136,6 +136,7 @@ def test_hssm_mcmc_recovers_ddm_parameters(trained_nle_for_ddm: Path) -> None:
     # Fall back to arviz if the convenience method is not exposed.
     if summary is None:
         import arviz as az
+
         summary = az.summary(idata, var_names=_DDM_PARAM_NAMES)
 
     posterior_means = summary.loc[_DDM_PARAM_NAMES, "mean"].to_numpy()

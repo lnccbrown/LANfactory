@@ -100,12 +100,10 @@ def test_nre_export_three_way_numerical_agreement(
     y_jax_flat = y_jax.flatten()
 
     assert np.allclose(y_torch_flat, y_ort_flat, atol=atol), (
-        f"torch vs onnxruntime: max |Δ| = "
-        f"{np.abs(y_torch_flat - y_ort_flat).max()}"
+        f"torch vs onnxruntime: max |Δ| = {np.abs(y_torch_flat - y_ort_flat).max()}"
     )
     assert np.allclose(y_torch_flat, y_jax_flat, atol=atol), (
-        f"torch vs jaxonnxruntime: max |Δ| = "
-        f"{np.abs(y_torch_flat - y_jax_flat).max()}"
+        f"torch vs jaxonnxruntime: max |Δ| = {np.abs(y_torch_flat - y_jax_flat).max()}"
     )
     assert np.allclose(y_ort_flat, y_jax_flat, atol=atol), (
         f"onnxruntime vs jaxonnxruntime: max |Δ| = "
