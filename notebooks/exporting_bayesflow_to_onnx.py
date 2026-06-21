@@ -66,6 +66,12 @@ def _():
     os.environ["KERAS_BACKEND"] = "torch"
     os.environ.setdefault("KERAS_TORCH_DEVICE", "cpu")
 
+    import logging
+    import warnings
+
+    warnings.filterwarnings("ignore")  # keep the rendered tutorial output clean
+    logging.getLogger("jax._src.xla_bridge").setLevel(logging.ERROR)  # silence TPU-probe log
+
     import jax
 
     jax.config.update("jax_enable_x64", True)
@@ -184,7 +190,7 @@ def _(THETA_DIM, X_DIM, approximator, transform_bayesflow_to_onnx):
         example_theta_dim=THETA_DIM,
         example_x_dim=X_DIM,
     )
-    print(f"wrote {onnx_path}")
+    print("✓ exported ddm_bayesflow_nle.onnx")
     return (onnx_path,)
 
 

@@ -57,6 +57,12 @@ def _(mo):
 
 @app.cell
 def _():
+    import logging
+    import warnings
+
+    warnings.filterwarnings("ignore")  # keep the rendered tutorial output clean
+    logging.getLogger("jax._src.xla_bridge").setLevel(logging.ERROR)  # silence TPU-probe log
+
     import jax
 
     jax.config.update("jax_enable_x64", True)
@@ -155,18 +161,18 @@ def _(THETA_DIM, X_DIM, estimator, transform_sbi_to_onnx):
         example_theta_dim=THETA_DIM,
         example_x_dim=X_DIM,
     )
-    print(f"wrote {onnx_path}")
+    print("✓ exported ddm_nle.onnx")
     return (onnx_path,)
 
 
 @app.cell
-def _(call_onnx, jax, np, onnx, onnx_path, ort):
+def _(THETA_DIM, X_DIM, call_onnx, jax, np, onnx, onnx_path, ort):
     # Load the exported graph into onnxruntime and the jax-translated runner once.
     _ort_session = ort.InferenceSession(onnx_path)
     _input_name = _ort_session.get_inputs()[0].name
 
     _onnx_model = onnx.load(onnx_path)
-    _trace_input = np.zeros(4, dtype=np.float32)  # [θ0, θ1, x0, x1]
+    _trace_input = np.zeros(THETA_DIM + X_DIM, dtype=np.float32)  # [θ.., x..]
     _model_func, _weights = call_onnx.call_onnx_model(
         _onnx_model, {_input_name: _trace_input}
     )
