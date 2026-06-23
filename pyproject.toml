@@ -89,6 +89,7 @@ dev = [
     "bayesflow>=2.0.8",
     "keras>=3.12",
     "sbi>=0.26",
+    "marimo>=0.23",
 ]
 
 [tool.setuptools.packages.find]
