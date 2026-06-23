@@ -88,7 +88,6 @@ def _():
     from bayesflow.networks.inference.coupling.transforms import AffineTransform
 
     from lanfactory.onnx import transform_bayesflow_to_onnx
-    from lanfactory.onnx.bayesflow import _BayesflowNLELogProbWrapper
 
     # bayesflow disables autograd at import under the torch backend; restore it.
     torch.set_grad_enabled(True)
@@ -210,6 +209,10 @@ def _(
     # Load the exported graph once into onnxruntime + the jax-translated runner,
     # and build the in-memory wrapper for the torch reference. (We bypass
     # approximator.log_prob, which runs the numpy adapter and re-standardizes.)
+    # Import the wrapper here (it is _-prefixed → cell-local in marimo, so it
+    # cannot be shared from the setup cell).
+    from lanfactory.onnx.bayesflow import _BayesflowNLELogProbWrapper
+
     _ort_session = ort.InferenceSession(onnx_path)
     _input_name = _ort_session.get_inputs()[0].name
 
