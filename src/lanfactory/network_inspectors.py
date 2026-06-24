@@ -9,18 +9,20 @@ from matplotlib import cm
 
 # import pymc as pm
 import pandas as pd
-import seaborn as sns
 
 try:
     # print('HDDM: Trying import of pytorch related classes.')
     from lanfactory.trainers import LoadTorchMLPInfer
-except:
+
+    _LOAD_TORCH_IMPORT_ERROR = None
+except ImportError as exc:
+    LoadTorchMLPInfer = None
+    _LOAD_TORCH_IMPORT_ERROR = exc
     print(
         "It seems that you do not have pytorch installed."
-        + " You cannot use the network_inspector module."
+        " You cannot use the network_inspector module."
     )
 
-from sklearn.neighbors import KernelDensity
 import os
 
 from ssms.config import ModelConfigBuilder
@@ -56,6 +58,11 @@ def get_torch_mlp(model_file_path, network_config, input_dim):
         >>> data = np.array([[0.5, 1.5, 0.5, 0.5, 1.0, -1.0], [0.5, 1.5, 0.5, 0.5, 1.0, -1.0]], dtype = np.float32)
         >>> forward(data)
     """
+    if LoadTorchMLPInfer is None:
+        raise ImportError(
+            "LoadTorchMLPInfer is unavailable. Install the torch-related "
+            "dependencies to use lanfactory.network_inspectors.get_torch_mlp()."
+        ) from _LOAD_TORCH_IMPORT_ERROR
     network = LoadTorchMLPInfer(
         model_file_path=model_file_path,
         network_config=network_config,
@@ -105,6 +112,15 @@ def kde_vs_lan_likelihoods(  # ax_titles = [],
     :Returns:
         empty
     """
+    if parameter_df is None:
+        raise ValueError("`parameter_df` is required and must not be None.")
+    if model is None:
+        raise ValueError("`model` is required and must not be None.")
+    if torch_mlp_predict is None:
+        raise ValueError(
+            "`torch_mlp_predict` is required and must not be None. "
+            "Pass a predict function as returned by `get_torch_mlp`."
+        )
 
     # Get predictions from simulations /kde
 
@@ -116,9 +132,11 @@ def kde_vs_lan_likelihoods(  # ax_titles = [],
 
     # Initialize rows and graph parameters
     rows = int(np.ceil(parameter_df.shape[0] / cols))
-    sns.set(style="white", palette="muted", color_codes=True, font_scale=2)
+    sns.set(style="white", palette="muted", color_codes=True, font_scale=font_scale)
 
-    fig, ax = plt.subplots(rows, cols, figsize=figsize, sharex=True, sharey=False)
+    fig, ax = plt.subplots(
+        rows, cols, figsize=figsize, sharex=True, sharey=False, squeeze=False
+    )
 
     fig.suptitle(
         "Likelihoods KDE vs. LAN" + ": " + model.upper().replace("_", "-"), fontsize=30
@@ -148,7 +166,7 @@ def kde_vs_lan_likelihoods(  # ax_titles = [],
         )
 
     # Load Keras model and initialize batch container
-    input_batch = np.zeros((4000, parameter_df.shape[1] + 2))
+    input_batch = np.zeros((plot_data.shape[0], parameter_df.shape[1] + 2))
     input_batch[:, parameter_df.shape[1] :] = plot_data
 
     # n_subplot = 0
@@ -262,7 +280,7 @@ def kde_vs_lan_likelihoods(  # ax_titles = [],
     plt.subplots_adjust(top=0.9)
     plt.subplots_adjust(hspace=0.3, wspace=0.3)
 
-    if save == True:
+    if save:
         if os.path.isdir("figures/"):
             pass
         else:
@@ -319,6 +337,13 @@ def lan_manifold(
     :Returns:
         empty
     """
+    if parameter_df is None:
+        raise ValueError("`parameter_df` is required and must not be None.")
+    if torch_mlp_predict is None:
+        raise ValueError(
+            "`torch_mlp_predict` is required and must not be None. "
+            "Pass a predict function as returned by `get_torch_mlp`."
+        )
 
     # mpl.rcParams.update(mpl.rcParamsDefault)
     # mpl.rcParams['text.usetex'] = True
@@ -327,18 +352,16 @@ def lan_manifold(
 
     config = ModelConfigBuilder.from_model(model)
 
-    assert (
-        len(config["choices"]) == 2
-    ), "This plot works only for 2-choice models at the moment. Improvements coming!"
+    assert len(config["choices"]) == 2, (
+        "This plot works only for 2-choice models at the moment. Improvements coming!"
+    )
 
     if parameter_df.shape[0] > 0:
         parameters = parameter_df.iloc[0, :]
         print("Using only the first row of the supplied parameter array !")
 
-    if type(parameter_df) == pd.core.frame.DataFrame:
-        parameters = np.squeeze(
-            parameters[config["params"]].values.astype(np.float32)
-        )
+    if isinstance(parameter_df, pd.DataFrame):
+        parameters = np.squeeze(parameters[config["params"]].values.astype(np.float32))
     else:
         parameters = parameter_df
 
@@ -357,13 +380,14 @@ def lan_manifold(
     )
 
     n_params = len(config["params"])
-    n_levels = vary_dict[list(vary_dict.keys())[0]].shape[0]
+    vary_param_name = list(vary_dict.keys())[0]
+    vary_values = np.asarray(vary_dict[vary_param_name], dtype=np.float32)
+    n_levels = vary_values.shape[0]
     data_var = np.zeros(((n_rt_steps * 2) * n_levels, n_params + 3))
 
     cnt = 0
-    vary_param_name = list(vary_dict.keys())[0]
 
-    for par_tmp in vary_dict[vary_param_name]:
+    for par_tmp in vary_values:
         tmp_begin = (n_rt_steps * 2) * cnt
         tmp_end = (n_rt_steps * 2) * (cnt + 1)
         parameters[config["params"].index(vary_param_name)] = par_tmp
@@ -371,7 +395,9 @@ def lan_manifold(
         data_var[tmp_begin:tmp_end, :n_params] = parameters
         data_var[tmp_begin:tmp_end, n_params : (n_params + 2)] = plot_data
         data_var[tmp_begin:tmp_end, (n_params + 2)] = np.squeeze(
-            np.exp(torch_mlp_predict(data_var[tmp_begin:tmp_end, :-1].astype(np.float32)))
+            np.exp(
+                torch_mlp_predict(data_var[tmp_begin:tmp_end, :-1].astype(np.float32))
+            )
         )
 
         cnt += 1
@@ -424,9 +450,9 @@ def lan_manifold(
         model.upper().replace("_", "-") + " - MLP: Manifold", fontsize=20, pad=20
     )
 
-    ax.w_xaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
-    ax.w_yaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
-    ax.w_zaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+    ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+    ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+    ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
 
     # Save plot
     if save:
