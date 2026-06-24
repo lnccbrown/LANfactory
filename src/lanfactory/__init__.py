@@ -9,12 +9,12 @@ __all__ = ["config", "trainers", "utils", "onnx", "network_inspectors"]
 
 
 def __getattr__(name):
-    # Lazily import network_inspectors so that `import lanfactory` does not
-    # eagerly pull in its heavy / optional dependencies (e.g. scikit-learn).
+    # lazy import so `import lanfactory` doesn't require sklearn etc.
+    # (importlib here, since `from . import` would recurse back into __getattr__)
     if name == "network_inspectors":
         import importlib
 
-        module = importlib.import_module(".network_inspectors", __name__)
+        module = importlib.import_module(f"{__name__}.network_inspectors")
         globals()[name] = module
         return module
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

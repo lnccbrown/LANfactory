@@ -13,14 +13,11 @@ import pandas as pd
 try:
     # print('HDDM: Trying import of pytorch related classes.')
     from lanfactory.trainers import LoadTorchMLPInfer
-
-    _LOAD_TORCH_IMPORT_ERROR = None
-except ImportError as exc:
+except ImportError:
     LoadTorchMLPInfer = None
-    _LOAD_TORCH_IMPORT_ERROR = exc
     print(
         "It seems that you do not have pytorch installed."
-        " You cannot use the network_inspector module."
+        + " You cannot use the network_inspector module."
     )
 
 import os
@@ -59,10 +56,7 @@ def get_torch_mlp(model_file_path, network_config, input_dim):
         >>> forward(data)
     """
     if LoadTorchMLPInfer is None:
-        raise ImportError(
-            "LoadTorchMLPInfer is unavailable. Install the torch-related "
-            "dependencies to use lanfactory.network_inspectors.get_torch_mlp()."
-        ) from _LOAD_TORCH_IMPORT_ERROR
+        raise ImportError("pytorch is not installed, cannot use get_torch_mlp.")
     network = LoadTorchMLPInfer(
         model_file_path=model_file_path,
         network_config=network_config,
@@ -113,14 +107,11 @@ def kde_vs_lan_likelihoods(  # ax_titles = [],
         empty
     """
     if parameter_df is None:
-        raise ValueError("`parameter_df` is required and must not be None.")
+        raise ValueError("parameter_df cannot be None.")
     if model is None:
-        raise ValueError("`model` is required and must not be None.")
+        raise ValueError("model cannot be None.")
     if torch_mlp_predict is None:
-        raise ValueError(
-            "`torch_mlp_predict` is required and must not be None. "
-            "Pass a predict function as returned by `get_torch_mlp`."
-        )
+        raise ValueError("torch_mlp_predict cannot be None.")
 
     # Get predictions from simulations /kde
 
@@ -338,12 +329,9 @@ def lan_manifold(
         empty
     """
     if parameter_df is None:
-        raise ValueError("`parameter_df` is required and must not be None.")
+        raise ValueError("parameter_df cannot be None.")
     if torch_mlp_predict is None:
-        raise ValueError(
-            "`torch_mlp_predict` is required and must not be None. "
-            "Pass a predict function as returned by `get_torch_mlp`."
-        )
+        raise ValueError("torch_mlp_predict cannot be None.")
 
     # mpl.rcParams.update(mpl.rcParamsDefault)
     # mpl.rcParams['text.usetex'] = True
@@ -352,16 +340,18 @@ def lan_manifold(
 
     config = ModelConfigBuilder.from_model(model)
 
-    assert len(config["choices"]) == 2, (
-        "This plot works only for 2-choice models at the moment. Improvements coming!"
-    )
+    assert (
+        len(config["choices"]) == 2
+    ), "This plot works only for 2-choice models at the moment. Improvements coming!"
 
     if parameter_df.shape[0] > 0:
         parameters = parameter_df.iloc[0, :]
         print("Using only the first row of the supplied parameter array !")
 
     if isinstance(parameter_df, pd.DataFrame):
-        parameters = np.squeeze(parameters[config["params"]].values.astype(np.float32))
+        parameters = np.squeeze(
+            parameters[config["params"]].values.astype(np.float32)
+        )
     else:
         parameters = parameter_df
 
@@ -395,9 +385,7 @@ def lan_manifold(
         data_var[tmp_begin:tmp_end, :n_params] = parameters
         data_var[tmp_begin:tmp_end, n_params : (n_params + 2)] = plot_data
         data_var[tmp_begin:tmp_end, (n_params + 2)] = np.squeeze(
-            np.exp(
-                torch_mlp_predict(data_var[tmp_begin:tmp_end, :-1].astype(np.float32))
-            )
+            np.exp(torch_mlp_predict(data_var[tmp_begin:tmp_end, :-1].astype(np.float32)))
         )
 
         cnt += 1
