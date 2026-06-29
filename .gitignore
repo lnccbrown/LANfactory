@@ -149,3 +149,4 @@ dmypy.json
 mynetworks/
 mygenfiles_data/
 explorations/
+uv.lock
