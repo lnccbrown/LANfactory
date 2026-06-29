@@ -127,10 +127,6 @@ Optional experiment tracking via MLflow. CLI flags: `--mlflow-run-name`, `--mlfl
 | `run_tests.yml` | Tests on Python 3.11/3.12/3.13 + ruff lint/format + codecov |
 | `build_wheels.yml` | Build sdist, upload to TestPyPI → PyPI on release publish |
 
-## Known Issues
-
-- `__init__.py` version (`0.5.3`) is out of sync with `pyproject.toml` (`0.6.1`)
-
 ## Compaction
 
 When compacting, preserve: file list of modified files, the three network types
