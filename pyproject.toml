@@ -97,9 +97,6 @@ dev = [
 where = ["src"]
 include = ["lanfactory", "lanfactory.*"]
 
-[tool.uv]
-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
-
 
 [tool.pytest.ini_options]
 log_cli = true
