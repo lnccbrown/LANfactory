@@ -167,7 +167,7 @@ class _NLELogProbWrapper(nn.Module):
         # sbi's batched log_prob contract, and reshape the (1, 1) output back
         # to a scalar so HSSM's downstream .squeeze() leaves it as ().
         theta = combined[: self.theta_dim].unsqueeze(0)
-        x = combined[self.theta_dim :].unsqueeze(0)
+        x = combined[self.theta_dim : self.theta_dim + self.x_dim].unsqueeze(0)
         return self.estimator.log_prob(x, condition=theta).reshape(())
 
 
@@ -192,5 +192,5 @@ class _NRELogRatioWrapper(nn.Module):
         # combined: 1D, shape (theta_dim + x_dim,) — see _NLELogProbWrapper for
         # the rationale around rank-1 tracing and vmap compatibility.
         theta = combined[: self.theta_dim].unsqueeze(0)
-        x = combined[self.theta_dim :].unsqueeze(0)
+        x = combined[self.theta_dim : self.theta_dim + self.x_dim].unsqueeze(0)
         return self.estimator(theta, x).reshape(())
