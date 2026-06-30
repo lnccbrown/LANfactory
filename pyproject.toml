@@ -16,7 +16,7 @@ authors = [
 description = "Package with convenience functions to train LANs"
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">3.10, <3.14"
+requires-python = ">=3.11, <3.15"
 classifiers = [
     "Development Status :: 1 - Planning",
     "Environment :: Console",
@@ -26,6 +26,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering",
 ]
 
@@ -33,8 +34,8 @@ dependencies = [
     "ssm-simulators>=0.12.2",
     "scipy>=1.15.2",
     "pandas>=2.2.3",
-    "torch>=2.7.0",
-    "flax>=0.10.6",
+    "torch>=2.10.0",
+    "flax>=0.12.7",
     "tqdm>=4.67.1",
     "frozendict>=2.4.6",
     "onnx>=1.17.0",
@@ -96,6 +97,9 @@ dev = [
 where = ["src"]
 include = ["lanfactory", "lanfactory.*"]
 
+[tool.uv]
+environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+
 
 [tool.pytest.ini_options]
 log_cli = true
@@ -113,25 +117,21 @@ addopts = [
 [tool.ruff]
 line-length = 88
 src = ["src/lanfactory", "tests"]
-exclude = [
-    "notebooks/*",
-    "docs/*",
-    "docs/basic_tutorial/basic_tutorial.ipynb",
-]
+exclude = ["notebooks/*", "docs/*", "docs/basic_tutorial/basic_tutorial.ipynb"]
 
 # Coverage settings
 [tool.coverage.run]
 source = ["src"]
-branch = true                      # Measure branch coverage
-parallel = true                    # Support parallel test execution
+branch = true # Measure branch coverage
+parallel = true # Support parallel test execution
 omit = [
     "*/tests/*",
     "*/__init__.py",
     "*/conftest.py",
-    "*/cli/jax_train.py",          # CLI entry points are tested via smoke tests
-    "*/cli/torch_train.py",        # CLI entry points are tested via smoke tests
-    "*/cli/upload_hf.py",          # CLI entry points are tested via smoke tests
-    "*/cli/download_hf.py",        # CLI entry points are tested via smoke tests
+    "*/cli/jax_train.py",   # CLI entry points are tested via smoke tests
+    "*/cli/torch_train.py", # CLI entry points are tested via smoke tests
+    "*/cli/upload_hf.py",   # CLI entry points are tested via smoke tests
+    "*/cli/download_hf.py", # CLI entry points are tested via smoke tests
 ]
 
 [tool.coverage.report]
@@ -147,7 +147,6 @@ exclude_lines = [
     "except.*ImportError",
     "logger.error",
 ]
-
 
 
 [project.scripts]
