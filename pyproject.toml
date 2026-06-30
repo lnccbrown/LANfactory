@@ -52,12 +52,12 @@ keywords = [
 ]
 
 [project.optional-dependencies]
-mlflow = ["mlflow>=3.6.0"]
+mlflow = ["mlflow>=3.14.0"]
 hf = ["huggingface-hub>=0.20.0"]
 sbi = ["sbi>=0.26", "nflows>=0.14"]
 bayesflow = ["bayesflow>=2.0.8", "keras>=3.12"]
 all = [
-    "mlflow>=3.6.0",
+    "mlflow>=3.14.0",
     "huggingface-hub>=0.20.0",
     "sbi>=0.26",
     "nflows>=0.14",
@@ -83,7 +83,7 @@ dev = [
     "pytest>=8.3.1",
     "ruff>=0.14.4",
     "types-PyYAML",
-    "mlflow>=3.6.0",
+    "mlflow>=3.14.0",
     "jaxonnxruntime>=0.3",
     "onnxruntime>=1.17",
     "nflows>=0.14",
