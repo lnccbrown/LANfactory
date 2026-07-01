@@ -1,14 +1,12 @@
 import pytest
 import ssms
 import lanfactory
-import os
 import numpy as np
 from copy import deepcopy
 import jax.numpy as jnp
 import torch
 from .constants import (
     TEST_GENERATOR_CONSTANTS,
-    TEST_MODEL_FOLDER_CONSTANTS_JAX,
 )
 
 # import logger
@@ -19,24 +17,7 @@ logger = logging.getLogger(__name__)
 LEN_FORWARD_PASS_DUMMY = 2000
 
 
-def dummy_training_data_files(generator_config, model_config, save=True):
-    """Fixture providing a dummy training data for testing."""
-    output_folder = generator_config["output"]["folder"]
-    os.makedirs(output_folder, exist_ok=True)
-    for i in range(TEST_GENERATOR_CONSTANTS.N_DATA_FILES):
-        logger.info(
-            "Generating training data for file %d of %d",
-            i + 1,
-            TEST_GENERATOR_CONSTANTS.N_DATA_FILES,
-        )
-        my_dataset_generator = ssms.dataset_generators.lan_mlp.TrainingDataGenerator(
-            config=generator_config, model_config=model_config
-        )
-        _ = my_dataset_generator.generate_data_training(save=save)
-
-    return [os.path.join(output_folder, file_) for file_ in os.listdir(output_folder)]
-
-
+@pytest.mark.slow
 @pytest.mark.flaky(reruns=2)
 @pytest.mark.parametrize(
     "train_type, config_fixture, generator_config_fixture",
@@ -63,6 +44,9 @@ def test_end_to_end_lan_mlp(
     config_fixture,
     request,
     generator_config_fixture,
+    data_folder,
+    model_folder,
+    dummy_training_data_files,
 ):
     """End-to-end test for LAN/CPN/OPN MLP models.
 
@@ -73,20 +57,14 @@ def test_end_to_end_lan_mlp(
         config_fixture: Fixture name for network and training configuration
         request: Pytest request object for fixture access
         generator_config_fixture: Fixture name for data generator configuration
+        data_folder: Temporary folder for generated training data
+        model_folder: Temporary folder for trained model artifacts
+        dummy_training_data_files: Factory fixture generating dummy training data
     """
-    if train_type == "lan":
-        MODEL_FOLDER = TEST_MODEL_FOLDER_CONSTANTS_JAX.LAN_MODEL_FOLDER
-    elif train_type == "cpn":
-        MODEL_FOLDER = TEST_MODEL_FOLDER_CONSTANTS_JAX.CPN_MODEL_FOLDER
-    elif train_type == "opn":
-        MODEL_FOLDER = TEST_MODEL_FOLDER_CONSTANTS_JAX.OPN_MODEL_FOLDER
-    else:
-        raise ValueError(f"Invalid train type: {train_type}")
-
     train_config_dict = request.getfixturevalue(config_fixture)
     config_generator = request.getfixturevalue(generator_config_fixture)
 
-    generator_config_dict = config_generator()
+    generator_config_dict = config_generator(output_folder=data_folder)
 
     logger.info("Generator config: %s", generator_config_dict)
     generator_config = generator_config_dict["generator_config"]
@@ -156,7 +134,7 @@ def test_end_to_end_lan_mlp(
     )
 
     _ = jax_trainer.train_and_evaluate(
-        output_folder=MODEL_FOLDER,
+        output_folder=model_folder,
         output_file_id=model_config["name"],
         run_id="jax",
         mlflow_on=False,
@@ -169,6 +147,11 @@ def test_end_to_end_lan_mlp(
         train=False,
     )
 
+    network_name = train_type if train_type == "lan" else "cpn"
+    state_file = str(
+        model_folder / f"jax_{network_name}_{model_config['name']}__train_state.jax"
+    )
+
     # TODO also test this with returned test_state!
     forward_pass, forward_pass_jitted = jax_infer.make_forward_partial(
         seed=42,
@@ -177,16 +160,7 @@ def test_end_to_end_lan_mlp(
             if train_type == "lan"
             else model_config["n_params"]
         ),
-        state=os.path.join(
-            MODEL_FOLDER,
-            (
-                "jax_"
-                + (train_type if train_type == "lan" else "cpn")
-                + "_"
-                + model_config["name"]
-                + "__train_state.jax"
-            ),
-        ),
+        state=state_file,
         add_jitted=True,
     )
 
@@ -234,18 +208,9 @@ def test_end_to_end_lan_mlp(
         input_mat = input_mat.at[:, i].set(jnp.ones(LEN_FORWARD_PASS_DUMMY) * param)
 
     logger.info("Input mat shape: %s", input_mat.shape)
-    shape_of_input = jax_infer.load_state_from_file(
-        file_path=os.path.join(
-            MODEL_FOLDER,
-            (
-                "jax_"
-                + (train_type if train_type == "lan" else "cpn")
-                + "_"
-                + model_config["name"]
-                + "__train_state.jax"
-            ),
-        )
-    )["params"]["layers_0"]["kernel"].shape
+    shape_of_input = jax_infer.load_state_from_file(file_path=state_file)["params"][
+        "layers_0"
+    ]["kernel"].shape
     logger.info("Shape of input from loading state: %s", shape_of_input)
 
     net_out_jitted = forward_pass_jitted(input_mat)
