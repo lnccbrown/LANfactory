@@ -155,3 +155,4 @@ explorations/
 
 # marimo session/layout cache (notebook source .py is the artifact we track)
 __marimo__/
+uv.lock
