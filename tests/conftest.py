@@ -92,7 +92,9 @@ def dummy_training_data_files():
             )
             my_dataset_generator.generate_data_training(save=save)
 
-        return [str(file_) for file_ in output_folder.iterdir()]
+        return sorted(
+            str(file_) for file_ in output_folder.iterdir() if file_.is_file()
+        )
 
     return _generate
 
