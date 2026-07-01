@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 LEN_FORWARD_PASS_DUMMY = 2000
 
 
+@pytest.mark.slow
 @pytest.mark.flaky(reruns=2)
 @pytest.mark.parametrize(
     "train_type, config_fixture, generator_config_fixture",
