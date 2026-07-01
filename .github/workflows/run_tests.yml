@@ -55,6 +55,6 @@ jobs:
         run: uv run ruff check src/lanfactory
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
