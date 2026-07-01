@@ -279,7 +279,7 @@ class _BayesflowNLELogProbWrapper(nn.Module):
     def forward(self, combined: torch.Tensor) -> torch.Tensor:
         # combined: rank-1, (theta_dim + x_dim,) — see module docstring.
         theta = combined[: self.theta_dim].unsqueeze(0)
-        x_obs = combined[self.theta_dim :].unsqueeze(0)
+        x_obs = combined[self.theta_dim : self.theta_dim + self.x_dim].unsqueeze(0)
 
         if self._x_mean is not None:
             x_obs = (x_obs - self._x_mean) / self._x_std
@@ -341,7 +341,7 @@ class _BayesflowNRELogRatioWrapper(nn.Module):
         # combined: rank-1, [theta..., x...]. Internal ordering matches the
         # bayesflow logits() convention: classifier_input = concat([θ, x]).
         theta = combined[: self.theta_dim].unsqueeze(0)
-        x_obs = combined[self.theta_dim :].unsqueeze(0)
+        x_obs = combined[self.theta_dim : self.theta_dim + self.x_dim].unsqueeze(0)
 
         if self._th_mean is not None:
             theta = (theta - self._th_mean) / self._th_std
