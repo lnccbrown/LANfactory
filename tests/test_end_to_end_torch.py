@@ -147,8 +147,10 @@ def test_end_to_end_lan_mlp(
     )
 
     network = lanfactory.trainers.LoadTorchMLPInfer(
-        model_file_path=model_folder
-        / f"{model_config['name']}_{train_type}_runid_train_state_dict.pt",
+        model_file_path=str(
+            model_folder
+            / f"{model_config['name']}_{train_type}_runid_train_state_dict.pt"
+        ),
         network_config=network_config,
         input_dim=torch_training_dataset.input_dim,
     )
