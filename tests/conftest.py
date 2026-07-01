@@ -179,7 +179,7 @@ def dummy_generator_config(model_selector, tmp_path):
             )
 
             if output_folder is None:
-                output_folder = tmp_path / "training_data" / str(uuid.uuid4())
+                output_folder = str(tmp_path / "training_data" / str(uuid.uuid4()))
 
             generator_config["output"]["folder"] = output_folder
             generator_config["training"]["n_samples_per_param"] = (
@@ -218,7 +218,7 @@ def dummy_generator_config_simple_two_choices(model_selector, tmp_path):
             )
 
             if output_folder is None:
-                output_folder = tmp_path / "training_data" / str(uuid.uuid4())
+                output_folder = str(tmp_path / "training_data" / str(uuid.uuid4()))
 
             generator_config["output"]["folder"] = output_folder
             generator_config["training"]["n_samples_per_param"] = (
