@@ -147,6 +147,11 @@ def test_end_to_end_lan_mlp(
         train=False,
     )
 
+    network_name = train_type if train_type == "lan" else "cpn"
+    state_file = str(
+        model_folder / f"jax_{network_name}_{model_config['name']}__train_state.jax"
+    )
+
     # TODO also test this with returned test_state!
     forward_pass, forward_pass_jitted = jax_infer.make_forward_partial(
         seed=42,
@@ -155,10 +160,7 @@ def test_end_to_end_lan_mlp(
             if train_type == "lan"
             else model_config["n_params"]
         ),
-        state=str(
-            model_folder
-            / f"jax_{train_type if train_type == 'lan' else 'cpn'}_{model_config['name']}__train_state.jax"
-        ),
+        state=state_file,
         add_jitted=True,
     )
 
@@ -206,12 +208,9 @@ def test_end_to_end_lan_mlp(
         input_mat = input_mat.at[:, i].set(jnp.ones(LEN_FORWARD_PASS_DUMMY) * param)
 
     logger.info("Input mat shape: %s", input_mat.shape)
-    shape_of_input = jax_infer.load_state_from_file(
-        file_path=str(
-            model_folder
-            / f"jax_{train_type if train_type == 'lan' else 'cpn'}_{model_config['name']}__train_state.jax"
-        )
-    )["params"]["layers_0"]["kernel"].shape
+    shape_of_input = jax_infer.load_state_from_file(file_path=state_file)["params"][
+        "layers_0"
+    ]["kernel"].shape
     logger.info("Shape of input from loading state: %s", shape_of_input)
 
     net_out_jitted = forward_pass_jitted(input_mat)
