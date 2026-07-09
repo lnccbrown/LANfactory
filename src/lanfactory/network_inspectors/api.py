@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+from typing import Callable
+
 import numpy as np
 import pandas as pd
 
@@ -16,16 +19,18 @@ from .compute import (
 from .config import GridSpec, ModelSpec, PlotConfig
 from .plotting import plot_kde_vs_lan, plot_manifold
 
+logger = logging.getLogger(__name__)
+
 
 def kde_vs_lan_likelihoods(
-    parameter_df,
-    model,
-    torch_mlp_predict,
-    n_samples=10,
-    n_reps=10,
-    grid=None,
-    plot=None,
-):
+    parameter_df: pd.DataFrame,
+    model: str,
+    torch_mlp_predict: Callable,
+    n_samples: int = 10,
+    n_reps: int = 10,
+    grid: GridSpec | None = None,
+    plot: PlotConfig | None = None,
+) -> None:
     """Compare kernel density estimates from simulation data with LAN output.
 
     parameter_df: one model-compatible parameter vector per row.
@@ -59,13 +64,13 @@ def kde_vs_lan_likelihoods(
 
 
 def lan_manifold(
-    parameter_df=None,
-    vary_dict={"v": [-1.0, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1.0]},
-    model="ddm",
-    torch_mlp_predict=None,
-    grid=None,
-    plot=None,
-):
+    parameter_df: pd.DataFrame | np.ndarray | None = None,
+    vary_dict: dict | None = None,
+    model: str = "ddm",
+    torch_mlp_predict: Callable | None = None,
+    grid: GridSpec | None = None,
+    plot: PlotConfig | None = None,
+) -> None:
     """Plot LAN likelihoods as a 3D manifold while sweeping one parameter.
 
     parameter_df: parameter vector (first row used). vary_dict: {param: values}.
@@ -77,6 +82,8 @@ def lan_manifold(
             "parameter_df and torch_mlp_predict are required; build the predictor"
             " with get_torch_mlp()."
         )
+    if vary_dict is None:
+        vary_dict = {"v": [-1.0, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1.0]}
 
     spec = ModelSpec.from_model(model, predictor=torch_mlp_predict)
 
@@ -84,14 +91,14 @@ def lan_manifold(
         "This plot works only for 2-choice models at the moment. Improvements coming!"
     )
 
-    if parameter_df.shape[0] > 0:
-        parameters = parameter_df.iloc[0, :]
-        print("Using only the first row of the supplied parameter array !")
-
     if isinstance(parameter_df, pd.DataFrame):
-        parameters = np.squeeze(parameters[spec.params].values.astype(np.float32))
+        if parameter_df.shape[0] > 0:
+            logger.info("Using only the first row of the supplied parameter array.")
+        parameters = np.squeeze(
+            parameter_df.iloc[0, :][spec.params].values.astype(np.float32)
+        )
     else:
-        parameters = parameter_df
+        parameters = np.asarray(parameter_df, dtype=np.float32)
 
     vary_name = list(vary_dict.keys())[0]
     vary_values = np.asarray(vary_dict[vary_name])

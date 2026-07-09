@@ -15,8 +15,8 @@ def _symmetric_2choice_grid(n, step):
     plot_data = np.zeros((2 * n, 2))
     plot_data[:, 0] = np.concatenate(
         (
-            [i * step for i in range(n, 0, -1)],
-            [i * step for i in range(1, n + 1, 1)],
+            np.arange(n, 0, -1) * step,
+            np.arange(1, n + 1) * step,
         )
     )
     plot_data[:, 1] = np.concatenate((np.repeat(-1, n), np.repeat(1, n)))
@@ -51,6 +51,10 @@ def evaluate_network(spec, params, grid):
     Builds the torch input batch (parameter vector trailed by rt and choice)
     and returns the per-row log-likelihood from ``predict_on_batch``.
     """
+    if spec.predictor is None:
+        raise ValueError(
+            "ModelSpec.predictor is None; supply a predictor via get_torch_mlp()."
+        )
     params = np.asarray(params, dtype=np.float32)
     input_batch = np.zeros((grid.shape[0], spec.n_params + 2))
     input_batch[:, : spec.n_params] = params
@@ -79,6 +83,11 @@ def evaluate_kde(sim_out, grid):
 def build_manifold(spec, base_params, vary_name, vary_values, grid):
     """LAN likelihoods over a grid while sweeping one param (tidy DataFrame)."""
     parameters = np.asarray(base_params, dtype=np.float32).copy()
+    if vary_name not in spec.params:
+        raise ValueError(
+            f"'{vary_name}' is not a valid parameter for model '{spec.name}'."
+            f" Available parameters: {spec.params}"
+        )
     idx = spec.params.index(vary_name)
 
     blocks = []

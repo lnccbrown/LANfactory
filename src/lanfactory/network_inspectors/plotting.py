@@ -11,10 +11,7 @@ from matplotlib import cm
 
 
 def _save_figure(filename, cfg):
-    if os.path.isdir(cfg.save_dir):
-        pass
-    else:
-        os.mkdir(cfg.save_dir)
+    os.makedirs(cfg.save_dir, exist_ok=True)
     plt.savefig(os.path.join(cfg.save_dir, filename), format="png", transparent=False)
 
 
@@ -24,6 +21,7 @@ def plot_kde_vs_lan(grid, results, spec, cfg):
     results: list of {"lan": array, "kdes": [arrays]}, one per parameter vector.
     """
     rows = int(np.ceil(len(results) / cfg.cols))
+    per_choice = grid.shape[0] // spec.n_choices
     sns.set(style="white", palette="muted", color_codes=True, font_scale=cfg.font_scale)
 
     fig, ax = plt.subplots(
@@ -62,8 +60,8 @@ def plot_kde_vs_lan(grid, results, spec, cfg):
                     if k > 0:
                         label = None
                     sns.lineplot(
-                        x=grid[1000 * k : 1000 * (k + 1), 0],
-                        y=kde_like[1000 * k : 1000 * (k + 1)],
+                        x=grid[per_choice * k : per_choice * (k + 1), 0],
+                        y=kde_like[per_choice * k : per_choice * (k + 1)],
                         color="black",
                         alpha=cfg.alpha,
                         label=label,
@@ -88,8 +86,8 @@ def plot_kde_vs_lan(grid, results, spec, cfg):
                     label = None
 
                 sns.lineplot(
-                    x=grid[1000 * k : 1000 * (k + 1), 0],
-                    y=lan_like[1000 * k : 1000 * (k + 1)],
+                    x=grid[per_choice * k : per_choice * (k + 1), 0],
+                    y=lan_like[per_choice * k : per_choice * (k + 1)],
                     color="green",
                     label=label,
                     alpha=1,
@@ -174,7 +172,6 @@ def plot_manifold(manifold, spec, vary_name, cfg):
         _save_figure("mlp_manifold_" + spec.name + ".png", cfg)
 
     if cfg.show:
-        return plt.show()
+        plt.show()
 
     plt.close()
-    return

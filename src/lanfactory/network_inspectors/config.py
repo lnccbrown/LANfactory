@@ -44,7 +44,7 @@ class PlotConfig:
     """Plotting defaults shared by the entry points."""
 
     font_scale: float = 1.5
-    figsize: tuple = (10, 10)
+    figsize: tuple[int, int] = (10, 10)
     cols: int = 3
     alpha: float = 0.1
     save: bool = False
