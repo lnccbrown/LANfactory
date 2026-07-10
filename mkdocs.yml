@@ -11,9 +11,13 @@ nav:
       - LAN (PyTorch): basic_tutorial/basic_tutorial_lan_torch.ipynb
       - CPN (PyTorch): basic_tutorial/basic_tutorial_cpn_torch.ipynb
       - OPN (PyTorch): basic_tutorial/basic_tutorial_opn_torch.ipynb
+      - Exporting sbi → ONNX: tutorials/exporting_sbi_to_onnx.ipynb
+      - Exporting bayesflow → ONNX: tutorials/exporting_bayesflow_to_onnx.ipynb
   - Guides:
       - MLflow Integration: using_mlflow.md
       - HuggingFace Hub: using_huggingface.md
+      - Exporting sbi Models: exporting_sbi_models.md
+      - Exporting bayesflow Models: exporting_bayesflow_models.md
   - API:
       - lanfactory: api/lanfactory.md
       - config: api/config.md
@@ -32,6 +36,8 @@ plugins:
         - basic_tutorial/basic_tutorial_lan_torch.ipynb
         - basic_tutorial/basic_tutorial_cpn_torch.ipynb
         - basic_tutorial/basic_tutorial_opn_torch.ipynb
+        - tutorials/exporting_sbi_to_onnx.ipynb
+        - tutorials/exporting_bayesflow_to_onnx.ipynb
   - mkdocstrings:
       default_handler: python
       handlers:
