@@ -32,7 +32,7 @@ def make_rt_choice_grid(spec, grid_spec=None):
     n, step = grid_spec.n_points_mc, grid_spec.rt_step_mc
     plot_data = np.zeros((spec.n_choices * n, 2))
     plot_data[:, 0] = np.concatenate(
-        [[i * step for i in range(1, n + 1, 1)] for _ in range(spec.n_choices)]
+        [np.arange(1, n + 1) * step for _ in range(spec.n_choices)]
     )
     plot_data[:, 1] = np.concatenate([np.repeat(i, n) for i in range(spec.n_choices)])
     return plot_data

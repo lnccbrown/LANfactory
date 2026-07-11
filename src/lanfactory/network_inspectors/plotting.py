@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import os
 
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 from matplotlib import cm
+
+logger = logging.getLogger(__name__)
 
 
 def _save_figure(filename, cfg):
@@ -35,9 +38,9 @@ def plot_kde_vs_lan(grid, results, spec, cfg):
     sns.despine(right=True)
 
     for i, res in enumerate(results):
-        print(str(i + 1) + " of " + str(len(results)))
+        logger.info("%d of %d", i + 1, len(results))
 
-        row_tmp = int(np.floor(i / cfg.cols))
+        row_tmp = i // cfg.cols
         col_tmp = i - (cfg.cols * row_tmp)
 
         for j, kde_like in enumerate(res["kdes"]):
@@ -114,7 +117,7 @@ def plot_kde_vs_lan(grid, results, spec, cfg):
         ax[row_tmp, col_tmp].tick_params(axis="x", size=14)
 
     for i in range(len(results), rows * cfg.cols, 1):
-        row_tmp = int(np.floor(i / cfg.cols))
+        row_tmp = i // cfg.cols
         col_tmp = i - (cfg.cols * row_tmp)
         ax[row_tmp, col_tmp].axis("off")
 

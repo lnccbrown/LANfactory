@@ -43,6 +43,8 @@ def kde_vs_lan_likelihoods(
             "parameter_df, model, and torch_mlp_predict are required; build the"
             " predictor with get_torch_mlp()."
         )
+    if not isinstance(parameter_df, pd.DataFrame):
+        raise TypeError("parameter_df must be a pandas.DataFrame.")
 
     spec = ModelSpec.from_model(model, predictor=torch_mlp_predict)
     cfg = plot or PlotConfig()
@@ -87,9 +89,11 @@ def lan_manifold(
 
     spec = ModelSpec.from_model(model, predictor=torch_mlp_predict)
 
-    assert spec.n_choices == 2, (
-        "This plot works only for 2-choice models at the moment. Improvements coming!"
-    )
+    if spec.n_choices != 2:
+        raise ValueError(
+            "lan_manifold currently supports only 2-choice models; "
+            f"got {spec.n_choices} choices."
+        )
 
     if isinstance(parameter_df, pd.DataFrame):
         if parameter_df.shape[0] > 0:
