@@ -311,7 +311,6 @@ def test_transform_rejects_invalid_mode(tmp_path: Path) -> None:
         )
 
 
-
 @pytest.mark.xfail(
     strict=True,
     reason="bayesflow's CouplingFlow emits internal INT64_MAX Constants (from its "
