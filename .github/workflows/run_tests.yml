@@ -8,14 +8,11 @@ jobs:
     runs-on: ubuntu-latest
 
     strategy:
-      # Run every Python version to completion even if one fails. The test job
-      # occasionally hits a flaky native SIGILL during import on a mismatched
-      # runner CPU/wheel; with fail-fast that one crash cancels the other
-      # versions and hides their real status. Keeping it false isolates the
-      # flake so you can re-run just the failed job (`gh run rerun --failed`).
+      # Run every Python version to completion even if one fails, so a single
+      # version's failure doesn't cancel the others and hide their real status.
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.12", "3.13", "3.14"]
 
     steps:
       - uses: actions/checkout@v7
@@ -86,15 +83,5 @@ jobs:
       # Runs the 4 Jupyter basic tutorials (via nbconvert) and the 2 marimo export
       # tutorials (via `marimo export`) so the tutorials cannot silently drift out
       # of sync with the code again.
-      #
-      # Retried a few times: this repo's native deps (jax/torch/...) occasionally
-      # SIGILL on import on some runner CPUs (see CLAUDE.md). That crash happens
-      # before any notebook runs, so a fresh re-import rides through it.
       - name: Execute tutorial notebooks
-        run: |
-          for attempt in 1 2 3; do
-            echo "Notebook execution attempt ${attempt}/3..."
-            uv run pytest tests/test_notebooks.py --run-notebooks --no-cov -v && exit 0
-            echo "Attempt ${attempt} failed (likely the transient native SIGILL-on-import flake); retrying..."
-          done
-          exit 1
+        run: uv run pytest tests/test_notebooks.py --run-notebooks --no-cov -v

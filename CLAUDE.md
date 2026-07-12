@@ -23,7 +23,7 @@ notebooks/                     # Test notebooks
 
 - **Build system:** setuptools (pure Python, no compiled extensions)
 - **Package manager:** uv (with `uv.lock`)
-- **Python:** >=3.11, <3.15 (classifiers target 3.11, 3.12, 3.13, 3.14)
+- **Python:** >=3.12, <3.15 (classifiers target 3.12, 3.13, 3.14)
 - **Linting:** ruff (line length 88, via pre-commit)
 - **Type checking:** mypy
 - **No system dependencies** — unlike ssm-simulators, this is pure Python + PyTorch/Flax
@@ -130,7 +130,7 @@ Optional experiment tracking via MLflow. CLI flags: `--mlflow-run-name`, `--mlfl
 
 | Workflow | Purpose |
 |----------|---------|
-| `run_tests.yml` | Tests on Python 3.11/3.12/3.13/3.14 + ruff lint/format + codecov |
+| `run_tests.yml` | Tests on Python 3.12/3.13/3.14 + ruff lint/format + codecov |
 | `build_wheels.yml` | Build sdist, upload to TestPyPI → PyPI on release publish |
 
 ## Compaction
