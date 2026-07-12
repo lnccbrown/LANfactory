@@ -310,13 +310,11 @@ plt.ylabel('likelihod')
 
 
 
-    Text(0, 0.5, 'likelihod')
 
 
 
 
 
-![png](basic_tutorial_files/basic_tutorial_22_1.png)
 
 
 
