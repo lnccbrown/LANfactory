@@ -340,7 +340,7 @@ For example:
 ```
 transform-onnx --network-config-file '0d9f0e94175b11eca9e93cecef057438_lca_no_bias_4_torch__network_config.pickle' --state-dict-file '0d9f0e94175b11eca9e93cecef057438_lca_no_bias_4_torch_state_dict.pt' --input-shape 11 --output-onnx-file 'lca_no_bias_4_torch.onnx'
 ```
-This onnx file can be used directly with the [`HSSM`](https://github.com/lnccbrown/HSSM) package.
+This ONNX file can be used directly with the [`HSSM`](https://github.com/lnccbrown/HSSM) package.
 
 We hope this package may be helpful in case you attempt to train [LANs](https://elifesciences.org/articles/65074) for your own research.
 

@@ -51,14 +51,14 @@ def pytest_collection_modifyitems(config, items):
 
 
 def pytest_configure(config):
-    """Configure logging and register custom markers for pytest."""
+    """Configure logging for pytest.
+
+    The ``notebooks`` marker is declared in ``[tool.pytest.ini_options].markers``
+    in pyproject.toml, so it does not need to be registered here as well.
+    """
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
-    config.addinivalue_line(
-        "markers",
-        "notebooks: mark test as a notebook test (skipped unless --run-notebooks is passed)",
     )
 
 

@@ -30,10 +30,19 @@ MARIMO_DIR = PROJECT_ROOT / "notebooks"
 NOTEBOOK_TIMEOUT = 1200
 
 BASIC_NOTEBOOKS = sorted(BASIC_TUTORIAL_DIR.glob("*.ipynb"))
+# Fail loudly if discovery finds nothing (e.g. the dir was moved/renamed) rather
+# than parametrizing over an empty set and silently skipping the whole suite.
+assert BASIC_NOTEBOOKS, (
+    f"No basic-tutorial notebooks discovered in {BASIC_TUTORIAL_DIR}"
+)
 MARIMO_NOTEBOOKS = [
     MARIMO_DIR / "exporting_sbi_to_onnx.py",
     MARIMO_DIR / "exporting_bayesflow_to_onnx.py",
 ]
+assert all(nb.exists() for nb in MARIMO_NOTEBOOKS), (
+    f"Missing marimo tutorial source(s): "
+    f"{[str(nb) for nb in MARIMO_NOTEBOOKS if not nb.exists()]}"
+)
 
 
 def _run(cmd: list[str]) -> tuple[bool, str]:
@@ -49,7 +58,7 @@ def _run(cmd: list[str]) -> tuple[bool, str]:
                 check=False,
             )
         except subprocess.TimeoutExpired:
-            return False, f"timed out after {NOTEBOOK_TIMEOUT} seconds"
+            return False, f"timed out after {NOTEBOOK_TIMEOUT + 60} seconds"
     return (
         result.returncode == 0,
         f"STDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}",
