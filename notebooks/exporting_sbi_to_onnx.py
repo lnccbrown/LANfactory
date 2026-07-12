@@ -275,8 +275,9 @@ def _(mo):
     For the consumption side end to end — defining the likelihood, building the
     model, sampling — see HSSM's
     [Build HSSM models starting from ONNX files](https://github.com/lnccbrown/HSSM/blob/main/docs/tutorials/blackbox_contribution_onnx_example.ipynb)
-    tutorial. The **NRE** path is identical: train a `RatioApproximator`-style
-    classifier and pass `mode="nre"` to `transform_sbi_to_onnx`.
+    tutorial. The **NRE** path is identical: train an sbi NRE ratio classifier
+    (e.g. `NRE_A`, `NRE_B`, `NRE_C`, or `BNRE`) and pass `mode="nre"` to
+    `transform_sbi_to_onnx`.
     """)
     return
 

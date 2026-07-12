@@ -109,6 +109,9 @@ addopts = [
     "--exitfirst",
     "--timer-top-n=25",
 ]
+markers = [
+    "notebooks: mark test as a notebook test (skipped unless --run-notebooks is passed)",
+]
 
 [tool.ruff]
 line-length = 88

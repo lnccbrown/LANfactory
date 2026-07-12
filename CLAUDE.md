@@ -83,8 +83,14 @@ but differ in output type and loss function.
 
 ### ONNX Export Pipeline
 
-PyTorch model → `torch.onnx.export()` → `.onnx` file. This is the format
-HSSM consumes at runtime. Only PyTorch models can be directly exported to ONNX.
+Three exporters (all in `src/lanfactory/onnx/`) produce `.onnx` via `torch.onnx.export()`:
+- **LAN/CPN/OPN MLPs** — `transform_onnx.py` (`transform-onnx` CLI)
+- **sbi** posterior/likelihood/ratio estimators — `sbi.py` (`transform_sbi_to_onnx`)
+- **bayesflow** networks — `bayesflow.py` (`transform_bayesflow_to_onnx`)
+
+All follow the single-trial contract: export with a concrete rank-1 per-trial
+input shape (no `dynamic_axes`); HSSM batches per-trial via `jax.vmap`. This is
+the format HSSM consumes at runtime.
 
 ### HuggingFace Integration
 

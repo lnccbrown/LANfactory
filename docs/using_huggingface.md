@@ -51,7 +51,7 @@ license: mit
 title: "LAN Model for DDM"
 description: "Likelihood Approximation Network trained on DDM (Drift Diffusion Model) simulations."
 
-# Optional: Network architecture (auto-extracted from config.pickle if not provided)
+# Optional: Network architecture (auto-extracted from network_config.pickle / train_config.pickle if not provided)
 architecture:
   layer_sizes: [100, 100, 1]
   activations: [tanh, tanh, linear]

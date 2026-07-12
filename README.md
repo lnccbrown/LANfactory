@@ -38,7 +38,7 @@ The `LANfactory` package is a light-weight convenience package for training `lik
 [LANs](https://elifesciences.org/articles/65074), although more general in potential scope of applications, were conceived in the context of sequential sampling modeling
 to account for cognitive processes giving rise to *choice* and *reaction time* data in *n-alternative forced choice experiments* commonly encountered in the cognitive sciences.
 
-For a basic tutorial on how to use the `LANfactory` package, please refer to the [basic tutorial notebook](docs/basic_tutorial/basic_tutorial.ipynb)..
+For a basic tutorial on how to use the `LANfactory` package, please refer to the [basic tutorial notebook](docs/basic_tutorial/basic_tutorial_lan_torch.ipynb)..
 
 #### Install
 
@@ -50,7 +50,7 @@ Necessary dependency should be installed automatically in the process.
 
 ### Basic Tutorial
 
-Check the basic tutorial [here](docs/basic_tutorial/basic_tutorial.ipynb).
+Check the basic tutorial [here](docs/basic_tutorial/basic_tutorial_lan_torch.ipynb).
 
 ### Command Line Interface
 
@@ -58,13 +58,13 @@ LANfactory includes a command line interface with the commands `jaxtrain` and `t
 
 **Examples**
 ```bash
-jaxtrain --config-path config.yaml --training-data-folder my_generated_data --network-id 0 --dl-workers 3 --network-path-base my_trained_network
+jaxtrain --config-path config.yaml --training-data-folder my_generated_data --network-id 0 --dl-workers 3 --networks-path-base my_trained_network
 ```
 ```bash
-torchtrain --config-path config.yaml --training-data-folder my_generated_data --network-id 0 --dl-workers 3 --network-path-base my_trained_network
+torchtrain --config-path config.yaml --training-data-folder my_generated_data --network-id 0 --dl-workers 3 --networks-path-base my_trained_network
 ```
 
-`jaxtrain` and `torchtrain` have the same 6 arguments
+`jaxtrain` and `torchtrain` share these core arguments
 * `--config-path`: Path to the YAML config file (optional)
 * `--training-data-folder`: Path to folder with data to train the neural network on
 * `--networks-path-base`: Path to the output folder for trained neural network
@@ -158,9 +158,9 @@ $ transform-onnx --help
 
 ```sh
 $ transform-onnx --network-config-file my_lca_no_bias_4_torch_network_config.pkl \
-                 --state-dict-file my_lca_no_bias_4_torch_state_dict.pt
+                 --state-dict-file my_lca_no_bias_4_torch_state_dict.pt \
                  --input-shape 11 \
-                 --ouput-onnx-file my_lca_no_bias_4_torch.onnx
+                 --output-onnx-file my_lca_no_bias_4_torch.onnx
 ```
 The produced onnx file can be used directly with the [`HSSM`](https://github.com/lnccbrown/HSSM) package.
 

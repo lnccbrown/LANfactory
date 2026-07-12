@@ -58,3 +58,29 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  test_notebooks:
+    name: Execute tutorial notebooks
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.6.5"
+
+      - name: Install package (with notebook + backend deps)
+        run: uv sync --all-groups
+
+      # Runs the 4 Jupyter basic tutorials (via nbconvert) and the 2 marimo export
+      # tutorials (via `marimo export`) so the tutorials cannot silently drift out
+      # of sync with the code again.
+      - name: Execute tutorial notebooks
+        run: uv run pytest tests/test_notebooks.py --run-notebooks --no-cov -v
