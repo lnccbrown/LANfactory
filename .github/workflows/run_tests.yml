@@ -82,5 +82,15 @@ jobs:
       # Runs the 4 Jupyter basic tutorials (via nbconvert) and the 2 marimo export
       # tutorials (via `marimo export`) so the tutorials cannot silently drift out
       # of sync with the code again.
+      #
+      # Retried a few times: this repo's native deps (jax/torch/...) occasionally
+      # SIGILL on import on some runner CPUs (see CLAUDE.md). That crash happens
+      # before any notebook runs, so a fresh re-import rides through it.
       - name: Execute tutorial notebooks
-        run: uv run pytest tests/test_notebooks.py --run-notebooks --no-cov -v
+        run: |
+          for attempt in 1 2 3; do
+            echo "Notebook execution attempt ${attempt}/3..."
+            uv run pytest tests/test_notebooks.py --run-notebooks --no-cov -v && exit 0
+            echo "Attempt ${attempt} failed (likely the transient native SIGILL-on-import flake); retrying..."
+          done
+          exit 1
