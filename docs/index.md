@@ -17,7 +17,7 @@ Lightweight python package to help with training [LANs](https://elifesciences.or
 
 ### Quick Start
 
-The `LANfactory` package is a light-weight convenience package for training `likelihood approximation networks` (LANs) in torch (or keras),
+The `LANfactory` package is a light-weight convenience package for training `likelihood approximation networks` (LANs) in PyTorch (or JAX/Flax),
 starting from supplied training data.
 
 [LANs](https://elifesciences.org/articles/65074), although more general in potential scope of applications, were conceived in the context of sequential sampling modeling
@@ -29,11 +29,11 @@ In this quick tutorial we will use the [`ssms`](https://github.com/AlexanderFeng
 
 To install the `ssms` package type,
 
-`pip install git+https://github.com/AlexanderFengler/ssm_simulators`
+`pip install ssm-simulators`
 
 To install the `LANfactory` package type,
 
-`pip install git+https://github.com/AlexanderFengler/LANfactory`
+`pip install lanfactory`
 
 Necessary dependency should be installed automatically in the process.
 
@@ -58,28 +58,29 @@ of this package. Please refer to the [basic ssms tutorial] (https://github.com/A
 ```python
 # MAKE CONFIGS
 
-# Initialize the generator config (for MLP LANs)
-generator_config = deepcopy(ssms.config.data_generator_config['lan']['mlp'])
-# Specify generative model (one from the list of included models mentioned above)
-generator_config['dgp_list'] = 'angle'
-# Specify number of parameter sets to simulate
-generator_config['n_parameter_sets'] = 100
-# Specify how many samples a simulation run should entail
-generator_config['n_samples'] = 1000
-# Specify folder in which to save generated data
-generator_config['output_folder'] = 'data/lan_mlp/'
+# Initialize the generator config (nested config object from ssm-simulators)
+generator_config = ssms.config.get_default_generator_config("lan")
+# Specify the generative model (any key from ssms.config.model_config)
+generator_config["model"] = "angle"
+# Number of parameter sets to simulate
+generator_config["pipeline"]["n_parameter_sets"] = 100
+# Simulation samples per parameter set
+generator_config["simulator"]["n_samples"] = 1000
+# Folder in which to save the generated data
+generator_config["output"]["folder"] = "data/lan_mlp/"
 
 # Make model config dict
-model_config = ssms.config.model_config['angle']
+model_config = ssms.config.model_config["angle"]
 ```
 
 ```python
 # MAKE DATA
 
-my_dataset_generator = ssms.dataset_generators.data_generator(generator_config = generator_config,
-                                                              model_config = model_config)
+my_dataset_generator = ssms.dataset_generators.lan_mlp.TrainingDataGenerator(
+    config=generator_config, model_config=model_config
+)
 
-training_data = my_dataset_generator.generate_data_training_uniform(save = True)
+training_data = my_dataset_generator.generate_data_training(save=True)
 ```
 
     n_cpus used:  6
@@ -112,28 +113,28 @@ You may choose your own way of defining the `DataLoader` classes, downstream you
 ```python
 # MAKE DATALOADERS
 
-# List of datafiles (here only one)
-folder_ = 'data/lan_mlp/training_data_0_nbins_0_n_1000/angle/'
-file_list_ = [folder_ + file_ for file_ in os.listdir(folder_)]
+# List of datafiles (generated directly into the output folder above)
+folder_ = 'data/lan_mlp/'
+file_list_ = [folder_ + file_ for file_ in os.listdir(folder_) if file_.endswith('.pickle')]
 
 # Training dataset
-torch_training_dataset = lanfactory.trainers.DatasetTorch(file_IDs = file_list_,
+torch_training_dataset = lanfactory.trainers.DatasetTorch(file_ids = file_list_,
                                                           batch_size = 128)
 
 torch_training_dataloader = torch.utils.data.DataLoader(torch_training_dataset,
                                                          shuffle = True,
                                                          batch_size = None,
-                                                         num_workers = 1,
+                                                         num_workers = 0,
                                                          pin_memory = True)
 
 # Validation dataset
-torch_validation_dataset = lanfactory.trainers.DatasetTorch(file_IDs = file_list_,
+torch_validation_dataset = lanfactory.trainers.DatasetTorch(file_ids = file_list_,
                                                           batch_size = 128)
 
 torch_validation_dataloader = torch.utils.data.DataLoader(torch_validation_dataset,
                                                           shuffle = True,
                                                           batch_size = None,
-                                                          num_workers = 1,
+                                                          num_workers = 0,
                                                           pin_memory = True)
 ```
 
@@ -159,10 +160,8 @@ print('Train config: ')
 print(train_config)
 ```
 
-    Network config:
-    {'layer_types': ['dense', 'dense', 'dense'], 'layer_sizes': [100, 100, 1], 'activations': ['tanh', 'tanh', 'linear'], 'loss': ['huber'], 'callbacks': ['checkpoint', 'earlystopping', 'reducelr']}
-    Train config:
-    {'batch_size': 128, 'n_epochs': 10, 'optimizer': 'adam', 'learning_rate': 0.002, 'loss': 'huber', 'save_history': True, 'metrics': [<keras.losses.MeanSquaredError object at 0x12c403d30>, <keras.losses.Huber object at 0x12c1c78e0>], 'callbacks': ['checkpoint', 'earlystopping', 'reducelr']}
+    Network config:  (default MLP architecture — layer_sizes, activations, train_output_type)
+    Train config:    (default hyperparameters — cpu/gpu_batch_size, n_epochs, optimizer, learning_rate, loss)
 
 
 We can now load a network, and save the configuration files for convenience.
@@ -172,11 +171,10 @@ We can now load a network, and save the configuration files for convenience.
 # LOAD NETWORK
 net = lanfactory.trainers.TorchMLP(network_config = deepcopy(network_config),
                                    input_shape = torch_training_dataset.input_dim,
-                                   save_folder = '/data/torch_models/',
-                                   generative_model_id = 'angle')
+                                   network_type = 'lan')
 
 # SAVE CONFIGS
-lanfactory.utils.save_configs(model_id = net.model_id + '_torch_',
+lanfactory.utils.save_configs(model_id = 'angle_torch_',
                               save_folder = 'data/torch_models/angle/',
                               network_config = network_config,
                               train_config = train_config,
@@ -188,9 +186,20 @@ To finally train the network we supply our network, the dataloaders and training
 
 ```python
 # TRAIN MODEL
-model_trainer.train_model(save_history = True,
-                          save_model = True,
-                          verbose = 0)
+model_trainer = lanfactory.trainers.ModelTrainerTorchMLP(
+    model = net,
+    train_config = train_config,
+    train_dl = torch_training_dataloader,
+    valid_dl = torch_validation_dataloader,
+    pin_memory = True,
+)
+
+model_trainer.train_and_evaluate(
+    output_folder = 'data/torch_models/angle/',
+    output_file_id = 'angle',
+    mlflow_on = False,
+    verbose = 0,
+)
 ```
 
     Epoch took 0 / 10,  took 11.54538607597351 seconds
@@ -301,13 +310,11 @@ plt.ylabel('likelihod')
 
 
 
-    Text(0, 0.5, 'likelihod')
 
 
 
 
 
-![png](basic_tutorial_files/basic_tutorial_22_1.png)
 
 
 
@@ -317,7 +324,9 @@ The `transform_onnx.py` script converts a TorchMLP model to the ONNX format. It 
 
 ### Usage
 
-```python onnx/transform_onnx.py <network_config_file> <state_dict_file> <input_shape> <output_onnx_file>```
+```
+transform-onnx --network-config-file <network_config_file> --state-dict-file <state_dict_file> --input-shape <input_shape> --output-onnx-file <output_onnx_file>
+```
 
 Replace the placeholders with the appropriate values:
 
@@ -329,9 +338,9 @@ Replace the placeholders with the appropriate values:
 For example:
 
 ```
-python onnx/transform_onnx.py '0d9f0e94175b11eca9e93cecef057438_lca_no_bias_4_torch__network_config.pickle' '0d9f0e94175b11eca9e93cecef057438_lca_no_bias_4_torch_state_dict.pt' 11 'lca_no_bias_4_torch.onnx'
+transform-onnx --network-config-file '0d9f0e94175b11eca9e93cecef057438_lca_no_bias_4_torch__network_config.pickle' --state-dict-file '0d9f0e94175b11eca9e93cecef057438_lca_no_bias_4_torch_state_dict.pt' --input-shape 11 --output-onnx-file 'lca_no_bias_4_torch.onnx'
 ```
-This onnx file can be used directly with the [`HSSM`](https://github.com/lnccbrown/HSSM) package.
+This ONNX file can be used directly with the [`HSSM`](https://github.com/lnccbrown/HSSM) package.
 
 We hope this package may be helpful in case you attempt to train [LANs](https://elifesciences.org/articles/65074) for your own research.
 

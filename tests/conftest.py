@@ -30,8 +30,32 @@ multiprocessing.set_start_method("spawn", force=True)
 logger = logging.getLogger(__name__)
 
 
+def pytest_addoption(parser):
+    """Add custom command line options."""
+    parser.addoption(
+        "--run-notebooks",
+        action="store_true",
+        default=False,
+        help="Run notebook/tutorial execution tests (skipped by default)",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip notebook tests unless --run-notebooks is passed."""
+    if config.getoption("--run-notebooks"):
+        return
+    skip_notebooks = pytest.mark.skip(reason="need --run-notebooks option to run")
+    for item in items:
+        if "notebooks" in item.keywords:
+            item.add_marker(skip_notebooks)
+
+
 def pytest_configure(config):
-    """Configure logging for pytest."""
+    """Configure logging for pytest.
+
+    The ``notebooks`` marker is declared in ``[tool.pytest.ini_options].markers``
+    in pyproject.toml, so it does not need to be registered here as well.
+    """
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",

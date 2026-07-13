@@ -23,7 +23,7 @@ notebooks/                     # Test notebooks
 
 - **Build system:** setuptools (pure Python, no compiled extensions)
 - **Package manager:** uv (with `uv.lock`)
-- **Python:** >=3.11, <3.15 (classifiers target 3.11, 3.12, 3.13, 3.14)
+- **Python:** >=3.12, <3.15 (classifiers target 3.12, 3.13, 3.14)
 - **Linting:** ruff (line length 88, via pre-commit)
 - **Type checking:** mypy
 - **No system dependencies** — unlike ssm-simulators, this is pure Python + PyTorch/Flax
@@ -83,8 +83,14 @@ but differ in output type and loss function.
 
 ### ONNX Export Pipeline
 
-PyTorch model → `torch.onnx.export()` → `.onnx` file. This is the format
-HSSM consumes at runtime. Only PyTorch models can be directly exported to ONNX.
+Three exporters (all in `src/lanfactory/onnx/`) produce `.onnx` via `torch.onnx.export()`:
+- **LAN/CPN/OPN MLPs** — `transform_onnx.py` (`transform-onnx` CLI)
+- **sbi** posterior/likelihood/ratio estimators — `sbi.py` (`transform_sbi_to_onnx`)
+- **bayesflow** networks — `bayesflow.py` (`transform_bayesflow_to_onnx`)
+
+All follow the single-trial contract: export with a concrete rank-1 per-trial
+input shape (no `dynamic_axes`); HSSM batches per-trial via `jax.vmap`. This is
+the format HSSM consumes at runtime.
 
 ### HuggingFace Integration
 
@@ -124,7 +130,7 @@ Optional experiment tracking via MLflow. CLI flags: `--mlflow-run-name`, `--mlfl
 
 | Workflow | Purpose |
 |----------|---------|
-| `run_tests.yml` | Tests on Python 3.11/3.12/3.13/3.14 + ruff lint/format + codecov |
+| `run_tests.yml` | Tests on Python 3.12/3.13/3.14 + ruff lint/format + codecov |
 | `build_wheels.yml` | Build sdist, upload to TestPyPI → PyPI on release publish |
 
 ## Compaction

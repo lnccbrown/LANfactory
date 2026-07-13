@@ -28,6 +28,7 @@ from sbi.inference import NLE_A  # noqa: E402
 from sbi.utils import BoxUniform  # noqa: E402
 
 from lanfactory.onnx import transform_sbi_to_onnx  # noqa: E402
+from tests._onnx_utils import max_int64_abs  # noqa: E402
 
 # Same friction as C2's MAF spike — torch.onnx.export emits Reshape shapes as
 # Constant nodes. HSSM's onnx2jax patch (commit 2e76516) sets this globally for
@@ -269,24 +270,6 @@ def test_transform_rejects_nonpositive_dims(tmp_path: Path) -> None:
         )
 
 
-def _max_int64_abs(onnx_model: onnx.ModelProto) -> int:
-    """Largest absolute value stored in any int64 tensor in the graph (0 if none)."""
-    tensors = list(onnx_model.graph.initializer)
-    for node in onnx_model.graph.node:
-        for attr in node.attribute:
-            if attr.type == onnx.AttributeProto.TENSOR:
-                tensors.append(attr.t)
-            elif attr.type == onnx.AttributeProto.TENSORS:
-                tensors.extend(attr.tensors)
-    biggest = 0
-    for tensor in tensors:
-        if tensor.data_type == onnx.TensorProto.INT64:
-            arr = onnx.numpy_helper.to_array(tensor)
-            if arr.size:
-                biggest = max(biggest, int(np.abs(arr).max()))
-    return biggest
-
-
 def test_export_int64_values_fit_in_int32(
     trained_nle: torch.nn.Module, tmp_path: Path
 ) -> None:
@@ -307,4 +290,4 @@ def test_export_int64_values_fit_in_int32(
         example_x_dim=_X_DIM,
     )
     model = onnx.load(str(onnx_path))
-    assert _max_int64_abs(model) <= np.iinfo(np.int32).max
+    assert max_int64_abs(model) <= np.iinfo(np.int32).max

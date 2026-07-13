@@ -8,17 +8,16 @@ jobs:
     runs-on: ubuntu-latest
 
     strategy:
-      # Run every Python version to completion even if one fails. The test job
-      # occasionally hits a flaky native SIGILL during import on a mismatched
-      # runner CPU/wheel; with fail-fast that one crash cancels the other
-      # versions and hides their real status. Keeping it false isolates the
-      # flake so you can re-run just the failed job (`gh run rerun --failed`).
+      # Run every Python version to completion even if one fails, so a single
+      # version's failure doesn't cancel the others and hide their real status.
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.12", "3.13", "3.14"]
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup Python
         uses: actions/setup-python@v6
@@ -58,3 +57,31 @@ jobs:
         uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  test_notebooks:
+    name: Execute tutorial notebooks
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.6.5"
+
+      - name: Install package (with notebook + backend deps)
+        run: uv sync --all-groups
+
+      # Runs the 4 Jupyter basic tutorials (via nbconvert) and the 2 marimo export
+      # tutorials (via `marimo export`) so the tutorials cannot silently drift out
+      # of sync with the code again.
+      - name: Execute tutorial notebooks
+        run: uv run pytest tests/test_notebooks.py --run-notebooks --no-cov -v
