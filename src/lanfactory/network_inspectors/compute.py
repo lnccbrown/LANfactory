@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from numpy.typing import ArrayLike, NDArray
 from ssms.basic_simulators.simulator import simulator
 from ssms.support_utils.kde_class import LogKDE
 
-from .config import GridSpec
+from .config import GridSpec, ModelSpec
 
 
-def _symmetric_2choice_grid(n, step):
+def _symmetric_2choice_grid(n: int, step: float) -> NDArray[np.float64]:
     """(rt, choice) grid: n points per side at rt = i*step, choices -1 and +1."""
     plot_data = np.zeros((2 * n, 2))
     plot_data[:, 0] = np.concatenate(
@@ -23,7 +24,9 @@ def _symmetric_2choice_grid(n, step):
     return plot_data
 
 
-def make_rt_choice_grid(spec, grid_spec=None):
+def make_rt_choice_grid(
+    spec: ModelSpec, grid_spec: GridSpec | None = None
+) -> NDArray[np.float64]:
     """Build the (rt, choice) evaluation grid for kde_vs_lan_likelihoods."""
     grid_spec = grid_spec or GridSpec()
     if spec.n_choices == 2:
@@ -38,14 +41,16 @@ def make_rt_choice_grid(spec, grid_spec=None):
     return plot_data
 
 
-def make_manifold_grid(grid_spec):
+def make_manifold_grid(grid_spec: GridSpec) -> NDArray[np.float64]:
     """Build the (rt, choice) grid for the 2-choice manifold plot."""
     return _symmetric_2choice_grid(
         grid_spec.n_rt_steps, grid_spec.max_rt / grid_spec.n_rt_steps
     )
 
 
-def evaluate_network(spec, params, grid):
+def evaluate_network(
+    spec: ModelSpec, params: ArrayLike, grid: NDArray[np.float64]
+) -> NDArray[np.float64]:
     """LAN log-likelihood over ``grid`` for a single parameter vector.
 
     Builds the torch input batch (parameter vector trailed by rt and choice)
@@ -63,7 +68,13 @@ def evaluate_network(spec, params, grid):
     return np.asarray(ll_out)[:, 0]
 
 
-def simulate_ground_truth(spec, params, n_samples, max_t=20, delta_t=0.001):
+def simulate_ground_truth(
+    spec: ModelSpec,
+    params: ArrayLike,
+    n_samples: int,
+    max_t: float = 20,
+    delta_t: float = 0.001,
+) -> dict:
     """Simulate data via ssms; the returned dict is what LogKDE expects."""
     return simulator(
         theta=np.asarray(params),
@@ -74,13 +85,19 @@ def simulate_ground_truth(spec, params, n_samples, max_t=20, delta_t=0.001):
     )
 
 
-def evaluate_kde(sim_out, grid):
+def evaluate_kde(sim_out: dict, grid: NDArray[np.float64]) -> NDArray[np.float64]:
     """KDE log-likelihood over ``grid`` from one simulation output."""
     mykde = LogKDE(sim_out)
     return mykde.kde_eval({"rts": grid[:, 0], "choices": grid[:, 1]})
 
 
-def build_manifold(spec, base_params, vary_name, vary_values, grid):
+def build_manifold(
+    spec: ModelSpec,
+    base_params: ArrayLike,
+    vary_name: str,
+    vary_values: ArrayLike,
+    grid: NDArray[np.float64],
+) -> pd.DataFrame:
     """LAN likelihoods over a grid while sweeping one param (tidy DataFrame)."""
     parameters = np.asarray(base_params, dtype=np.float32).copy()
     if vary_name not in spec.params:

@@ -4,21 +4,40 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import TYPE_CHECKING, TypedDict
 
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 from matplotlib import cm
+from numpy.typing import NDArray
+
+from .config import ModelSpec, PlotConfig
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 logger = logging.getLogger(__name__)
 
 
-def _save_figure(filename, cfg):
+class LikelihoodResult(TypedDict):
+    """Likelihood arrays for one parameter vector."""
+
+    lan: NDArray[np.float64]
+    kdes: list[NDArray[np.float64]]
+
+
+def _save_figure(filename: str, cfg: PlotConfig) -> None:
     os.makedirs(cfg.save_dir, exist_ok=True)
     plt.savefig(os.path.join(cfg.save_dir, filename), format="png", transparent=False)
 
 
-def plot_kde_vs_lan(grid, results, spec, cfg):
+def plot_kde_vs_lan(
+    grid: NDArray[np.float64],
+    results: list[LikelihoodResult],
+    spec: ModelSpec,
+    cfg: PlotConfig,
+) -> None:
     """Render the KDE-vs-LAN comparison from precomputed likelihoods.
 
     results: list of {"lan": array, "kdes": [arrays]}, one per parameter vector.
@@ -133,7 +152,9 @@ def plot_kde_vs_lan(grid, results, spec, cfg):
     plt.close()
 
 
-def plot_manifold(manifold, spec, vary_name, cfg):
+def plot_manifold(
+    manifold: "pd.DataFrame", spec: ModelSpec, vary_name: str, cfg: PlotConfig
+) -> None:
     """Render a 3D LAN likelihood manifold from a build_manifold frame."""
     signed_rt = (manifold["rt"] * manifold["choice"]).values
     vary = manifold["vary"].values

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import logging
-from typing import Callable
+from typing import Any
 
 import numpy as np
 import pandas as pd
+from numpy.typing import NDArray
 
 from .compute import (
     build_manifold,
@@ -17,7 +19,7 @@ from .compute import (
     simulate_ground_truth,
 )
 from .config import GridSpec, ModelSpec, PlotConfig
-from .plotting import plot_kde_vs_lan, plot_manifold
+from .plotting import LikelihoodResult, plot_kde_vs_lan, plot_manifold
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +27,7 @@ logger = logging.getLogger(__name__)
 def kde_vs_lan_likelihoods(
     parameter_df: pd.DataFrame,
     model: str,
-    torch_mlp_predict: Callable,
+    torch_mlp_predict: Callable[[NDArray[np.float32]], Any],
     n_samples: int = 10,
     n_reps: int = 10,
     grid: GridSpec | None = None,
@@ -50,7 +52,7 @@ def kde_vs_lan_likelihoods(
     cfg = plot or PlotConfig()
     grid_arr = make_rt_choice_grid(spec, grid)
 
-    results = []
+    results: list[LikelihoodResult] = []
     for i in range(parameter_df.shape[0]):
         params = parameter_df.iloc[i, :].values
         lan_like = np.exp(evaluate_network(spec, params, grid_arr))
@@ -67,9 +69,9 @@ def kde_vs_lan_likelihoods(
 
 def lan_manifold(
     parameter_df: pd.DataFrame | np.ndarray | None = None,
-    vary_dict: dict | None = None,
+    vary_dict: dict[str, Any] | None = None,
     model: str = "ddm",
-    torch_mlp_predict: Callable | None = None,
+    torch_mlp_predict: Callable[[NDArray[np.float32]], Any] | None = None,
     grid: GridSpec | None = None,
     plot: PlotConfig | None = None,
 ) -> None:

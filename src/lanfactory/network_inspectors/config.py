@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any
+
+import numpy as np
+from numpy.typing import NDArray
 
 from ssms.config import ModelConfigBuilder
 
@@ -15,10 +19,14 @@ class ModelSpec:
     name: str
     params: list[str]
     choices: list[int]
-    predictor: Callable | None = None
+    predictor: Callable[[NDArray[np.float32]], Any] | None = None
 
     @classmethod
-    def from_model(cls, model, predictor=None):
+    def from_model(
+        cls,
+        model: str,
+        predictor: Callable[[NDArray[np.float32]], Any] | None = None,
+    ) -> ModelSpec:
         """Build a ModelSpec from an ssms model name and optional predictor."""
         cfg = ModelConfigBuilder.from_model(model)
         return cls(
@@ -29,12 +37,12 @@ class ModelSpec:
         )
 
     @property
-    def n_params(self):
+    def n_params(self) -> int:
         """Number of model parameters."""
         return len(self.params)
 
     @property
-    def n_choices(self):
+    def n_choices(self) -> int:
         """Number of possible choices."""
         return len(self.choices)
 
