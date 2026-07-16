@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING, TypedDict
 
 import matplotlib.pyplot as plt
 import numpy as np
+import plotly.graph_objects as go
 import seaborn as sns
-from matplotlib import cm
 from numpy.typing import NDArray
 
 from .config import ModelSpec, PlotConfig
@@ -154,48 +154,45 @@ def plot_kde_vs_lan(
 
 def plot_manifold(
     manifold: pd.DataFrame, spec: ModelSpec, vary_name: str, cfg: PlotConfig
-) -> None:
-    """Render a 3D LAN likelihood manifold from a build_manifold frame."""
-    signed_rt = (manifold["rt"] * manifold["choice"]).values
-    vary = manifold["vary"].values
-    like = manifold["likelihood"].values
-
-    fig = plt.figure(figsize=(8 * cfg.fig_scale, 5.5 * cfg.fig_scale))
-    ax = fig.add_subplot(111, projection="3d")
-    ax.plot_trisurf(
-        signed_rt,
-        vary,
-        like,
-        linewidth=0.5,
-        alpha=1.0,
-        cmap=cm.coolwarm,
+) -> go.Figure:
+    """Render an interactive 3D LAN likelihood manifold."""
+    plot_data = manifold.assign(signed_rt=manifold["rt"] * manifold["choice"])
+    surface = (
+        plot_data.pivot(index="vary", columns="signed_rt", values="likelihood")
+        .sort_index()
+        .sort_index(axis=1)
     )
 
-    ax.set_ylabel(vary_name.upper().replace("_", "-"), fontsize=16, labelpad=20)
-
-    ax.set_xlabel("RT", fontsize=16, labelpad=20)
-
-    ax.set_zlabel("Likelihood", fontsize=16, labelpad=20)
-
-    ax.set_zticks(np.round(np.linspace(min(like), max(like), 5), 1))
-
-    ax.set_yticks(np.round(np.linspace(min(vary), max(vary), 5), 1))
-
-    ax.set_xticks(np.round(np.linspace(min(signed_rt), max(signed_rt), 5), 1))
-
-    ax.tick_params(labelsize=16)
-    ax.set_title(
-        spec.name.upper().replace("_", "-") + " - MLP: Manifold", fontsize=20, pad=20
+    fig = go.Figure(
+        data=[
+            go.Surface(
+                x=surface.columns.to_numpy(dtype=float),
+                y=surface.index.to_numpy(dtype=float),
+                z=surface.to_numpy(dtype=float),
+                colorscale="RdBu",
+                colorbar={"title": "Likelihood"},
+            )
+        ]
     )
-
-    ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
-    ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
-    ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+    fig.update_layout(
+        title=spec.name.upper().replace("_", "-") + " - MLP: Manifold",
+        width=int(900 * cfg.fig_scale),
+        height=int(620 * cfg.fig_scale),
+        scene={
+            "xaxis_title": "RT",
+            "yaxis_title": vary_name.upper().replace("_", "-"),
+            "zaxis_title": "Likelihood",
+        },
+    )
 
     if cfg.save:
-        _save_figure("mlp_manifold_" + spec.name + ".png", cfg)
+        os.makedirs(cfg.save_dir, exist_ok=True)
+        fig.write_html(
+            os.path.join(cfg.save_dir, "mlp_manifold_" + spec.name + ".html"),
+            include_plotlyjs="cdn",
+        )
 
     if cfg.show:
-        plt.show()
+        fig.show()
 
-    plt.close()
+    return fig
