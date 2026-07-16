@@ -50,14 +50,22 @@ def kde_vs_lan_likelihoods(
         )
     if not isinstance(parameter_df, pd.DataFrame):
         raise TypeError("parameter_df must be a pandas.DataFrame.")
+    if parameter_df.empty:
+        raise ValueError("parameter_df must contain at least one parameter vector.")
 
     spec = ModelSpec.from_model(model, predictor=torch_mlp_predict)
+    missing_params = [param for param in spec.params if param not in parameter_df]
+    if missing_params:
+        raise ValueError(
+            "parameter_df is missing model parameter columns: "
+            + ", ".join(missing_params)
+        )
     cfg = plot or PlotConfig()
     grid_arr = make_rt_choice_grid(spec, grid)
 
     results: list[LikelihoodResult] = []
     for i in range(parameter_df.shape[0]):
-        params = parameter_df.iloc[i, :].values
+        params = parameter_df.iloc[i, :][spec.params].values.astype(np.float32)
         lan_like = np.exp(evaluate_network(spec, params, grid_arr))
         kdes = [
             np.exp(
@@ -91,6 +99,13 @@ def lan_manifold(
         )
     if vary_dict is None:
         vary_dict = {"v": [-1.0, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1.0]}
+    if len(vary_dict) != 1:
+        raise ValueError("vary_dict must contain exactly one parameter.")
+
+    vary_name, raw_values = next(iter(vary_dict.items()))
+    vary_values = np.asarray(raw_values)
+    if vary_values.size == 0:
+        raise ValueError("The parameter sweep must contain at least one value.")
 
     spec = ModelSpec.from_model(model, predictor=torch_mlp_predict)
 
@@ -101,16 +116,27 @@ def lan_manifold(
         )
 
     if isinstance(parameter_df, pd.DataFrame):
+        if parameter_df.empty:
+            raise ValueError("parameter_df must contain at least one parameter vector.")
+        missing_params = [param for param in spec.params if param not in parameter_df]
+        if missing_params:
+            raise ValueError(
+                "parameter_df is missing model parameter columns: "
+                + ", ".join(missing_params)
+            )
         if parameter_df.shape[0] > 0:
             logger.info("Using only the first row of the supplied parameter array.")
-        parameters = np.squeeze(
-            parameter_df.iloc[0, :][spec.params].values.astype(np.float32)
-        )
+        parameters = parameter_df.iloc[0, :][spec.params].values.astype(np.float32)
     else:
         parameters = np.asarray(parameter_df, dtype=np.float32)
-
-    vary_name = list(vary_dict.keys())[0]
-    vary_values = np.asarray(vary_dict[vary_name])
+        if parameters.ndim == 2:
+            if parameters.shape[0] == 0:
+                raise ValueError("parameter_df must contain at least one row.")
+            parameters = parameters[0]
+        if parameters.ndim != 1 or parameters.size != spec.n_params:
+            raise ValueError(
+                f"Expected one parameter vector with {spec.n_params} values."
+            )
 
     grid_arr = make_manifold_grid(grid or GridSpec())
     manifold = build_manifold(spec, parameters, vary_name, vary_values, grid_arr)
