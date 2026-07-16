@@ -153,7 +153,7 @@ def plot_kde_vs_lan(
 
 
 def plot_manifold(
-    manifold: "pd.DataFrame", spec: ModelSpec, vary_name: str, cfg: PlotConfig
+    manifold: pd.DataFrame, spec: ModelSpec, vary_name: str, cfg: PlotConfig
 ) -> None:
     """Render a 3D LAN likelihood manifold from a build_manifold frame."""
     signed_rt = (manifold["rt"] * manifold["choice"]).values
