@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
@@ -22,6 +22,9 @@ from .config import GridSpec, ModelSpec, PlotConfig
 from .plotting import LikelihoodResult, plot_kde_vs_lan, plot_manifold
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    import plotly.graph_objects as go
 
 
 def kde_vs_lan_likelihoods(
@@ -74,12 +77,12 @@ def lan_manifold(
     torch_mlp_predict: Callable[[NDArray[np.float32]], Any] | None = None,
     grid: GridSpec | None = None,
     plot: PlotConfig | None = None,
-) -> None:
+) -> go.Figure:
     """Plot LAN likelihoods as a 3D manifold while sweeping one parameter.
 
     parameter_df: parameter vector (first row used). vary_dict: {param: values}.
     model: model name. torch_mlp_predict: predict_on_batch from get_torch_mlp.
-    grid: optional GridSpec. plot: optional PlotConfig.
+    grid: optional GridSpec. plot: optional PlotConfig. Returns a Plotly Figure.
     """
     if parameter_df is None or torch_mlp_predict is None:
         raise ValueError(
