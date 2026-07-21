@@ -179,7 +179,7 @@ def plot_manifold(
         width=int(900 * cfg.fig_scale),
         height=int(620 * cfg.fig_scale),
         scene={
-            "xaxis_title": "RT",
+            "xaxis_title": "Signed RT",
             "yaxis_title": vary_name.upper().replace("_", "-"),
             "zaxis_title": "Likelihood",
         },
@@ -189,7 +189,7 @@ def plot_manifold(
         os.makedirs(cfg.save_dir, exist_ok=True)
         fig.write_html(
             os.path.join(cfg.save_dir, "mlp_manifold_" + spec.name + ".html"),
-            include_plotlyjs="cdn",
+            include_plotlyjs=True,
         )
 
     if cfg.show:

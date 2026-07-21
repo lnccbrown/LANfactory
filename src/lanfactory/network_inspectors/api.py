@@ -124,7 +124,7 @@ def lan_manifold(
                 "parameter_df is missing model parameter columns: "
                 + ", ".join(missing_params)
             )
-        if parameter_df.shape[0] > 0:
+        if parameter_df.shape[0] > 1:
             logger.info("Using only the first row of the supplied parameter array.")
         parameters = parameter_df.iloc[0, :][spec.params].values.astype(np.float32)
     else:
