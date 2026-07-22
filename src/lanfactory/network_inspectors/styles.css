@@ -1,0 +1,186 @@
+:root {
+    --lan-focus: #0a66c2;
+}
+
+div[role="radiogroup"] {
+    gap: 0.75rem;
+}
+
+div[role="radiogroup"] > label {
+    border: 2px solid #1f6feb;
+    border-radius: 10px;
+    padding: 0.35rem 0.8rem;
+    background: #f4f8ff;
+    color: #0b1f3a;
+    font-weight: 600;
+}
+
+div[role="radiogroup"] > label * {
+    color: #0b1f3a !important;
+}
+
+div[role="radiogroup"] > label:has(input:checked) {
+    background: #dbeafe;
+    color: #052249;
+    border-color: #0a66c2;
+}
+
+div[role="radiogroup"] > label:has(input:checked) * {
+    color: #052249 !important;
+}
+
+div[data-testid="stSidebar"] div[data-testid="stExpander"] {
+    border: 2px solid #1f6feb !important;
+    border-radius: 10px !important;
+    background: #f4f8ff !important;
+    overflow: hidden !important;
+}
+
+div[data-testid="stSidebar"] div[data-testid="stExpander"] details {
+    border: 0 !important;
+    border-radius: 10px !important;
+    background: transparent !important;
+}
+
+div[data-testid="stSidebar"] div[data-testid="stExpander"] summary {
+    background: #f4f8ff !important;
+    color: #0b1f3a !important;
+    font-weight: 600 !important;
+}
+
+div[data-testid="stSidebar"] div[data-testid="stExpander"] summary * {
+    color: #0b1f3a !important;
+}
+
+div[data-testid="stSidebar"] div[data-testid="stExpander"] summary:hover {
+    background: #eaf3ff !important;
+}
+
+div[data-testid="stSidebar"] div[data-testid="stExpander"] details[open],
+div[data-testid="stSidebar"] div[data-testid="stExpander"]:has(details[open]) {
+    background: #dbeafe !important;
+    border-color: #0a66c2 !important;
+}
+
+div[data-testid="stSidebar"] div[data-testid="stExpander"] details[open] summary,
+div[data-testid="stSidebar"] div[data-testid="stExpander"] details[open] summary * {
+    color: #052249 !important;
+}
+
+div.stButton > button {
+    border: 2px solid #1f6feb;
+    border-radius: 10px;
+    background: #f4f8ff;
+    color: #0b1f3a;
+    font-weight: 600;
+}
+
+div.stButton > button:hover {
+    background: #eaf3ff;
+    border-color: #0a66c2;
+    color: #052249;
+}
+
+div.stButton > button:active {
+    background: #dbeafe;
+    border-color: #0a66c2;
+    color: #052249;
+}
+
+div[role="radiogroup"] > label:has(input:focus-visible),
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+    outline: 3px solid var(--lan-focus) !important;
+    outline-offset: 2px !important;
+}
+
+div[data-testid="stDataFrame"] thead tr th,
+div[data-testid="stDataEditor"] thead tr th {
+    background-color: #0b3a75;
+    color: #ffffff;
+    font-weight: 700;
+    border-bottom: 2px solid #072b57;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+@media (prefers-color-scheme: dark) {
+    div[role="radiogroup"] > label {
+        background: #14365f;
+        color: #f5f9ff;
+        border-color: #66a3ff;
+    }
+
+    div[role="radiogroup"] > label * {
+        color: #f5f9ff !important;
+    }
+
+    div[role="radiogroup"] > label:has(input:checked) {
+        background: #1f4f86;
+        color: #ffffff;
+        border-color: #9dc4ff;
+    }
+
+    div[role="radiogroup"] > label:has(input:checked) * {
+        color: #ffffff !important;
+    }
+
+    div[data-testid="stSidebar"] div[data-testid="stExpander"] {
+        background: #14365f !important;
+        border-color: #66a3ff !important;
+    }
+
+    div[data-testid="stSidebar"] div[data-testid="stExpander"] details {
+        background: transparent !important;
+    }
+
+    div[data-testid="stSidebar"] div[data-testid="stExpander"] summary,
+    div[data-testid="stSidebar"] div[data-testid="stExpander"] summary * {
+        background: #14365f !important;
+        color: #f5f9ff !important;
+    }
+
+    div[data-testid="stSidebar"] div[data-testid="stExpander"] summary:hover {
+        background: #1b4473 !important;
+    }
+
+    div[data-testid="stSidebar"] div[data-testid="stExpander"] details[open],
+    div[data-testid="stSidebar"] div[data-testid="stExpander"]:has(details[open]) {
+        background: #1f4f86 !important;
+        border-color: #9dc4ff !important;
+    }
+
+    div[data-testid="stSidebar"] div[data-testid="stExpander"] details[open] summary,
+    div[data-testid="stSidebar"] div[data-testid="stExpander"] details[open] summary * {
+        color: #ffffff !important;
+    }
+
+    div.stButton > button {
+        background: #14365f;
+        color: #f5f9ff;
+        border-color: #66a3ff;
+    }
+
+    div.stButton > button:hover {
+        background: #1b4473;
+        color: #ffffff;
+        border-color: #9dc4ff;
+    }
+
+    div.stButton > button:active {
+        background: #1f4f86;
+        color: #ffffff;
+        border-color: #9dc4ff;
+    }
+}
