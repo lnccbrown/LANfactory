@@ -10,14 +10,25 @@ Modular layout:
 
 from __future__ import annotations
 
-from .api import kde_vs_lan_likelihoods, lan_manifold
+from .api import (
+    compute_kde_vs_lan_likelihoods,
+    compute_lan_manifold,
+    kde_vs_lan_likelihoods,
+    lan_manifold,
+)
 from .config import GridSpec, ModelSpec, PlotConfig
+from .contracts import LikelihoodComparison, LikelihoodRow, ManifoldComputation
 from .loaders import get_torch_mlp
 
 __all__ = [
     "get_torch_mlp",
+    "compute_kde_vs_lan_likelihoods",
+    "compute_lan_manifold",
     "kde_vs_lan_likelihoods",
     "lan_manifold",
+    "LikelihoodComparison",
+    "LikelihoodRow",
+    "ManifoldComputation",
     "ModelSpec",
     "PlotConfig",
     "GridSpec",
