@@ -604,7 +604,7 @@ class ModelTrainerJaxMLP:
             }
 
             data_details_path.write_bytes(pickle.dumps(data_details))
-            print("Saving training data details to: " + data_details_path)
+            print(f"Saving training data details to: {data_details_path}")
 
             if self.mlflow_on:
                 try:
