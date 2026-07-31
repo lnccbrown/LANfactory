@@ -48,7 +48,9 @@ def test_kde_vs_lan_uses_model_parameter_order(monkeypatch):
 def test_compute_kde_vs_lan_returns_contract(monkeypatch):
     monkeypatch.setattr(api, "make_rt_choice_grid", lambda spec, grid: np.zeros((2, 2)))
     monkeypatch.setattr(api, "evaluate_network", lambda spec, params, grid: np.zeros(2))
-    monkeypatch.setattr(api, "simulate_ground_truth", lambda spec, params, n_samples: {})
+    monkeypatch.setattr(
+        api, "simulate_ground_truth", lambda spec, params, n_samples: {}
+    )
     monkeypatch.setattr(api, "evaluate_kde", lambda sim_out, grid: np.zeros(2))
 
     parameter_df = pd.DataFrame(

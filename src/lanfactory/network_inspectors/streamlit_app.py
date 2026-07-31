@@ -40,8 +40,8 @@ def _load_stylesheet() -> str:
             .read_text(encoding="utf-8")
         )
     except (FileNotFoundError, ModuleNotFoundError, OSError):
-        return Path(__file__).resolve().with_name("styles.css").read_text(
-            encoding="utf-8"
+        return (
+            Path(__file__).resolve().with_name("styles.css").read_text(encoding="utf-8")
         )
 
 
@@ -204,7 +204,9 @@ def _kde_tab(model: str, predictor, grid_spec: GridSpec, plot_cfg: PlotConfig) -
         st.pyplot(fig, clear_figure=True, use_container_width=True)
 
 
-def _manifold_tab(model: str, predictor, grid_spec: GridSpec, plot_cfg: PlotConfig) -> None:
+def _manifold_tab(
+    model: str, predictor, grid_spec: GridSpec, plot_cfg: PlotConfig
+) -> None:
     st.subheader("LAN Manifold")
     params = ssms.config.model_config[model]["params"]
     defaults = ssms.config.model_config[model]["default_params"]
@@ -320,17 +322,16 @@ def run() -> None:
             available_models = _available_models(base_dir)
 
             if available_models:
-                default_model = "ddm" if "ddm" in available_models else available_models[0]
+                default_model = (
+                    "ddm" if "ddm" in available_models else available_models[0]
+                )
                 model = st.selectbox(
                     "Model",
                     options=available_models,
                     index=available_models.index(default_model),
                     help="Choose a model that exists in the selected torch models directory.",
                 )
-                st.caption(
-                    "Models detected on disk: "
-                    + ", ".join(available_models)
-                )
+                st.caption("Models detected on disk: " + ", ".join(available_models))
             else:
                 default_model = "ddm" if "ddm" in all_models else all_models[0]
                 model = st.selectbox(
@@ -370,6 +371,7 @@ def run() -> None:
             rt_step_2c = st.number_input(
                 "KDE grid step (2-choice)",
                 value=0.0025,
+                min_value=0.0001,
                 help="Reaction-time spacing in the KDE/LAN evaluation grid.",
             )
 
@@ -402,7 +404,9 @@ def run() -> None:
         n_points_2c=n_points_2c,
         rt_step_2c=float(rt_step_2c),
     )
-    plot_cfg = PlotConfig(show=False, save=False, cols=cols, alpha=alpha, font_scale=font_scale)
+    plot_cfg = PlotConfig(
+        show=False, save=False, cols=cols, alpha=alpha, font_scale=font_scale
+    )
 
     try:
         predictor = _load_predictor(base_dir, model)
@@ -411,9 +415,7 @@ def run() -> None:
         st.stop()
 
     st.markdown("## Choose Analysis View")
-    st.info(
-        "Select a view below. The 3D surface plot is in the '3D Manifold' view."
-    )
+    st.info("Select a view below. The 3D surface plot is in the '3D Manifold' view.")
     view = st.radio(
         "Analysis view",
         options=["KDE vs LAN", "3D Manifold"],
