@@ -18,7 +18,7 @@ jobs:
           version: "0.12.0"
 
       - name: Check styling
-              run: uvx ruff format --check .
+        run: uvx ruff format --check .
 
-            - name: Check linting
-              run: uvx ruff check src/lanfactory
+      - name: Check linting
+        run: uvx ruff check src/lanfactory
