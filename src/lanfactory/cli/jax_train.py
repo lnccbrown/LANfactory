@@ -465,13 +465,8 @@ def main(
         ]
     )
 
-    pickle.dump(
-        network_config,
-        open(
-            networks_path / file_name_suffix,
-            "wb",
-        ),
-    )
+    file_path = networks_path / file_name_suffix
+    file_path.write_bytes(pickle.dumps(network_config))
 
     # Load network
     net = lanfactory.trainers.JaxMLPFactory(
