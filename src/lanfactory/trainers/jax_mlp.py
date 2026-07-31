@@ -593,25 +593,22 @@ class ModelTrainerJaxMLP:
 
             # Write to file
             train_state_path = f"{full_path}_train_state.jax"
-            file = open(train_state_path, "wb")
-            file.write(byte_output)
-            file.close()
+            Path(train_state_path).write_bytes(byte_output)
             print("Saving model parameters to: " + train_state_path)
 
-            config_path = f"{full_path}_train_config.pickle"
-            pickle.dump(self.train_config, open(config_path, "wb"))
-            print("Saving training config to: " + config_path)
+            config_path = Path(f"{full_path}_train_config.pickle")
+            config_path.write_bytes(pickle.dumps(self.train_config))
+            print(f"Saving training config to: {config_path}")
 
-            data_details_path = f"{full_path}_data_details.pickle"
-            pickle.dump(
-                {
-                    "train_data_generator_config": self.train_dl.dataset.data_generator_config,
-                    "train_data_file_ids": self.train_dl.dataset.file_ids,
-                    "valid_data_generator_config": self.valid_dl.dataset.data_generator_config,
-                    "valid_data_file_ids": self.valid_dl.dataset.file_ids,
-                },
-                open(data_details_path, "wb"),
-            )
+            data_details_path = Path(f"{full_path}_data_details.pickle")
+            data_details = {
+                "train_data_generator_config": self.train_dl.dataset.data_generator_config,
+                "train_data_file_ids": self.train_dl.dataset.file_ids,
+                "valid_data_generator_config": self.valid_dl.dataset.data_generator_config,
+                "valid_data_file_ids": self.valid_dl.dataset.file_ids,
+            }
+
+            data_details_path.write_bytes(pickle.dumps(data_details))
             print("Saving training data details to: " + data_details_path)
 
             if self.mlflow_on:
