@@ -447,8 +447,8 @@ class ModelTrainerJaxMLP:
                 if self.mlflow_on:
                     try:
                         mlflow.log_metric("loss", float(loss), step=int(state.step))
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        print(f"Failed to log metric to MLflow: {e}")
 
                 elif verbose == 1:  # pragma: no cover
                     if (step % 1000) == 0:
