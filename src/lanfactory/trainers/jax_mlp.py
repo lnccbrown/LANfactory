@@ -419,7 +419,7 @@ class ModelTrainerJaxMLP:
         # Run training for one epoch
         start_time = time()
         step = 0
-        for step, X, y in enumerate(tmp_dataloader):
+        for step, (X, y) in enumerate(tmp_dataloader):
             X_jax = jnp.array(X)
             y_jax = jnp.array(y)
 
