@@ -28,14 +28,13 @@ def save_configs(
     Path(save_folder).mkdir(parents=True, exist_ok=True)
 
     # Save network config
-    pickle.dump(
-        network_config,
-        open(Path(save_folder) / f"{model_id}_network_config.pickle", "wb"),
-    )
+    network_config_path = Path(save_folder) / f"{model_id}_network_config.pickle"
+    with open(network_config_path, "wb") as f:
+        pickle.dump(network_config, f)
     print("Saved network config")
+
     # Save train config
-    pickle.dump(
-        train_config, open(Path(save_folder) / f"{model_id}_train_config.pickle", "wb")
-    )
+    train_config_path = Path(save_folder) / f"{model_id}_train_config.pickle"
+    with open(train_config_path, "wb") as f:
+        pickle.dump(train_config, f)
     print("Saved train config")
-    return
