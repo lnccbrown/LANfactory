@@ -120,20 +120,11 @@ class JaxMLP(nn.Module):
 
         for i, lyr in enumerate(self.layers):
             x = lyr(x)
-            if i != (len(self.layers) - 1):
+            if i != (len(self.layers) - 1) or self.activations[i] != "linear":
                 x = self.activation_funs[i](x)
-            else:
-                if self.activations[i] == "linear":
-                    pass
-                else:
-                    x = self.activation_funs[i](x)
 
-        if (not self.train) and (self.train_output_type == "logprob"):
-            x = x  # just for pedagogy
-        elif (not self.train) and (self.train_output_type == "logits"):
+        if (not self.train) and (self.train_output_type == "logits"):
             x = -jnp.log(1 + jnp.exp(-x))
-        elif not self.train:  # pragma: no cover
-            x = x  # just for pedagogy
 
         return x
 
