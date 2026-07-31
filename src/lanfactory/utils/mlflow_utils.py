@@ -166,7 +166,7 @@ def log_training_data_lineage(
 
         # Verify we have all the files we expect
         expected_file_names = set(expected_files_info["all_files"])
-        actual_file_names = set(f.name for f in valid_file_list)
+        actual_file_names = {f.name for f in valid_file_list}
 
         missing_files = expected_file_names - actual_file_names
         extra_files = actual_file_names - expected_file_names
