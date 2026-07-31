@@ -253,15 +253,19 @@ def _manifold_tab(model: str, predictor, grid_spec: GridSpec, plot_cfg: PlotConf
             return
 
         vary_values = np.linspace(sweep_min, sweep_max, sweep_steps)
-        with st.spinner("Computing manifold..."):
-            computation = compute_lan_manifold(
-                parameter_df=edited_df,
-                vary_dict={vary_param: vary_values},
-                model=model,
-                torch_mlp_predict=predictor,
-                grid=grid_spec,
-            )
-            fig = build_manifold_figure(computation, plot_cfg)
+        try:
+            with st.spinner("Computing manifold..."):
+                computation = compute_lan_manifold(
+                    parameter_df=edited_df,
+                    vary_dict={vary_param: vary_values},
+                    model=model,
+                    torch_mlp_predict=predictor,
+                    grid=grid_spec,
+                )
+                fig = build_manifold_figure(computation, plot_cfg)
+        except ValueError as exc:
+            st.error(str(exc))
+            return
 
         st.caption(
             "3D manifold chart. X-axis is signed reaction time, y-axis is the swept "
