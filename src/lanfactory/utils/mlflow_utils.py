@@ -110,7 +110,7 @@ def log_training_data_lineage(
     training_data_folder: Path,
     valid_file_list: list,
     n_training_files: int,
-    tracking_uri: str = None,
+    tracking_uri: str | None = None,
 ) -> dict:
     """Log training data lineage information to MLflow.
 
