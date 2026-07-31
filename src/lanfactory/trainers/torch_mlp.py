@@ -661,7 +661,7 @@ class ModelTrainerTorchMLP:
             epoch_s_t = time()
 
             # Training loop
-            for xb, yb in self.train_dl:
+            for cnt, (xb, yb) in enumerate(self.train_dl):
                 # Shift data to device
                 if self.pin_memory and str(self.dev) == "cuda":
                     xb, yb = xb.cuda(non_blocking=True), yb.cuda(non_blocking=True)
@@ -680,7 +680,6 @@ class ModelTrainerTorchMLP:
                 # Log training progress
                 self._log_training_progress(epoch, cnt, loss, verbose)
 
-                cnt += 1
                 step_cnt += 1
 
             print(
