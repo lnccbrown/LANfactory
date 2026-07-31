@@ -531,7 +531,7 @@ class ModelTrainerJaxMLP:
 
         # Initialize network
         if not isinstance(self.seed, int):
-            raise ValueError(
+            raise TypeError(
                 "seed argument is not an integer, "
                 + "please specify a valid seed to make this code reproducible!"
             )
