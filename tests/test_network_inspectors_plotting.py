@@ -5,8 +5,6 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-from matplotlib.figure import Figure
-
 from lanfactory.network_inspectors.config import ModelSpec, PlotConfig
 from lanfactory.network_inspectors.contracts import (
     LikelihoodComparison,
@@ -38,6 +36,7 @@ def test_build_kde_vs_lan_figure_returns_matplotlib_figure():
     fig = build_kde_vs_lan_figure(comparison, PlotConfig(show=False, save=False))
 
     assert isinstance(fig, Figure)
+    plt.close(fig)
 
 
 def test_plot_manifold_returns_interactive_plotly_figure(tmp_path):
