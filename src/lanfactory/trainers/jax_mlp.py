@@ -323,10 +323,10 @@ class ModelTrainerJaxMLP:
 
             if train:
                 grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-                (loss, pred), grads = grad_fn(state.params)
+                loss, _, grads = grad_fn(state.params)
                 return grads, loss
             else:
-                loss, pred = loss_fn(state.params)
+                loss, _ = loss_fn(state.params)
                 return loss
 
         return apply_model_core
@@ -419,7 +419,7 @@ class ModelTrainerJaxMLP:
         # Run training for one epoch
         start_time = time()
         step = 0
-        for X, y in tmp_dataloader:
+        for step, X, y in enumerate(tmp_dataloader):
             X_jax = jnp.array(X)
             y_jax = jnp.array(y)
 
@@ -463,8 +463,6 @@ class ModelTrainerJaxMLP:
                         )
                 else:
                     pass
-
-            step += 1
 
         end_time = time()
         print(
