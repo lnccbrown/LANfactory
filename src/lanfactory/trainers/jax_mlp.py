@@ -86,10 +86,6 @@ class JaxMLP(nn.Module):
     activations_dict = frozendict(
         {"relu": nn.relu, "tanh": nn.tanh, "sigmoid": nn.sigmoid}
     )
-    # network_type: Optional[str] = "none"
-
-    # Define network type
-    # network_type = "lan" if train_output_type == "logprob" else "cpn"
 
     def setup(self) -> None:
         """Setup function for the JaxMLP class.
