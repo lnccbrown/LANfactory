@@ -323,7 +323,7 @@ class ModelTrainerJaxMLP:
 
             if train:
                 grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-                loss, _, grads = grad_fn(state.params)
+                (loss, _), grads = grad_fn(state.params)
                 return grads, loss
             else:
                 loss, _ = loss_fn(state.params)
