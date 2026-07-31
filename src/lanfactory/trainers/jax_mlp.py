@@ -3,10 +3,11 @@ are used to train Jax based LANs and CPNs.
 """
 
 import pickle
+from collections.abc import Callable, Sequence
 from functools import partial
 from pathlib import Path
 from time import time
-from typing import Any, Callable, Sequence
+from typing import Any
 
 import flax
 import jax
@@ -134,7 +135,7 @@ class JaxMLP(nn.Module):
         if (not self.train) and (self.train_output_type == "logprob"):
             x = x  # just for pedagogy
         elif (not self.train) and (self.train_output_type == "logits"):
-            x = -jnp.log((1 + jnp.exp(-x)))
+            x = -jnp.log(1 + jnp.exp(-x))
         elif not self.train:  # pragma: no cover
             x = x  # just for pedagogy
 
@@ -272,7 +273,7 @@ class ModelTrainerJaxMLP:
                 The ModelTrainerJaxMLP object.
 
         """
-        if "loss_dict" not in train_config.keys():
+        if "loss_dict" not in train_config:
             self.loss_dict: dict[str, dict] = {
                 "huber": {"fun": optax.huber_loss, "kwargs": {"delta": 1}},
                 "mse": {"fun": optax.l2_loss, "kwargs": {}},
@@ -281,7 +282,7 @@ class ModelTrainerJaxMLP:
         else:  # pragma: no cover
             self.loss_dict = train_config["loss_dict"]
 
-        if "lr_dict" not in train_config.keys():
+        if "lr_dict" not in train_config:
             # Todo: Add more schedules (for now warmup_cosine_decay_schedule)
             self.lr_dict: dict[str, float] = {
                 "init_value": 0.0002,

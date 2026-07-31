@@ -1,11 +1,8 @@
 __version__ = "0.8.0"
 
-from . import config
-from . import trainers
-from . import utils
-from . import onnx
+from . import config, onnx, trainers, utils
 
-__all__ = ["config", "trainers", "utils", "onnx", "network_inspectors"]
+__all__ = ["config", "network_inspectors", "onnx", "trainers", "utils"]
 
 
 def __getattr__(name):

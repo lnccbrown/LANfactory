@@ -1,18 +1,16 @@
 """This module contains the classes for training TorchMLP models."""
 
+import logging
+import pickle
+from collections.abc import Callable
+from pathlib import Path
+from time import time
+
 import numpy as np
 import pandas as pd
-import pickle
-from typing import Callable
-from time import time
-import logging
-from pathlib import Path
-
-
 import torch
-import torch.nn as nn
-import torch.optim as optim
 import torch.nn.functional as F
+from torch import nn, optim
 from torch.utils.data import DataLoader
 
 try:
@@ -100,7 +98,6 @@ class DatasetTorch(torch.utils.data.Dataset):
             shuffle_idx, :
         ]
         self.tmp_data[self.label_key] = self.tmp_data[self.label_key][shuffle_idx]
-        return
 
     def __init_file_shape(self) -> None:
         # Function gets dimensionalities form a test data file
@@ -130,7 +127,6 @@ class DatasetTorch(torch.utils.data.Dataset):
             self.label_dim = self.file_shape_dict["labels"][1]
         else:
             self.label_dim = 1
-        return
 
     def __data_generation(
         self, batch_ids: np.ndarray | None = None
@@ -337,7 +333,7 @@ def TorchMLPFactory(
     """
     if isinstance(network_config, str):
         with open(network_config, "rb") as f:
-            network_config = pickle.load(f)  # noqa: S301
+            network_config = pickle.load(f)
 
     assert isinstance(network_config, dict)
     return TorchMLP(
@@ -366,7 +362,7 @@ class TorchMLP(nn.Module):
         input_shape: int = 10,
         network_type: str | None = None,
     ) -> None:
-        super(TorchMLP, self).__init__()
+        super().__init__()
 
         self.input_shape = input_shape
         self.network_config = network_config
@@ -452,7 +448,7 @@ class TorchMLP(nn.Module):
             return self.layers[-1](x)
         elif self.train_output_type == "logits":
             return -torch.log(
-                (1 + torch.exp(-self.layers[-1](x)))
+                1 + torch.exp(-self.layers[-1](x))
             )  # log ( 1 / (1 + exp(-x))), where x = log(p / (1 - p))
         else:
             return self.layers[-1](x)
@@ -501,7 +497,7 @@ class ModelTrainerTorchMLP:
                 self.train_config: dict = pickle.load(open(train_config, "rb"))
             except (OSError, pickle.PickleError) as e:  # pragma: no cover
                 logger.error(
-                    f"Error loading training config from file {train_config}: {str(e)}"
+                    f"Error loading training config from file {train_config}: {e!s}"
                 )
                 raise
         elif isinstance(train_config, dict):

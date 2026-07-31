@@ -1,10 +1,11 @@
 # import argparse
 import logging
-from pathlib import Path
 import pickle
-import yaml
-import numpy as np
+from pathlib import Path
+
 import lanfactory
+import numpy as np
+import yaml
 
 logger = logging.getLogger(__name__)
 
