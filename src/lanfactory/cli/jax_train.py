@@ -314,7 +314,7 @@ def main(
     # Mode 2: Validation - verify MLflow files exist in training_data_folder
     if mlflow_lineage_info and training_data_folder:
         expected_files = set(mlflow_lineage_info["all_files"])
-        actual_files = set(f.name for f in valid_file_list)
+        actual_files = {f.name for f in valid_file_list}
 
         missing_files = expected_files - actual_files
         extra_files = actual_files - expected_files
