@@ -208,7 +208,7 @@ class JaxMLP(nn.Module):
         elif isinstance(state, dict):
             loaded_state = state
         else:
-            raise ValueError("state argument has to be a dictionary or a string!")
+            raise TypeError("state argument has to be a dictionary or a string!")
 
         # Make forward pass
         net_forward = partial(self.apply, loaded_state)
