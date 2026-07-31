@@ -155,18 +155,22 @@ If you are using `uv`, you can also use the `uv run` command to run `jaxtrain` o
 To generate multiple torch models (for example, `angle` and `ddm`) in one command,
 use the helper script:
 
+```sh
 scripts/train_torch_models_batch.sh \
   --training-data-base data/data \
   --networks-path-base data/torch_models \
   --models angle,ddm \
   --network-ids 0,1,2
+```
 
 If all models should use the same training-data folder, use:
 
+```sh
 scripts/train_torch_models_batch.sh \
   --training-data-folder data/data/angle \
   --models angle \
   --network-ids 0,1
+```
 
 You can validate setup without training via `--dry-run`.
 
