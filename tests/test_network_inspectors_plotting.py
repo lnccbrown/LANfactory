@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -16,6 +17,7 @@ from lanfactory.network_inspectors.plotting import (
     build_manifold_figure,
     plot_manifold,
 )
+from matplotlib.figure import Figure
 
 
 def test_build_kde_vs_lan_figure_returns_matplotlib_figure():
