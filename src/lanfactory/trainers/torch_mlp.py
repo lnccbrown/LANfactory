@@ -88,7 +88,8 @@ class DatasetTorch(torch.utils.data.Dataset):
 
     def __load_file(self, file_index: int) -> None:
         # Load file and shuffle the indices
-        self.tmp_data = pickle.load(open(self.file_ids[file_index], "rb"))
+        with open(self.file_ids[file_index], "rb") as f:
+            self.tmp_data = pickle.load(f)
         shuffle_idx = np.random.choice(
             self.tmp_data[self.features_key].shape[0],
             size=self.tmp_data[self.features_key].shape[0],
@@ -101,7 +102,8 @@ class DatasetTorch(torch.utils.data.Dataset):
 
     def __init_file_shape(self) -> None:
         # Function gets dimensionalities form a test data file
-        init_file = pickle.load(open(self.file_ids[0], "rb"))
+        with open(self.file_ids[0], "rb") as f:
+            init_file = pickle.load(f)
         self.file_shape_dict = {
             "inputs": init_file[self.features_key].shape,
             "labels": init_file[self.label_key].shape,
@@ -493,11 +495,15 @@ class ModelTrainerTorchMLP:
         elif isinstance(train_config, str | Path):
             print("train_config is passed as string or path: \n", train_config)
             try:
-                logger.info("Trying to load string as path to pickle file: ")
-                self.train_config: dict = pickle.load(open(train_config, "rb"))
+                logger.info(
+                    "Trying to load string as path to pickle file: %s", train_config
+                )
+                self.train_config: dict = pickle.loads(Path(train_config).read_bytes())
             except (OSError, pickle.PickleError) as e:  # pragma: no cover
                 logger.error(
-                    f"Error loading training config from file {train_config}: {e!s}"
+                    "Error loading training config from file %s: %s",
+                    train_config,
+                    e,
                 )
                 raise
         elif isinstance(train_config, dict):
