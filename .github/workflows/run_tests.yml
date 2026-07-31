@@ -23,6 +23,7 @@ jobs:
         uses: astral-sh/setup-uv@v7
         with:
           version: "0.12.0"
+          python-version: ${{ matrix.python-version }}
           # enable-cache: true
           # cache-dependency-glob: "pyproject.toml pdm.lock"
 
