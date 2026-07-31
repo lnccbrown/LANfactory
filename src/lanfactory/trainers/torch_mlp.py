@@ -574,36 +574,24 @@ class ModelTrainerTorchMLP:
                     self.optimizer,
                     mode="min",
                     factor=(
-                        self.train_config["lr_scheduler_params"]["factor"]
-                        if "factor" in self.train_config["lr_scheduler_params"]
-                        else 0.1
+                        self.train_config["lr_scheduler_params"].get("factor", 0.1)
                     ),
                     patience=(
-                        self.train_config["lr_scheduler_params"]["patience"]
-                        if "patience" in self.train_config["lr_scheduler_params"]
-                        else 2
+                        self.train_config["lr_scheduler_params"].get("patience", 2)
                     ),
                     threshold=(
-                        self.train_config["lr_scheduler_params"]["threshold"]
-                        if "threshold" in self.train_config["lr_scheduler_params"]
-                        else 0.001
+                        self.train_config["lr_scheduler_params"].get("threshold", 0.001)
                     ),
                     threshold_mode="rel",
                     cooldown=0,
                     min_lr=(
-                        self.train_config["lr_scheduler_params"]["min_lr"]
-                        if "min_lr" in self.train_config["lr_scheduler_params"]
-                        else 0.00000001
+                        self.train_config["lr_scheduler_params"].get("min_lr", 1e-08)
                     ),
                 )
             elif self.train_config["lr_scheduler"] == "multiply":
                 self.scheduler = optim.lr_scheduler.ExponentialLR(
                     self.optimizer,
-                    gamma=(
-                        self.train_config["lr_scheduler_params"]["factor"]
-                        if "factor" in self.train_config["lr_scheduler_params"]
-                        else 0.1
-                    ),
+                    gamma=(self.train_config["lr_scheduler_params"].get("factor", 0.1)),
                     last_epoch=-1,
                 )
 
