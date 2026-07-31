@@ -562,7 +562,7 @@ class ModelTrainerJaxMLP:
         # Training loop over epochs
         for epoch in range(self.train_config["n_epochs"]):
             print("Epoch: " + str(epoch) + " of " + str(self.train_config["n_epochs"]))
-            state, train_loss = self.run_epoch(
+            state, _ = self.run_epoch(
                 state,
                 train=True,
                 verbose=verbose,
