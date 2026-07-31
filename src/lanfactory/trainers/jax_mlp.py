@@ -50,7 +50,7 @@ def JaxMLPFactory(
     elif isinstance(network_config, dict):
         network_config_internal = network_config
     else:
-        raise ValueError(
+        raise TypeError(
             "network_config argument is not passed as either a dictionary or a string (path to a file)!"
         )
 
