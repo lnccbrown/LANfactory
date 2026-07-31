@@ -450,19 +450,16 @@ class ModelTrainerJaxMLP:
                     except Exception as e:
                         print(f"Failed to log metric to MLflow: {e}")
 
-                elif verbose == 1:  # pragma: no cover
-                    if (step % 1000) == 0:
-                        print(
-                            train_str
-                            + " - Step: "
-                            + str(step)
-                            + " of "
-                            + str(cnt_max)
-                            + " - Loss: "
-                            + str(loss)
-                        )
-                else:
-                    pass
+                elif verbose == 1 and (step % 1000) == 0:  # pragma: no cover
+                    print(
+                        train_str
+                        + " - Step: "
+                        + str(step)
+                        + " of "
+                        + str(cnt_max)
+                        + " - Loss: "
+                        + str(loss)
+                    )
 
         end_time = time()
         print(
