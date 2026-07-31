@@ -145,7 +145,7 @@ resolve_model_training_folder() {
     local model="$2"
 
     if [[ ! -d "$candidate_folder" ]]; then
-        echo ""
+        echo "$candidate_folder"
         return
     fi
 
