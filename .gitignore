@@ -157,3 +157,4 @@ explorations/
 __marimo__/
 
 uv.lock
+.vscode/

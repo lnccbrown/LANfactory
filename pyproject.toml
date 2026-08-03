@@ -120,6 +120,14 @@ line-length = 88
 src = ["src/lanfactory", "tests"]
 exclude = ["notebooks/*", "docs/*", "docs/basic_tutorial/basic_tutorial.ipynb"]
 
+[tool.ruff.lint]
+ignore = [
+    "B008",   # Function calls in default arguments (Typer/FastAPI options)
+    "EXE001", # Shebang present but file is not executable
+    "EXE002", # Executable file fails to declare a shebang
+    "BLE001", # 
+]
+
 # Coverage settings
 [tool.coverage.run]
 source = ["src"]

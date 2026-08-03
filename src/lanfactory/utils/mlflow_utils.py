@@ -110,7 +110,7 @@ def log_training_data_lineage(
     training_data_folder: Path,
     valid_file_list: list,
     n_training_files: int,
-    tracking_uri: str = None,
+    tracking_uri: str | None = None,
 ) -> dict:
     """Log training data lineage information to MLflow.
 
@@ -141,8 +141,9 @@ def log_training_data_lineage(
             - extra_files
     """
     try:
-        import mlflow
         import os
+
+        import mlflow
     except ImportError:
         logger.error("mlflow package not installed")
         return {}
@@ -165,7 +166,7 @@ def log_training_data_lineage(
 
         # Verify we have all the files we expect
         expected_file_names = set(expected_files_info["all_files"])
-        actual_file_names = set(f.name for f in valid_file_list)
+        actual_file_names = {f.name for f in valid_file_list}
 
         missing_files = expected_file_names - actual_file_names
         extra_files = actual_file_names - expected_file_names

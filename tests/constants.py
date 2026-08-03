@@ -31,7 +31,6 @@ class TestGeneratorConstants:
     N_TRAINING_SAMPLES: int = 2000
     N_SAMPLES_BY_PARAMETER_SET: int = 2000
     TEST_FOLDER: str = "tests/test_data"
-    OUT_FOLDER: str = "tests/test_data/lan_mlp/training_data"
     N_DATA_FILES: int = 2
     DEVICE: str = "cpu"
 
