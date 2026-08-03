@@ -1,32 +1,32 @@
 import warnings
 
+from .jax_mlp import JaxMLP, JaxMLPFactory, ModelTrainerJaxMLP
 from .torch_mlp import (
     DatasetTorch,
-    TorchMLP,
-    TorchMLPFactory,
-    ModelTrainerTorchMLP,
     LoadTorchMLP,
     LoadTorchMLPInfer,
+    ModelTrainerTorchMLP,
+    TorchMLP,
+    TorchMLPFactory,
     make_dataloader,
     make_train_valid_dataloaders,
 )
-from .jax_mlp import JaxMLPFactory, JaxMLP, ModelTrainerJaxMLP
 
 __all__ = [
     # Dataset and DataLoader helpers
     "DatasetTorch",
-    "make_dataloader",
-    "make_train_valid_dataloaders",
+    "JaxMLP",
+    # Jax MLP
+    "JaxMLPFactory",
+    "LoadTorchMLP",
+    "LoadTorchMLPInfer",
+    "ModelTrainerJaxMLP",
+    "ModelTrainerTorchMLP",
     # Torch MLP
     "TorchMLP",
     "TorchMLPFactory",
-    "ModelTrainerTorchMLP",
-    "LoadTorchMLP",
-    "LoadTorchMLPInfer",
-    # Jax MLP
-    "JaxMLPFactory",
-    "JaxMLP",
-    "ModelTrainerJaxMLP",
+    "make_dataloader",
+    "make_train_valid_dataloaders",
 ]
 
 _DEPRECATED_ALIASES = {

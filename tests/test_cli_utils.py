@@ -1,10 +1,10 @@
 """Tests for CLI utilities."""
 
-from unittest.mock import patch, mock_open
+import pickle
 
 import pytest
-
-from lanfactory.cli.utils import _make_train_network_configs, _get_train_network_config
+import yaml
+from lanfactory.cli.utils import _get_train_network_config, _make_train_network_configs
 
 
 def test_make_train_network_configs_with_dict_args():
@@ -44,25 +44,30 @@ def test_make_train_network_configs_without_save_name():
 
 
 def test_make_train_network_configs_with_save_name(tmp_path):
-    """Test _make_train_network_configs with save_name (file written)."""
+    """Test _make_train_network_configs creates and writes the pickle file to disk."""
     save_name = "test_config.pickle"
+    expected_file_path = tmp_path / save_name
 
-    with patch("builtins.open", mock_open()), patch("pickle.dump") as mock_dump:
-        result = _make_train_network_configs(
-            training_data_folder="/fake/data",
-            train_val_split=0.9,
-            save_folder=str(tmp_path),
-            network_arg_dict=None,
-            train_arg_dict=None,
-            save_name=save_name,
-        )
+    result = _make_train_network_configs(
+        training_data_folder="/fake/data",
+        train_val_split=0.9,
+        save_folder=str(tmp_path),
+        network_arg_dict=None,
+        train_arg_dict=None,
+        save_name=save_name,
+    )
 
-        assert mock_dump.called
-        assert result["config_file_name"] == tmp_path / save_name
+    assert result["config_file_name"] == expected_file_path.name
+
+    assert expected_file_path.is_file()
+
+    with open(expected_file_path, "rb") as f:
+        saved_data = pickle.load(f)
+        assert saved_data is not None
 
 
-def test_get_train_network_config_lan():
-    """Test _get_train_network_config with LAN network type."""
+def test_get_train_network_config_lan(tmp_path):
+    """Test _get_train_network_config with LAN network type using real file I/O."""
     yaml_content = {
         "NETWORK_TYPE": "lan",
         "LAYER_SIZES": [[100, 100, 1]],
@@ -83,20 +88,20 @@ def test_get_train_network_config_lan():
         "MODEL": "ddm",
     }
 
-    with (
-        patch("builtins.open", mock_open()),
-        patch("yaml.safe_load", return_value=yaml_content),
-    ):
-        result = _get_train_network_config(yaml_config_path="fake.yaml", net_index=0)
+    yaml_file = tmp_path / "test_config.yaml"
+    with open(yaml_file, "w") as f:
+        yaml.dump(yaml_content, f)
 
-        assert result["config_dict"]["network_config"]["train_output_type"] == "logprob"
-        assert result["config_dict"]["train_config"]["loss"] == "huber"
-        assert result["config_dict"]["train_config"]["features_key"] == "lan_data"
-        assert result["config_dict"]["train_config"]["label_key"] == "lan_labels"
-        assert result["extra_fields"]["model"] == "ddm"
+    result = _get_train_network_config(yaml_config_path=yaml_file, net_index=0)
+
+    assert result["config_dict"]["network_config"]["train_output_type"] == "logprob"
+    assert result["config_dict"]["train_config"]["loss"] == "huber"
+    assert result["config_dict"]["train_config"]["features_key"] == "lan_data"
+    assert result["config_dict"]["train_config"]["label_key"] == "lan_labels"
+    assert result["extra_fields"]["model"] == "ddm"
 
 
-def test_get_train_network_config_cpn():
+def test_get_train_network_config_cpn(tmp_path):
     """Test _get_train_network_config with CPN network type."""
     yaml_content = {
         "NETWORK_TYPE": "cpn",
@@ -118,19 +123,18 @@ def test_get_train_network_config_cpn():
         "MODEL": "ddm",
     }
 
-    with (
-        patch("builtins.open", mock_open()),
-        patch("yaml.safe_load", return_value=yaml_content),
-    ):
-        result = _get_train_network_config(yaml_config_path="fake.yaml", net_index=0)
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text(yaml.dump(yaml_content))
 
-        assert result["config_dict"]["network_config"]["train_output_type"] == "logits"
-        assert result["config_dict"]["train_config"]["loss"] == "bcelogit"
-        assert result["config_dict"]["train_config"]["features_key"] == "cpn_data"
-        assert result["config_dict"]["train_config"]["label_key"] == "cpn_labels"
+    result = _get_train_network_config(yaml_config_path=config_file, net_index=0)
+
+    assert result["config_dict"]["network_config"]["train_output_type"] == "logits"
+    assert result["config_dict"]["train_config"]["loss"] == "bcelogit"
+    assert result["config_dict"]["train_config"]["features_key"] == "cpn_data"
+    assert result["config_dict"]["train_config"]["label_key"] == "cpn_labels"
 
 
-def test_get_train_network_config_opn():
+def test_get_train_network_config_opn(tmp_path):
     """Test _get_train_network_config with OPN network type."""
     yaml_content = {
         "NETWORK_TYPE": "opn",
@@ -152,16 +156,15 @@ def test_get_train_network_config_opn():
         "MODEL": "ddm",
     }
 
-    with (
-        patch("builtins.open", mock_open()),
-        patch("yaml.safe_load", return_value=yaml_content),
-    ):
-        result = _get_train_network_config(yaml_config_path="fake.yaml", net_index=0)
+    config_file = tmp_path / "test_config_opn.yaml"
+    config_file.write_text(yaml.dump(yaml_content))
 
-        assert result["config_dict"]["network_config"]["train_output_type"] == "logits"
-        assert result["config_dict"]["train_config"]["loss"] == "bcelogit"
-        assert result["config_dict"]["train_config"]["features_key"] == "opn_data"
-        assert result["config_dict"]["train_config"]["label_key"] == "opn_labels"
+    result = _get_train_network_config(yaml_config_path=config_file, net_index=0)
+
+    assert result["config_dict"]["network_config"]["train_output_type"] == "logits"
+    assert result["config_dict"]["train_config"]["loss"] == "bcelogit"
+    assert result["config_dict"]["train_config"]["features_key"] == "opn_data"
+    assert result["config_dict"]["train_config"]["label_key"] == "opn_labels"
 
 
 def test_get_train_network_config_no_path():
@@ -170,7 +173,7 @@ def test_get_train_network_config_no_path():
         _get_train_network_config(yaml_config_path=None)
 
 
-def test_get_train_network_config_with_net_index():
+def test_get_train_network_config_with_net_index(tmp_path):
     """Test _get_train_network_config with different net_index."""
     yaml_content = {
         "NETWORK_TYPE": "lan",
@@ -192,17 +195,16 @@ def test_get_train_network_config_with_net_index():
         "MODEL": "ddm",
     }
 
-    with (
-        patch("builtins.open", mock_open()),
-        patch("yaml.safe_load", return_value=yaml_content),
-    ):
-        result = _get_train_network_config(yaml_config_path="fake.yaml", net_index=1)
+    config_file = tmp_path / "test_config_net_index.yaml"
+    config_file.write_text(yaml.dump(yaml_content))
 
-        # layer_sizes comes directly from YAML (not modified)
-        assert result["config_dict"]["network_config"]["layer_sizes"] == [120, 120, 1]
-        # activations has output layer activation appended
-        assert result["config_dict"]["network_config"]["activations"] == [
-            "relu",
-            "relu",
-            "linear",
-        ]
+    result = _get_train_network_config(yaml_config_path=config_file, net_index=1)
+
+    # layer_sizes comes directly from YAML (not modified)
+    assert result["config_dict"]["network_config"]["layer_sizes"] == [120, 120, 1]
+    # activations has output layer activation appended
+    assert result["config_dict"]["network_config"]["activations"] == [
+        "relu",
+        "relu",
+        "linear",
+    ]

@@ -1,10 +1,11 @@
 # import argparse
 import logging
-from pathlib import Path
 import pickle
-import yaml
-import numpy as np
+from pathlib import Path
+
 import lanfactory
+import numpy as np
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -88,9 +89,9 @@ def _make_train_network_configs(
     if save_name:
         save_folder = Path(save_folder)
         save_folder.mkdir(parents=True, exist_ok=True)  # pragma: no cover
-        save_name = save_folder / save_name
-        pickle.dump(config_dict, open(save_name, "wb"))
-        print(f"Saved to: {save_name}")
+        save_path = save_folder / save_name
+        save_path.write_bytes(pickle.dumps(config_dict))
+        print(f"Saved to: {save_path}")
     else:
         print("No save name provided, config not saved to file.")
 
@@ -99,7 +100,7 @@ def _make_train_network_configs(
 
 def _get_train_network_config(yaml_config_path: str | Path | None = None, net_index=0):
     if yaml_config_path is not None:
-        basic_config = yaml.safe_load(open(yaml_config_path, "rb"))
+        basic_config = yaml.safe_load(Path(yaml_config_path).read_bytes())
         network_type = basic_config["NETWORK_TYPE"]
     else:
         raise ValueError("No YAML config path provided")

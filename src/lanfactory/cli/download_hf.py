@@ -12,7 +12,6 @@ import logging
 from pathlib import Path
 
 import typer
-
 from lanfactory.hf import DEFAULT_REPO_ID, VALID_NETWORK_TYPES
 
 app = typer.Typer()

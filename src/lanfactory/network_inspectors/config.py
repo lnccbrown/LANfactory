@@ -8,7 +8,6 @@ from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
-
 from ssms.config import ModelConfigBuilder
 
 
