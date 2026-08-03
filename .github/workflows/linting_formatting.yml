@@ -17,8 +17,11 @@ jobs:
         with:
           version: "0.12.0"
 
+      - name: Install package
+        run: uv sync --group dev
+
       - name: Check styling
-        run: uvx ruff format --check .
+        run: uv run ruff format --check .
 
       - name: Check linting
-        run: uvx ruff check src/lanfactory
+        run: uv run ruff check src/lanfactory
