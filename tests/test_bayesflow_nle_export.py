@@ -43,7 +43,6 @@ from tests._onnx_utils import max_int64_abs
 jax.config.update("jax_enable_x64", True)
 
 
-
 # bayesflow under KERAS_BACKEND=torch globally disables autograd at import to
 # avoid excessive memory in long training loops. Restore the global default so
 # that subsequent tests (e.g. test_sbi_*) that rely on autograd-by-default work.
