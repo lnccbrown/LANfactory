@@ -26,14 +26,13 @@ import pytest
 # Skip cleanly when HSSM is not in the environment.
 hssm = pytest.importorskip("hssm")
 
-import numpy as np  # noqa: E402
-import pandas as pd  # noqa: E402
-import torch  # noqa: E402
-from sbi.inference import NLE_A  # noqa: E402
-from sbi.utils import BoxUniform  # noqa: E402
-from ssms.basic_simulators.simulator import simulator  # noqa: E402
-
-from lanfactory.onnx import transform_sbi_to_onnx  # noqa: E402
+import numpy as np
+import pandas as pd
+import torch
+from lanfactory.onnx import transform_sbi_to_onnx
+from sbi.inference import NLE_A
+from sbi.utils import BoxUniform
+from ssms.basic_simulators.simulator import simulator
 
 # DDM parameter order matches sbi simulator inputs and HSSM defaults.
 _DDM_PARAM_NAMES = ["v", "a", "z", "t"]

@@ -14,17 +14,17 @@ import jax
 # x64 required before any JAX import — see test_sbi_nle_export.py for details.
 jax.config.update("jax_enable_x64", True)
 
-import jax.numpy as jnp  # noqa: E402
-import numpy as np  # noqa: E402
-import onnx  # noqa: E402
-import onnxruntime as ort  # noqa: E402
-import pytest  # noqa: E402
-import torch  # noqa: E402
-from jaxonnxruntime import call_onnx, config  # noqa: E402
-from sbi.inference import NRE_A  # noqa: E402
-from sbi.utils import BoxUniform  # noqa: E402
+import jax.numpy as jnp
+import numpy as np
+import onnxruntime as ort
+import pytest
+import torch
+from jaxonnxruntime import call_onnx, config
+from lanfactory.onnx import transform_sbi_to_onnx
+from sbi.inference import NRE_A
+from sbi.utils import BoxUniform
 
-from lanfactory.onnx import transform_sbi_to_onnx  # noqa: E402
+import onnx
 
 config.update("jaxort_only_allow_initializers_as_static_args", False)
 

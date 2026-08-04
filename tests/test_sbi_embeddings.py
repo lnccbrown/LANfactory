@@ -13,22 +13,21 @@ regression tests if a user needs them.
 from pathlib import Path
 
 import jax
+import numpy as np
+import onnxruntime as ort
+import pytest
+import torch
+from jaxonnxruntime import call_onnx, config
+from lanfactory.onnx import transform_sbi_to_onnx
+from sbi.inference import NRE_A
+from sbi.neural_nets import classifier_nn
+from sbi.neural_nets.embedding_nets import CNNEmbedding, FCEmbedding
+from sbi.utils import BoxUniform
+from torch import nn
+
+import onnx
 
 jax.config.update("jax_enable_x64", True)
-
-import numpy as np  # noqa: E402
-import onnx  # noqa: E402
-import onnxruntime as ort  # noqa: E402
-import pytest  # noqa: E402
-import torch  # noqa: E402
-from jaxonnxruntime import call_onnx, config  # noqa: E402
-from sbi.inference import NRE_A  # noqa: E402
-from sbi.neural_nets import classifier_nn  # noqa: E402
-from sbi.neural_nets.embedding_nets import CNNEmbedding, FCEmbedding  # noqa: E402
-from sbi.utils import BoxUniform  # noqa: E402
-from torch import nn  # noqa: E402
-
-from lanfactory.onnx import transform_sbi_to_onnx  # noqa: E402
 
 config.update("jaxort_only_allow_initializers_as_static_args", False)
 

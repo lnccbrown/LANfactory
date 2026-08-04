@@ -3,7 +3,6 @@
 from unittest.mock import patch
 
 import pytest
-
 from lanfactory.hf.download import (
     DEFAULT_REPO_ID,
     download_model,
