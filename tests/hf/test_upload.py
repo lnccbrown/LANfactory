@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
-
 from lanfactory.hf.upload import (
     DEFAULT_INCLUDE_PATTERNS,
     DEFAULT_REPO_ID,

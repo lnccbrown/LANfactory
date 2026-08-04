@@ -5,8 +5,7 @@ from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 import torch
-
-from lanfactory.onnx.transform_onnx import transform_to_onnx, main
+from lanfactory.onnx.transform_onnx import main, transform_to_onnx
 
 
 @pytest.fixture
@@ -165,14 +164,16 @@ def test_transform_to_onnx_creates_correct_input_tensor(mock_network_config):
 def test_transform_to_onnx_missing_config_file():
     """Test that transform_to_onnx raises error for missing config file."""
     # Mock open to raise FileNotFoundError
-    with patch("builtins.open", side_effect=FileNotFoundError("File not found")):
-        with pytest.raises(FileNotFoundError):
-            transform_to_onnx(
-                network_config_file="/nonexistent/config.pickle",
-                state_dict_file="/fake/state.pt",
-                input_shape=6,
-                output_onnx_file="/fake/output.onnx",
-            )
+    with (
+        patch("builtins.open", side_effect=FileNotFoundError("File not found")),
+        pytest.raises(FileNotFoundError),
+    ):
+        transform_to_onnx(
+            network_config_file="/nonexistent/config.pickle",
+            state_dict_file="/fake/state.pt",
+            input_shape=6,
+            output_onnx_file="/fake/output.onnx",
+        )
 
 
 def test_transform_to_onnx_missing_state_dict_file(mock_network_config):
@@ -210,14 +211,14 @@ def test_transform_to_onnx_invalid_pickle_file():
             "lanfactory.onnx.transform_onnx.pickle.load",
             side_effect=pickle.UnpicklingError("Invalid pickle"),
         ),
+        pytest.raises(pickle.UnpicklingError),
     ):
-        with pytest.raises(pickle.UnpicklingError):
-            transform_to_onnx(
-                network_config_file=config_file,
-                state_dict_file="/fake/state.pt",
-                input_shape=6,
-                output_onnx_file="/fake/output.onnx",
-            )
+        transform_to_onnx(
+            network_config_file=config_file,
+            state_dict_file="/fake/state.pt",
+            input_shape=6,
+            output_onnx_file="/fake/output.onnx",
+        )
 
 
 def test_main_calls_transform_to_onnx():

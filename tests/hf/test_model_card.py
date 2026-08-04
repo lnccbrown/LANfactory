@@ -4,7 +4,6 @@ import pickle
 
 import pytest
 import yaml
-
 from lanfactory.hf.model_card import (
     ModelCardConfig,
     generate_readme,

@@ -10,12 +10,13 @@ from pathlib import Path
 
 import jax
 import numpy as np
-import onnx
 import onnxruntime as ort
 import pytest
 import torch
 from jaxonnxruntime import call_onnx
 from torch import nn
+
+import onnx
 
 
 @pytest.mark.flaky(reruns=2)

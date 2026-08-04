@@ -11,7 +11,6 @@ from pathlib import Path
 
 import jax
 import numpy as np
-import onnx
 import onnxruntime as ort
 import pytest
 import torch
@@ -24,6 +23,8 @@ from nflows.transforms import (
     ReversePermutation,
 )
 from torch import nn
+
+import onnx
 
 # Friction discovered in C2: nflows' MAF exports a Reshape whose shape argument
 # is a Constant node (not a model initializer). jaxonnxruntime's default strict
