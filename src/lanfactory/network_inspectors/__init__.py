@@ -21,15 +21,15 @@ from .contracts import LikelihoodComparison, LikelihoodRow, ManifoldComputation
 from .loaders import get_torch_mlp
 
 __all__ = [
-    "get_torch_mlp",
-    "compute_kde_vs_lan_likelihoods",
-    "compute_lan_manifold",
-    "kde_vs_lan_likelihoods",
-    "lan_manifold",
+    "GridSpec",
     "LikelihoodComparison",
     "LikelihoodRow",
     "ManifoldComputation",
     "ModelSpec",
     "PlotConfig",
-    "GridSpec",
+    "compute_kde_vs_lan_likelihoods",
+    "compute_lan_manifold",
+    "get_torch_mlp",
+    "kde_vs_lan_likelihoods",
+    "lan_manifold",
 ]

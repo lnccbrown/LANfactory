@@ -12,7 +12,6 @@ from lanfactory.hf.model_card import (
 )
 from lanfactory.hf.upload import upload_model
 
-
 DEFAULT_REPO_ID = "franklab/HSSM"
 VALID_NETWORK_TYPES = ("lan", "cpn", "opn")
 

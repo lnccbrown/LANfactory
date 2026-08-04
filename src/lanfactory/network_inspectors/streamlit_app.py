@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import sys
 from importlib.resources import files
 from pathlib import Path
-import sys
 
 import numpy as np
 import pandas as pd
@@ -19,13 +19,17 @@ if __package__ in (None, ""):
     if src_root_str not in sys.path:
         sys.path.insert(0, src_root_str)
 
-from lanfactory.network_inspectors.api import (  # noqa: E402
+from lanfactory.network_inspectors.api import (
     compute_kde_vs_lan_likelihoods,
     compute_lan_manifold,
 )
-from lanfactory.network_inspectors.config import GridSpec, ModelSpec, PlotConfig  # noqa: E402
-from lanfactory.network_inspectors.loaders import get_torch_mlp  # noqa: E402
-from lanfactory.network_inspectors.plotting import (  # noqa: E402
+from lanfactory.network_inspectors.config import (
+    GridSpec,
+    ModelSpec,
+    PlotConfig,
+)
+from lanfactory.network_inspectors.loaders import get_torch_mlp
+from lanfactory.network_inspectors.plotting import (
     build_kde_vs_lan_figure,
     build_manifold_figure,
 )
