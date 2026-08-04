@@ -158,7 +158,9 @@ def plot_kde_vs_lan(
     plt.close(fig)
 
 
-def build_manifold_figure(computation: ManifoldComputation, cfg: PlotConfig) -> go.Figure:
+def build_manifold_figure(
+    computation: ManifoldComputation, cfg: PlotConfig
+) -> go.Figure:
     """Build and return an interactive Plotly manifold figure."""
     manifold = computation.manifold
     spec = computation.spec
