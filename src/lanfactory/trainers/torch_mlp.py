@@ -66,6 +66,11 @@ class DatasetTorch(torch.utils.data.Dataset):
         self.label_key = label_key
         self.out_framework = out_framework
         self.data_generator_config: str = "None"
+        # model_config from the training data (param_bounds, params, choices):
+        # the provenance HSSM-facing consumers need. Populated from the first
+        # data file when present; training pickles embed it alongside
+        # generator_config (ssm-simulators lan_mlp.py).
+        self.data_model_config: str = "None"
 
         self.tmp_data: dict = {}
 
@@ -125,6 +130,9 @@ class DatasetTorch(torch.utils.data.Dataset):
 
         if "generator_config" in init_file:
             self.data_generator_config = init_file["generator_config"]
+
+        if "model_config" in init_file:
+            self.data_model_config = init_file["model_config"]
 
         if len(self.file_shape_dict["labels"]) > 1:
             self.label_dim = self.file_shape_dict["labels"][1]
@@ -715,8 +723,15 @@ class ModelTrainerTorchMLP:
 
             if mlflow_on:
                 try:
+                    # train_loss duplicates loss under the cross-backend schema
+                    # name (HSSMSpine _docs/mlflow-schema.md); loss is kept for
+                    # continuity with existing dashboards.
                     mlflow.log_metrics(
-                        {"loss": float(loss), "val_loss": float(val_loss)},
+                        {
+                            "loss": float(loss),
+                            "train_loss": float(loss),
+                            "val_loss": float(val_loss),
+                        },
                         step=step_cnt,
                     )
                 except Exception as e:
@@ -817,8 +832,10 @@ class ModelTrainerTorchMLP:
             pickle.dump(
                 {
                     "train_data_generator_config": train_dl.dataset.data_generator_config,
+                    "train_data_model_config": train_dl.dataset.data_model_config,
                     "train_datafile_ids": train_dl.dataset.file_ids,
                     "valid_data_generator_config": valid_dl.dataset.data_generator_config,
+                    "valid_data_model_config": valid_dl.dataset.data_model_config,
                     "valid_datafile_ids": valid_dl.dataset.file_ids,
                 },
                 f,

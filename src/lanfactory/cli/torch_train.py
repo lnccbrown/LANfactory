@@ -29,6 +29,7 @@ import typer
 import lanfactory
 from lanfactory.cli.utils import (
     _get_train_network_config,
+    log_training_run_identity,
 )
 
 app = typer.Typer()
@@ -474,6 +475,33 @@ def main(
             "wb",
         ),
     )
+
+    if mlflow_tracking_enabled:
+        # Identity params/tags: make the run self-describing (model, bounds,
+        # run_uuid join key). Best-effort inside the helper.
+        log_training_run_identity(
+            model=extra_config["model"],
+            network_type=network_config["network_type"],
+            backend="torch",
+            run_uuid=RUN_ID,
+            config_path=config_path,
+            training_data_folder=training_data_folder,
+            n_training_files=n_training_files,
+            dataset=train_dataset,
+        )
+        try:
+            import mlflow
+
+            # The network config is required to reconstruct the network but was
+            # previously only written to disk, never logged — the MLflow
+            # artifact set alone could not rebuild a network.
+            mlflow.log_artifact(
+                str(networks_path / file_name_suffix), artifact_path="training_output"
+            )
+            if config_path is not None and Path(config_path).is_file():
+                mlflow.log_artifact(str(config_path), artifact_path="training_output")
+        except Exception as e:
+            logger.error("Failed to log config artifacts to MLflow: %s", e)
 
     # Load network
     net = lanfactory.trainers.TorchMLP(

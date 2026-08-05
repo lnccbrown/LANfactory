@@ -500,6 +500,7 @@ class ModelTrainerJaxMLP:
         mlflow_on: bool = False,
         save_outputs: bool = True,
         verbose: int = 1,
+        network_type: str | None = None,
     ) -> train_state.TrainState:
         """Train and evaluate JAXMLP model.
         Arguments
@@ -517,6 +518,11 @@ class ModelTrainerJaxMLP:
                 Whether to save all files or not.
             verbose (int):
                 The verbosity level.
+            network_type (str | None):
+                The network type ('lan', 'cpn', 'opn', ...), used in output
+                filenames. When None it is inferred from train_output_type —
+                which cannot distinguish cpn from opn (both use logits), so
+                callers that know the type should pass it.
         Returns
         -------
             flax.core.frozen_dict.FrozenDict:
@@ -528,18 +534,21 @@ class ModelTrainerJaxMLP:
         if mlflow_on:
             self.__try_mlflow(run_id=run_id)
 
-        # Identify network type:
-        if self.model.train_output_type == "logprob":
-            network_type = "lan"
-        elif self.model.train_output_type == "logits":
-            network_type = "cpn"
-        else:
-            network_type = "unknown"
-            print(
-                'Model type identified as "unknown" because '
-                "the training_output_type attribute"
-                ' of the supplied jax model is neither "logprob", nor "logits"'
-            )
+        # Identify network type. Inference from train_output_type is a
+        # fallback only: logits cannot distinguish cpn from opn, which used to
+        # mislabel OPN artifacts as cpn.
+        if network_type is None:
+            if self.model.train_output_type == "logprob":
+                network_type = "lan"
+            elif self.model.train_output_type == "logits":
+                network_type = "cpn"
+            else:
+                network_type = "unknown"
+                print(
+                    'Model type identified as "unknown" because '
+                    "the training_output_type attribute"
+                    ' of the supplied jax model is neither "logprob", nor "logits"'
+                )
 
         # Initialize Training history
         training_history = pd.DataFrame(
@@ -580,6 +589,21 @@ class ModelTrainerJaxMLP:
             # Collect loss in training history
             training_history.values[epoch, :] = [int(epoch), float(test_loss)]
 
+            if self.mlflow_on:
+                try:
+                    # Per-epoch metrics under the cross-backend schema names
+                    # (HSSMSpine _docs/mlflow-schema.md), matching torchtrain.
+                    # The per-100-step `loss` metric above is kept as-is.
+                    mlflow.log_metrics(
+                        {
+                            "train_loss": float(train_loss),
+                            "val_loss": float(test_loss),
+                        },
+                        step=int(epoch),
+                    )
+                except Exception:
+                    pass
+
             print(
                 "Epoch: {} / {}, test_loss: {}".format(
                     epoch, self.train_config["n_epochs"], test_loss
@@ -618,8 +642,10 @@ class ModelTrainerJaxMLP:
             pickle.dump(
                 {
                     "train_data_generator_config": self.train_dl.dataset.data_generator_config,
+                    "train_data_model_config": self.train_dl.dataset.data_model_config,
                     "train_data_file_ids": self.train_dl.dataset.file_ids,
                     "valid_data_generator_config": self.valid_dl.dataset.data_generator_config,
+                    "valid_data_model_config": self.valid_dl.dataset.data_model_config,
                     "valid_data_file_ids": self.valid_dl.dataset.file_ids,
                 },
                 open(data_details_path, "wb"),
