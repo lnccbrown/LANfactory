@@ -38,6 +38,10 @@ dependencies = [
     "tqdm>=4.67.1",
     "frozendict>=2.4.6",
     "onnx>=1.17.0",
+    # jax -> ONNX export for jaxtrain networks. Exact-pinned to the 0.15 line:
+    # 0.x releases move the API, and the parity test in tests/onnx guards the
+    # ecosystem's single-trial ONNX contract against silent changes.
+    "jax2onnx==0.15.*",
     "matplotlib>=3.10.1",
     "plotly>=6.0.0",
     "seaborn>=0.13.2",
@@ -156,6 +160,7 @@ exclude_lines = [
 jaxtrain = "lanfactory.cli.jax_train:app"
 torchtrain = "lanfactory.cli.torch_train:app"
 transform-onnx = "lanfactory.onnx.transform_onnx:app"
+transform-jax-onnx = "lanfactory.onnx.jax_export:app"
 upload-hf = "lanfactory.cli.upload_hf:app"
 download-hf = "lanfactory.cli.download_hf:app"
 

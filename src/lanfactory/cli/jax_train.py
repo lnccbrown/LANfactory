@@ -53,6 +53,12 @@ def main(
         help="Validate the pipeline without training. Useful for testing configurations.",
         is_flag=True,
     ),
+    export_onnx: bool = typer.Option(
+        True,
+        "--export-onnx/--no-export-onnx",
+        help="Export the trained network to ONNX (single-trial contract) "
+        "alongside the flax state. ONNX is the artifact HSSM consumes.",
+    ),
     mlflow_run_name: str = typer.Option(
         None,
         "--mlflow-run-name",
@@ -525,6 +531,7 @@ def main(
         # Pass explicitly: inference from train_output_type mislabels OPN as
         # cpn (both train on logits).
         network_type=network_config["network_type"],
+        export_onnx=export_onnx,
     )
     # -------------------------------------------------------------
 
