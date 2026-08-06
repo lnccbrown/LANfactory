@@ -23,6 +23,25 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+def _picklable_copy(config):
+    """Return a copy of a config dict safe for stdlib pickle.
+
+    Values that stdlib pickle rejects (e.g. local lambdas used as boundary
+    functions in ssm-simulators model configs) are replaced by their repr, so
+    provenance survives without carrying live callables.
+    """
+    if not isinstance(config, dict):
+        return config
+    out = {}
+    for key, value in config.items():
+        try:
+            pickle.dumps(value)
+            out[key] = value
+        except Exception:  # noqa: BLE001 - any unpicklable value gets repr'd
+            out[key] = repr(value)
+    return out
+
+
 class DatasetTorch(torch.utils.data.Dataset):
     """Dataset class for TorchMLP training.
 
@@ -132,7 +151,12 @@ class DatasetTorch(torch.utils.data.Dataset):
             self.data_generator_config = init_file["generator_config"]
 
         if "model_config" in init_file:
-            self.data_model_config = init_file["model_config"]
+            # Sanitized at capture: ssm-simulators model_configs can carry
+            # callables (boundary/simulator lambdas) which the training data
+            # pickles tolerate (cloudpickle) but stdlib pickle in
+            # _save_data_details cannot. The catalog-relevant fields (params,
+            # param_bounds, choices, ...) are plain data and pass through.
+            self.data_model_config = _picklable_copy(init_file["model_config"])
 
         if len(self.file_shape_dict["labels"]) > 1:
             self.label_dim = self.file_shape_dict["labels"][1]

@@ -307,3 +307,47 @@ class TestJaxNetworkTypePassthrough:
         names = self._train_tiny(tmp_path, network_type_arg=None)
         assert names, "no output files produced"
         assert all("_cpn_" in n for n in names), names
+
+
+class TestUnpicklableModelConfig:
+    """ssm-simulators model_configs can carry lambdas (boundary functions).
+
+    Training pickles tolerate them (cloudpickle), but data_details is written
+    with stdlib pickle — the sanitized copy must keep plain fields and
+    stringify callables. Regression test for an order-dependent failure found
+    by the full suite (race_no_bias_angle_2's lambda boundary).
+    """
+
+    def test_lambda_fields_are_stringified_and_data_details_saves(self, tmp_path):
+        import cloudpickle
+        from lanfactory.trainers.torch_mlp import ModelTrainerTorchMLP
+
+        config_with_lambda = dict(MODEL_CONFIG)
+        config_with_lambda["boundary"] = lambda t: 1.0
+
+        f = tmp_path / "training_data_lambda.pickle"
+        with open(f, "wb") as fh:
+            cloudpickle.dump(
+                {
+                    "lan_data": np.random.randn(64, 6).astype(np.float32),
+                    "lan_labels": np.random.randn(64).astype(np.float32),
+                    "generator_config": {"model": "race_no_bias_angle_2"},
+                    "model_config": config_with_lambda,
+                },
+                fh,
+            )
+
+        dataset = lanfactory.trainers.DatasetTorch(
+            file_ids=[f], batch_size=16, features_key="lan_data", label_key="lan_labels"
+        )
+        # plain fields survive, the lambda is stringified
+        assert dataset.data_model_config["params"] == MODEL_CONFIG["params"]
+        assert isinstance(dataset.data_model_config["boundary"], str)
+
+        # and the data_details write (stdlib pickle) must succeed
+        stub = SimpleNamespace(dataset=dataset)
+        out = tmp_path / "d_data_details.pickle"
+        ModelTrainerTorchMLP._save_data_details(stub, stub, str(out))
+        with open(out, "rb") as fh:
+            details = pickle.load(fh)
+        assert details["train_data_model_config"]["params"] == MODEL_CONFIG["params"]
