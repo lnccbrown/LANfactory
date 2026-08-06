@@ -94,19 +94,58 @@ class TestLogTrainingRunIdentity:
             run_id = run.info.run_id
         return mlflow.tracking.MlflowClient().get_run(run_id)
 
-    def test_identity_params(self, tmp_tracking, tmp_path):
+    def test_immutable_facts_are_params(self, tmp_tracking, tmp_path):
         run = self._log_and_fetch(tmp_tracking, tmp_path)
         p = run.data.params
 
         assert p["model"] == "ddm"
         assert p["network_type"] == "lan"
         assert p["backend"] == "jax"
-        assert p["run_uuid"] == "abc123"
-        assert p["n_training_files"] == "42"
         assert p["input_dim"] == "6"
         assert json.loads(p["param_space"]) == ["v", "a", "z", "t"]
-        assert len(p["config_sha256"]) == 64
-        assert "lanfactory_version" in p
+        # per-invocation values must NOT be params (resume safety)
+        for key in ("run_uuid", "n_training_files", "training_data_folder"):
+            assert key not in p
+
+    def test_per_invocation_values_are_tags(self, tmp_tracking, tmp_path):
+        run = self._log_and_fetch(tmp_tracking, tmp_path)
+        t = run.data.tags
+
+        assert t["run_uuid"] == "abc123"
+        assert t["n_training_files_used"] == "42"
+        assert "training_data_folder" in t
+        assert len(t["config_sha256"]) == 64
+        assert "lanfactory_version" in t
+
+    def test_resume_relogs_without_error_and_updates_run_uuid(
+        self, tmp_tracking, tmp_path
+    ):
+        """A resumed run re-logs identity with a fresh run_uuid: params re-log
+        identical values (allowed), tags overwrite — no MlflowException, and
+        the run reflects the latest invocation's artifacts."""
+        config_yaml = tmp_path / "train.yaml"
+        config_yaml.write_text("NETWORK_TYPE: lan\nMODEL: ddm\n")
+        dataset = SimpleNamespace(input_dim=6, data_model_config=MODEL_CONFIG)
+
+        mlflow.set_experiment("identity-resume-test")
+        with mlflow.start_run() as run:
+            for uuid_value, n_files in (("first", 2), ("second", 5)):
+                log_training_run_identity(
+                    model="ddm",
+                    network_type="lan",
+                    backend="jax",
+                    run_uuid=uuid_value,
+                    config_path=config_yaml,
+                    training_data_folder=tmp_path / "data",
+                    n_training_files=n_files,
+                    dataset=dataset,
+                )
+            run_id = run.info.run_id
+
+        fetched = mlflow.tracking.MlflowClient().get_run(run_id)
+        assert fetched.data.tags["run_uuid"] == "second"
+        assert fetched.data.tags["n_training_files_used"] == "5"
+        assert fetched.data.params["model"] == "ddm"
 
     def test_param_bounds_json_and_sha_consistent(self, tmp_tracking, tmp_path):
         run = self._log_and_fetch(tmp_tracking, tmp_path)
@@ -128,6 +167,7 @@ class TestLogTrainingRunIdentity:
         assert p["model"] == "ddm"
         assert "input_dim" not in p
         assert "param_bounds_json" not in p
+        assert run.data.tags["run_uuid"] == "abc123"
 
     def test_dataset_without_model_config_skips_bounds(self, tmp_tracking, tmp_path):
         # DatasetTorch defaults data_model_config to the string "None" when the

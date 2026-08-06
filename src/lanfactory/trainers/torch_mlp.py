@@ -671,6 +671,7 @@ class ModelTrainerTorchMLP:
         for epoch in range(self.train_config["n_epochs"]):
             cnt = 0
             epoch_s_t = time()
+            epoch_loss_sum = 0.0
 
             # Training loop
             for xb, yb in self.train_dl:
@@ -692,6 +693,7 @@ class ModelTrainerTorchMLP:
                 # Log training progress
                 self._log_training_progress(epoch, cnt, loss, verbose)
 
+                epoch_loss_sum += float(loss)
                 cnt += 1
                 step_cnt += 1
 
@@ -723,16 +725,18 @@ class ModelTrainerTorchMLP:
 
             if mlflow_on:
                 try:
-                    # train_loss duplicates loss under the cross-backend schema
-                    # name (HSSMSpine _docs/mlflow-schema.md); loss is kept for
-                    # continuity with existing dashboards.
+                    # Legacy metrics unchanged (loss = last minibatch, at the
+                    # cumulative batch step). The cross-backend schema metric
+                    # train_loss (HSSMSpine _docs/mlflow-schema.md) is the
+                    # EPOCH-MEAN training loss at step=epoch, matching the jax
+                    # trainer's semantics so the two backends are comparable.
                     mlflow.log_metrics(
-                        {
-                            "loss": float(loss),
-                            "train_loss": float(loss),
-                            "val_loss": float(val_loss),
-                        },
+                        {"loss": float(loss), "val_loss": float(val_loss)},
                         step=step_cnt,
+                    )
+                    mlflow.log_metrics(
+                        {"train_loss": epoch_loss_sum / max(cnt, 1)},
+                        step=int(epoch),
                     )
                 except Exception as e:
                     logger.error(f"Unexpected mlflow error: {e}")

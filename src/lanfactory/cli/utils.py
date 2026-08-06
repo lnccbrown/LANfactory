@@ -202,9 +202,27 @@ def log_training_run_identity(
 
     Every field a catalog needs to answer "which network is this?" is logged on
     the run itself rather than being recoverable only from experiment-name
-    conventions or by unpickling artifacts. ``run_uuid`` is the join key
-    between the MLflow run and the artifact filenames on disk. Schema
-    documented in HSSMSpine ``_docs/mlflow-schema.md``.
+    conventions or by unpickling artifacts. Schema documented in HSSMSpine
+    ``_docs/mlflow-schema.md``.
+
+    Params vs tags split is deliberate, for resume safety: MLflow rejects
+    re-logging a param key with a *different* value, and a run resumed via
+    ``--mlflow-run-id`` re-runs this function with per-invocation values
+    (fresh ``run_uuid``, possibly different data folder / file count).
+
+    - **Params** hold facts immutable for a given network (model,
+      network_type, backend, input_dim, param_space, bounds): a resume
+      re-logs identical values, which MLflow permits.
+    - **Tags** hold per-invocation values (``run_uuid``, training data folder,
+      files used, config sha, lanfactory version): tags are mutable, so a
+      resume overwrites them and the run always reflects its *latest*
+      invocation — whose ``run_uuid`` is the one in the newest artifact
+      filenames, keeping the MLflow<->disk join correct.
+
+    Note the effective file count is tagged ``n_training_files_used``: the
+    trainer separately bulk-logs ``train_config`` whose ``n_training_files``
+    is the configured *cap*, and reusing that param key with the effective
+    value would make MLflow reject the trainer's entire param batch.
 
     Best-effort: failures are logged, never raised — training must not die on
     a tracking hiccup. No-op when no MLflow run is active.
@@ -224,21 +242,7 @@ def log_training_run_identity(
             "model": model,
             "network_type": network_type,
             "backend": backend,
-            "run_uuid": run_uuid,
-            "n_training_files": n_training_files,
         }
-        if training_data_folder is not None:
-            params["training_data_folder"] = str(training_data_folder)
-
-        if config_path is not None and Path(config_path).is_file():
-            params["config_sha256"] = hashlib.sha256(
-                Path(config_path).read_bytes()
-            ).hexdigest()
-
-        try:
-            params["lanfactory_version"] = version("lanfactory")
-        except PackageNotFoundError:
-            pass
 
         # The dataset has read a training file: it knows the exact input
         # dimensionality, and (when the data pickles embed model_config) the
@@ -263,7 +267,22 @@ def log_training_run_identity(
 
         mlflow.log_params(params)
 
-        tags = {"schema_version": "1", "phase": "train"}
+        tags = {
+            "schema_version": "1",
+            "phase": "train",
+            "run_uuid": run_uuid,
+            "n_training_files_used": str(n_training_files),
+        }
+        if training_data_folder is not None:
+            tags["training_data_folder"] = str(training_data_folder)
+        if config_path is not None and Path(config_path).is_file():
+            tags["config_sha256"] = hashlib.sha256(
+                Path(config_path).read_bytes()
+            ).hexdigest()
+        try:
+            tags["lanfactory_version"] = version("lanfactory")
+        except PackageNotFoundError:
+            pass
         for env_key, tag in (
             ("SLURM_JOB_ID", "slurm_job_id"),
             ("SLURM_ARRAY_JOB_ID", "slurm_array_job_id"),
