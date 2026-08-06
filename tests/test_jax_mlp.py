@@ -2,11 +2,10 @@
 
 import pickle
 
-import pytest
 import jax
 import jax.numpy as jnp
-
-from lanfactory.trainers.jax_mlp import JaxMLPFactory, JaxMLP
+import pytest
+from lanfactory.trainers.jax_mlp import JaxMLP, JaxMLPFactory
 
 
 def test_mlp_jax_factory_with_dict():
@@ -44,9 +43,9 @@ def test_mlp_jax_factory_with_string_path(tmp_path):
     assert model.layer_sizes == [100, 100, 1]
 
 
-def test_mlp_jax_factory_raises_value_error():
+def test_mlp_jax_factory_raises_type_error():
     """Test JaxMLPFactory raises ValueError for invalid network_config type."""
-    with pytest.raises(ValueError, match="network_config argument is not passed"):
+    with pytest.raises(TypeError, match="network_config argument is not passed"):
         JaxMLPFactory(network_config=123, train=True)  # Invalid type
 
 
@@ -128,7 +127,7 @@ def test_mlp_jax_forward_with_non_linear_output_activation():
     x = jax.random.normal(key, (5, 5))
 
     # Initialize model state
-    key1, key2 = jax.random.split(key)
+    key1, _ = jax.random.split(key)
     state = model.init(key1, x)
 
     # Forward pass
@@ -152,7 +151,7 @@ def test_mlp_jax_inference_mode_with_logits():
     x = jax.random.normal(key, (5, 5))
 
     # Initialize model state
-    key1, key2 = jax.random.split(key)
+    key1, _ = jax.random.split(key)
     state = model.init(key1, x)
 
     # Forward pass in inference mode
@@ -163,8 +162,8 @@ def test_mlp_jax_inference_mode_with_logits():
 
 def test_mlp_jax_load_state_from_file_error():
     """Test JaxMLP load_state_from_file raises error when file_path is None."""
-    from lanfactory.trainers.jax_mlp import JaxMLPFactory
     import pytest
+    from lanfactory.trainers.jax_mlp import JaxMLPFactory
 
     network_config = {
         "layer_sizes": [10, 10, 1],
@@ -180,8 +179,8 @@ def test_mlp_jax_load_state_from_file_error():
 
 def test_mlp_jax_load_state_from_file_without_input_dim(tmp_path):
     """Test JaxMLP load_state_from_file without providing input_dim."""
-    from lanfactory.trainers.jax_mlp import JaxMLPFactory
     import flax.serialization
+    from lanfactory.trainers.jax_mlp import JaxMLPFactory
 
     network_config = {
         "layer_sizes": [10, 10, 1],
@@ -242,8 +241,8 @@ def test_mlp_jax_make_forward_partial_with_dict_state(tmp_path):
 
 def test_mlp_jax_make_forward_partial_without_jit(tmp_path):
     """Test JaxMLP make_forward_partial without JIT compilation."""
-    from lanfactory.trainers.jax_mlp import JaxMLPFactory
     import flax.serialization
+    from lanfactory.trainers.jax_mlp import JaxMLPFactory
 
     network_config = {
         "layer_sizes": [10, 10, 1],
@@ -276,8 +275,8 @@ def test_mlp_jax_make_forward_partial_without_jit(tmp_path):
 
 def test_mlp_jax_make_forward_partial_invalid_state_type():
     """Test JaxMLP make_forward_partial raises error with invalid state type."""
-    from lanfactory.trainers.jax_mlp import JaxMLPFactory
     import pytest
+    from lanfactory.trainers.jax_mlp import JaxMLPFactory
 
     network_config = {
         "layer_sizes": [10, 10, 1],
@@ -289,7 +288,7 @@ def test_mlp_jax_make_forward_partial_invalid_state_type():
 
     # Test with invalid state type (list instead of dict or string)
     with pytest.raises(
-        ValueError, match="state argument has to be a dictionary or a string"
+        TypeError, match="state argument has to be a dictionary or a string"
     ):
         model.make_forward_partial(
             seed=42, input_dim=5, state=[1, 2, 3], add_jitted=True

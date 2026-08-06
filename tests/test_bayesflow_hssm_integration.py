@@ -24,23 +24,21 @@ import os
 os.environ["KERAS_BACKEND"] = "torch"
 os.environ.setdefault("KERAS_TORCH_DEVICE", "cpu")
 
-from pathlib import Path  # noqa: E402
+from pathlib import Path
 
-import pytest  # noqa: E402
+import bayesflow as bf
+import keras
+import numpy as np
+import pandas as pd
+import pytest
+from bayesflow.datasets import OfflineDataset
+from bayesflow.networks.inference.coupling.transforms import (
+    AffineTransform,
+)
+from lanfactory.onnx import transform_bayesflow_to_onnx
+from ssms.basic_simulators.simulator import simulator
 
 hssm = pytest.importorskip("hssm")
-
-import numpy as np  # noqa: E402
-import pandas as pd  # noqa: E402
-
-import bayesflow as bf  # noqa: E402
-import keras  # noqa: E402
-from bayesflow.datasets import OfflineDataset  # noqa: E402
-from bayesflow.networks.inference.coupling.transforms import AffineTransform  # noqa: E402
-from ssms.basic_simulators.simulator import simulator  # noqa: E402
-
-from lanfactory.onnx import transform_bayesflow_to_onnx  # noqa: E402
-
 _DDM_PARAM_NAMES = ["v", "a", "z", "t"]
 _DDM_PARAM_LOW = np.array([-2.0, 0.6, 0.3, 0.1], dtype=np.float32)
 _DDM_PARAM_HIGH = np.array([2.0, 1.8, 0.7, 0.5], dtype=np.float32)

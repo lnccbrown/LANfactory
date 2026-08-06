@@ -5,7 +5,6 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-
 from lanfactory.network_inspectors.config import ModelSpec, PlotConfig
 from lanfactory.network_inspectors.plotting import plot_manifold
 

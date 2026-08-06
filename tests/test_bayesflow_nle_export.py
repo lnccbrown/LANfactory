@@ -17,29 +17,31 @@ import os
 os.environ["KERAS_BACKEND"] = "torch"
 os.environ.setdefault("KERAS_TORCH_DEVICE", "cpu")
 
-from pathlib import Path  # noqa: E402
+from pathlib import Path
+from typing import ClassVar
 
-import jax  # noqa: E402
+import bayesflow as bf
+import jax
+import jax.numpy as jnp
+import keras
+import numpy as np
+import onnxruntime as ort
+import pytest
+import torch
+from bayesflow.datasets import OfflineDataset
+from bayesflow.networks.inference.coupling.transforms import (
+    AffineTransform,
+)
+from jaxonnxruntime import call_onnx, config
+from lanfactory.onnx import transform_bayesflow_to_onnx
+
+import onnx
+from tests._onnx_utils import max_int64_abs
 
 # Same reason as the sbi test: ONNX shape/index tensors are int64; JAX's default
 # int32 silently truncates them inside jaxonnxruntime translation.
 jax.config.update("jax_enable_x64", True)
 
-import jax.numpy as jnp  # noqa: E402
-import numpy as np  # noqa: E402
-import onnx  # noqa: E402
-import onnxruntime as ort  # noqa: E402
-import pytest  # noqa: E402
-import torch  # noqa: E402
-from jaxonnxruntime import call_onnx, config  # noqa: E402
-
-import bayesflow as bf  # noqa: E402
-import keras  # noqa: E402
-from bayesflow.datasets import OfflineDataset  # noqa: E402
-from bayesflow.networks.inference.coupling.transforms import AffineTransform  # noqa: E402
-
-from lanfactory.onnx import transform_bayesflow_to_onnx  # noqa: E402
-from tests._onnx_utils import max_int64_abs  # noqa: E402
 
 # bayesflow under KERAS_BACKEND=torch globally disables autograd at import to
 # avoid excessive memory in long training loops. Restore the global default so
@@ -400,7 +402,9 @@ def test_nle_wrapper_standardizes_conditions_only() -> None:
             return (samples.sum() + conditions.sum()).reshape(1)
 
     class _Standardizer:
-        standardize_layers = {"inference_conditions": _FakeStandardizeLayer(_THETA_DIM)}
+        standardize_layers: ClassVar[dict[str, _FakeStandardizeLayer]] = {
+            "inference_conditions": _FakeStandardizeLayer(_THETA_DIM)
+        }
 
     class _Approx:
         adapter = None

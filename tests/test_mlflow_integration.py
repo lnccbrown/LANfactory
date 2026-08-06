@@ -4,8 +4,8 @@ import pickle
 import shutil
 from pathlib import Path
 
-import pytest
 import numpy as np
+import pytest
 
 try:
     import mlflow
@@ -51,7 +51,7 @@ def cleanup_mlflow():
     try:
         mlflow.set_tracking_uri(original_uri)
     except Exception:
-        pass
+        mlflow.set_tracking_uri("file:./mlruns")
 
 
 @pytest.fixture
@@ -306,9 +306,9 @@ class TestMLflowIntegrationWithTrainers:
         tmp_path,
     ):
         """Test that JAX trainer logs to MLflow correctly."""
-        from torch.utils.data import DataLoader
         from lanfactory.trainers.jax_mlp import JaxMLPFactory, ModelTrainerJaxMLP
         from lanfactory.trainers.torch_mlp import DatasetTorch
+        from torch.utils.data import DataLoader
 
         tracking_uri = test_mlflow_dir["tracking_uri"]
         artifact_location = test_mlflow_dir["artifact_location"]
@@ -400,12 +400,12 @@ class TestMLflowIntegrationWithTrainers:
         tmp_path,
     ):
         """Test that PyTorch trainer logs to MLflow correctly."""
-        from torch.utils.data import DataLoader
         from lanfactory.trainers.torch_mlp import (
-            TorchMLP,
-            ModelTrainerTorchMLP,
             DatasetTorch,
+            ModelTrainerTorchMLP,
+            TorchMLP,
         )
+        from torch.utils.data import DataLoader
 
         tracking_uri = test_mlflow_dir["tracking_uri"]
         artifact_location = test_mlflow_dir["artifact_location"]
@@ -639,12 +639,12 @@ class TestMLflowEdgeCases:
         tmp_path,
     ):
         """Test that trainers work correctly when MLflow is disabled."""
-        from torch.utils.data import DataLoader
         from lanfactory.trainers.torch_mlp import (
-            TorchMLP,
-            ModelTrainerTorchMLP,
             DatasetTorch,
+            ModelTrainerTorchMLP,
+            TorchMLP,
         )
+        from torch.utils.data import DataLoader
 
         # Generate minimal training data
         gen_configs = dummy_generator_config_simple_two_choices()

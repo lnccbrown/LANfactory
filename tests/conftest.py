@@ -1,6 +1,5 @@
 import logging
 import multiprocessing
-import os
 import random
 import time
 import uuid
@@ -133,7 +132,7 @@ def model_selector(request, available_models, test_run_seed):
 
 
 @pytest.fixture
-def dummy_generator_config(model_selector):
+def dummy_generator_config(model_selector, tmp_path):
     """Fixture providing a dummy model config for testing."""
 
     def _dummy_generator_config(mode="random"):
@@ -148,9 +147,7 @@ def dummy_generator_config(model_selector):
             generator_config["simulator"]["n_samples"] = (
                 TEST_GENERATOR_CONSTANTS.N_SAMPLES
             )
-            generator_config["output"]["folder"] = os.path.join(
-                TEST_GENERATOR_CONSTANTS.OUT_FOLDER, str(uuid.uuid4())
-            )
+            generator_config["output"]["folder"] = str(tmp_path / str(uuid.uuid4()))
             generator_config["training"]["n_samples_per_param"] = (
                 TEST_GENERATOR_CONSTANTS.N_SAMPLES_BY_PARAMETER_SET
             )
@@ -169,7 +166,7 @@ def dummy_generator_config(model_selector):
 
 
 @pytest.fixture
-def dummy_generator_config_simple_two_choices(model_selector):
+def dummy_generator_config_simple_two_choices(model_selector, tmp_path):
     """Fixture providing a dummy model config for testing."""
 
     def _dummy_generator_config_simple_two_choices(mode="random"):
@@ -185,9 +182,8 @@ def dummy_generator_config_simple_two_choices(model_selector):
             generator_config["simulator"]["n_samples"] = (
                 TEST_GENERATOR_CONSTANTS.N_SAMPLES
             )
-            generator_config["output"]["folder"] = os.path.join(
-                TEST_GENERATOR_CONSTANTS.OUT_FOLDER, str(uuid.uuid4())
-            )
+            generator_config["output"]["folder"] = str(tmp_path / str(uuid.uuid4()))
+
             generator_config["training"]["n_samples_per_param"] = (
                 TEST_GENERATOR_CONSTANTS.N_SAMPLES_BY_PARAMETER_SET
             )

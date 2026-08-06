@@ -17,18 +17,18 @@ import jax
 # wrong numerical values (~0.5 drift from the torch reference on MAF log_prob).
 jax.config.update("jax_enable_x64", True)
 
-import jax.numpy as jnp  # noqa: E402
-import numpy as np  # noqa: E402
-import onnx  # noqa: E402
-import onnxruntime as ort  # noqa: E402
-import pytest  # noqa: E402
-import torch  # noqa: E402
-from jaxonnxruntime import call_onnx, config  # noqa: E402
-from sbi.inference import NLE_A  # noqa: E402
-from sbi.utils import BoxUniform  # noqa: E402
+import jax.numpy as jnp
+import numpy as np
+import onnxruntime as ort
+import pytest
+import torch
+from jaxonnxruntime import call_onnx, config
+from lanfactory.onnx import transform_sbi_to_onnx
+from sbi.inference import NLE_A
+from sbi.utils import BoxUniform
 
-from lanfactory.onnx import transform_sbi_to_onnx  # noqa: E402
-from tests._onnx_utils import max_int64_abs  # noqa: E402
+import onnx
+from tests._onnx_utils import max_int64_abs
 
 # Same friction as C2's MAF spike — torch.onnx.export emits Reshape shapes as
 # Constant nodes. HSSM's onnx2jax patch (commit 2e76516) sets this globally for
@@ -191,7 +191,7 @@ def test_nle_log_prob_ordering_matches_analytical_gaussian(
 def test_transform_rejects_unsupported_score_estimator(tmp_path: Path) -> None:
     """Estimators in the unsupported set should fail loudly."""
 
-    class ScoreEstimator(torch.nn.Module):  # noqa: D401 - name is the signal
+    class ScoreEstimator(torch.nn.Module):
         pass
 
     with pytest.raises(ValueError, match="does not support"):
