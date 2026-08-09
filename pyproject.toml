@@ -82,7 +82,9 @@ dev = [
     "pytest-timer>=1.0.0",
     "pytest-xdist>=3.6.1",
     "pytest>=8.3.1",
-    "ruff>=0.14.4",
+    # <0.16: ruff 0.16 flags ~111 pre-existing errors repo-wide (same drift that
+    # broke ssm-simulators CI, pinned identically there); migrate deliberately.
+    "ruff>=0.15.1,<0.16",
     "types-PyYAML",
     "mlflow>=3.14.0",
     "jaxonnxruntime>=0.3",

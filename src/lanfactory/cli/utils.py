@@ -185,3 +185,111 @@ def _get_train_network_config(yaml_config_path: str | Path | None = None, net_in
     config["extra_fields"] = {"model": basic_config["MODEL"]}
 
     return config
+
+
+def log_training_run_identity(
+    *,
+    model: str,
+    network_type: str,
+    backend: str,
+    run_uuid: str,
+    config_path: Path | str | None,
+    training_data_folder: Path | str | None,
+    n_training_files: int,
+    dataset=None,
+) -> None:
+    """Log identity params/tags that make a training run self-describing.
+
+    Every field a catalog needs to answer "which network is this?" is logged on
+    the run itself rather than being recoverable only from experiment-name
+    conventions or by unpickling artifacts. Schema documented in HSSMSpine
+    ``_docs/mlflow-schema.md``.
+
+    Params vs tags split is deliberate, for resume safety: MLflow rejects
+    re-logging a param key with a *different* value, and a run resumed via
+    ``--mlflow-run-id`` re-runs this function with per-invocation values
+    (fresh ``run_uuid``, possibly different data folder / file count).
+
+    - **Params** hold facts immutable for a given network (model,
+      network_type, backend, input_dim, param_space, bounds): a resume
+      re-logs identical values, which MLflow permits.
+    - **Tags** hold per-invocation values (``run_uuid``, training data folder,
+      files used, config sha, lanfactory version): tags are mutable, so a
+      resume overwrites them and the run always reflects its *latest*
+      invocation — whose ``run_uuid`` is the one in the newest artifact
+      filenames, keeping the MLflow<->disk join correct.
+
+    Note the effective file count is tagged ``n_training_files_used``: the
+    trainer separately bulk-logs ``train_config`` whose ``n_training_files``
+    is the configured *cap*, and reusing that param key with the effective
+    value would make MLflow reject the trainer's entire param batch.
+
+    Best-effort: failures are logged, never raised — training must not die on
+    a tracking hiccup. No-op when no MLflow run is active.
+    """
+    import hashlib
+    import json
+    import os
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        import mlflow
+
+        if mlflow.active_run() is None:
+            return
+
+        params: dict = {
+            "model": model,
+            "network_type": network_type,
+            "backend": backend,
+        }
+
+        # The dataset has read a training file: it knows the exact input
+        # dimensionality, and (when the data pickles embed model_config) the
+        # parameter space and training bounds — the fields HSSM consumers
+        # need to use a network correctly.
+        if dataset is not None:
+            input_dim = getattr(dataset, "input_dim", None)
+            if input_dim is not None:
+                params["input_dim"] = int(input_dim)
+            model_config = getattr(dataset, "data_model_config", None)
+            if isinstance(model_config, dict):
+                if "params" in model_config:
+                    params["param_space"] = json.dumps(list(model_config["params"]))
+                if "param_bounds" in model_config:
+                    bounds_json = json.dumps(
+                        np.asarray(model_config["param_bounds"]).tolist()
+                    )
+                    params["param_bounds_json"] = bounds_json
+                    params["param_bounds_sha256"] = hashlib.sha256(
+                        bounds_json.encode()
+                    ).hexdigest()
+
+        mlflow.log_params(params)
+
+        tags = {
+            "schema_version": "1",
+            "phase": "train",
+            "run_uuid": run_uuid,
+            "n_training_files_used": str(n_training_files),
+        }
+        if training_data_folder is not None:
+            tags["training_data_folder"] = str(training_data_folder)
+        if config_path is not None and Path(config_path).is_file():
+            tags["config_sha256"] = hashlib.sha256(
+                Path(config_path).read_bytes()
+            ).hexdigest()
+        try:
+            tags["lanfactory_version"] = version("lanfactory")
+        except PackageNotFoundError:  # pragma: no cover - not hit under uv run
+            pass
+        for env_key, tag in (
+            ("SLURM_JOB_ID", "slurm_job_id"),
+            ("SLURM_ARRAY_JOB_ID", "slurm_array_job_id"),
+            ("SLURM_ARRAY_TASK_ID", "slurm_array_task_id"),
+        ):
+            if os.getenv(env_key):
+                tags[tag] = os.environ[env_key]
+        mlflow.set_tags(tags)
+    except Exception as e:  # noqa: BLE001 - tracking must never kill training
+        logger.error("Failed to log run identity to MLflow: %s", e)

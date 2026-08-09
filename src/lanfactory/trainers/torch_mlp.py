@@ -23,6 +23,25 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+def _picklable_copy(config):
+    """Return a copy of a config dict safe for stdlib pickle.
+
+    Values that stdlib pickle rejects (e.g. local lambdas used as boundary
+    functions in ssm-simulators model configs) are replaced by their repr, so
+    provenance survives without carrying live callables.
+    """
+    if not isinstance(config, dict):
+        return config
+    out = {}
+    for key, value in config.items():
+        try:
+            pickle.dumps(value)
+            out[key] = value
+        except Exception:  # noqa: BLE001 - any unpicklable value gets repr'd
+            out[key] = repr(value)
+    return out
+
+
 class DatasetTorch(torch.utils.data.Dataset):
     """Dataset class for TorchMLP training.
 
@@ -65,7 +84,12 @@ class DatasetTorch(torch.utils.data.Dataset):
         self.features_key = features_key
         self.label_key = label_key
         self.out_framework = out_framework
-        self.data_generator_config: str = "None"
+        self.data_generator_config: str | dict = "None"
+        # model_config from the training data (param_bounds, params, choices):
+        # the provenance HSSM-facing consumers need. Populated from the first
+        # data file when present; training pickles embed it alongside
+        # generator_config (ssm-simulators lan_mlp.py).
+        self.data_model_config: str | dict = "None"
 
         self.tmp_data: dict = {}
 
@@ -125,6 +149,14 @@ class DatasetTorch(torch.utils.data.Dataset):
 
         if "generator_config" in init_file:
             self.data_generator_config = init_file["generator_config"]
+
+        if "model_config" in init_file:
+            # Sanitized at capture: ssm-simulators model_configs can carry
+            # callables (boundary/simulator lambdas) which the training data
+            # pickles tolerate (cloudpickle) but stdlib pickle in
+            # _save_data_details cannot. The catalog-relevant fields (params,
+            # param_bounds, choices, ...) are plain data and pass through.
+            self.data_model_config = _picklable_copy(init_file["model_config"])
 
         if len(self.file_shape_dict["labels"]) > 1:
             self.label_dim = self.file_shape_dict["labels"][1]
@@ -663,6 +695,7 @@ class ModelTrainerTorchMLP:
         for epoch in range(self.train_config["n_epochs"]):
             cnt = 0
             epoch_s_t = time()
+            epoch_loss_sum = 0.0
 
             # Training loop
             for xb, yb in self.train_dl:
@@ -684,6 +717,7 @@ class ModelTrainerTorchMLP:
                 # Log training progress
                 self._log_training_progress(epoch, cnt, loss, verbose)
 
+                epoch_loss_sum += float(loss)
                 cnt += 1
                 step_cnt += 1
 
@@ -715,9 +749,18 @@ class ModelTrainerTorchMLP:
 
             if mlflow_on:
                 try:
+                    # Legacy metrics unchanged (loss = last minibatch, at the
+                    # cumulative batch step). The cross-backend schema metric
+                    # train_loss (HSSMSpine _docs/mlflow-schema.md) is the
+                    # EPOCH-MEAN training loss at step=epoch, matching the jax
+                    # trainer's semantics so the two backends are comparable.
                     mlflow.log_metrics(
                         {"loss": float(loss), "val_loss": float(val_loss)},
                         step=step_cnt,
+                    )
+                    mlflow.log_metrics(
+                        {"train_loss": epoch_loss_sum / max(cnt, 1)},
+                        step=int(epoch),
                     )
                 except Exception as e:
                     logger.error(f"Unexpected mlflow error: {e}")
@@ -817,8 +860,10 @@ class ModelTrainerTorchMLP:
             pickle.dump(
                 {
                     "train_data_generator_config": train_dl.dataset.data_generator_config,
+                    "train_data_model_config": train_dl.dataset.data_model_config,
                     "train_datafile_ids": train_dl.dataset.file_ids,
                     "valid_data_generator_config": valid_dl.dataset.data_generator_config,
+                    "valid_data_model_config": valid_dl.dataset.data_model_config,
                     "valid_datafile_ids": valid_dl.dataset.file_ids,
                 },
                 f,
