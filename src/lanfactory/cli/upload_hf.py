@@ -88,6 +88,33 @@ def main(
         help="Show what would be uploaded without uploading.",
         is_flag=True,
     ),
+    publish_root_alias: bool = typer.Option(
+        True,
+        "--publish-root-alias/--no-publish-root-alias",
+        help="Also publish the canonical ONNX at the repo root under the "
+        "filename HSSM downloads ({model}.onnx / {model}_cpn.onnx / ...). "
+        "Without it the upload is not consumable by released HSSM versions.",
+    ),
+    update_manifest: bool = typer.Option(
+        True,
+        "--update-manifest/--no-update-manifest",
+        help="Record this network in manifest.json at the repository root.",
+    ),
+    require_model_card: bool = typer.Option(
+        False,
+        "--require-model-card",
+        help="Fail when model_card.yaml is missing instead of generating one.",
+        is_flag=True,
+    ),
+    overwrite_root: bool = typer.Option(
+        False,
+        "--overwrite-root",
+        help="Allow replacing a root network that is already published. "
+        "Released HSSM versions download root filenames from main without "
+        "pinning a revision, so replacing one changes the likelihood for all "
+        "existing users. Without this flag such an upload is refused.",
+        is_flag=True,
+    ),
     log_level: str = typer.Option(
         "WARNING",
         "--log-level",
@@ -159,6 +186,10 @@ def main(
             revision=revision,
             token=token,
             dry_run=dry_run,
+            publish_root_alias=publish_root_alias,
+            update_manifest=update_manifest,
+            require_model_card=require_model_card,
+            overwrite_root=overwrite_root,
         )
 
         if url and not dry_run:
