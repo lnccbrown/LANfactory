@@ -19,10 +19,10 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-mlflow = pytest.importorskip("mlflow")
-
 import lanfactory
 from lanfactory.cli.utils import log_training_run_identity
+
+mlflow = pytest.importorskip("mlflow")
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -116,6 +116,19 @@ class TestLogTrainingRunIdentity:
         assert "training_data_folder" in t
         assert len(t["config_sha256"]) == 64
         assert "lanfactory_version" in t
+
+    def test_slurm_env_ids_become_tags(self, tmp_tracking, tmp_path, monkeypatch):
+        # On Oscar these are the join keys between MLflow runs and sacct
+        # accounting; a run launched outside SLURM simply omits them.
+        monkeypatch.setenv("SLURM_JOB_ID", "12345")
+        monkeypatch.setenv("SLURM_ARRAY_JOB_ID", "12300")
+        monkeypatch.setenv("SLURM_ARRAY_TASK_ID", "7")
+        run = self._log_and_fetch(tmp_tracking, tmp_path)
+        t = run.data.tags
+
+        assert t["slurm_job_id"] == "12345"
+        assert t["slurm_array_job_id"] == "12300"
+        assert t["slurm_array_task_id"] == "7"
 
     def test_resume_relogs_without_error_and_updates_run_uuid(
         self, tmp_tracking, tmp_path
@@ -317,6 +330,13 @@ class TestUnpicklableModelConfig:
     stringify callables. Regression test for an order-dependent failure found
     by the full suite (race_no_bias_angle_2's lambda boundary).
     """
+
+    def test_non_dict_config_passes_through(self):
+        # DatasetTorch's data_model_config defaults to the string "None";
+        # the sanitizer must hand non-dict values back untouched.
+        from lanfactory.trainers.torch_mlp import _picklable_copy
+
+        assert _picklable_copy("None") == "None"
 
     def test_lambda_fields_are_stringified_and_data_details_saves(self, tmp_path):
         import cloudpickle

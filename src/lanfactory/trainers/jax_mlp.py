@@ -542,7 +542,8 @@ class ModelTrainerJaxMLP:
                 network_type = "lan"
             elif self.model.train_output_type == "logits":
                 network_type = "cpn"
-            else:
+            else:  # pragma: no cover - unreachable: JaxMLP.setup() raises on
+                # train_output_type values outside network_type_dict
                 network_type = "unknown"
                 print(
                     'Model type identified as "unknown" because '

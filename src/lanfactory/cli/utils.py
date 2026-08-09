@@ -281,7 +281,7 @@ def log_training_run_identity(
             ).hexdigest()
         try:
             tags["lanfactory_version"] = version("lanfactory")
-        except PackageNotFoundError:
+        except PackageNotFoundError:  # pragma: no cover - not hit under uv run
             pass
         for env_key, tag in (
             ("SLURM_JOB_ID", "slurm_job_id"),
