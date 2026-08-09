@@ -501,6 +501,7 @@ class ModelTrainerJaxMLP:
         save_outputs: bool = True,
         verbose: int = 1,
         network_type: str | None = None,
+        export_onnx: bool = True,
     ) -> train_state.TrainState:
         """Train and evaluate JAXMLP model.
         Arguments
@@ -523,6 +524,9 @@ class ModelTrainerJaxMLP:
                 filenames. When None it is inferred from train_output_type —
                 which cannot distinguish cpn from opn (both use logits), so
                 callers that know the type should pass it.
+            export_onnx (bool):
+                Whether to export the trained network to ONNX alongside the
+                flax state (single-trial contract; the artifact HSSM consumes).
         Returns
         -------
             flax.core.frozen_dict.FrozenDict:
@@ -653,6 +657,39 @@ class ModelTrainerJaxMLP:
             )
             print("Saving training data details to: " + data_details_path)
 
+            # ONNX export (single-trial contract) — the artifact HSSM consumes.
+            # Mirrors the torch trainer's _save_onnx step; previously the jax
+            # path produced only flax bytes, which nothing downstream reads.
+            onnx_path = None
+            if export_onnx:
+                try:
+                    from functools import partial as _partial
+
+                    from lanfactory.onnx.jax_export import export_forward_to_onnx
+
+                    # Export the EVAL head, not the raw training head: for
+                    # logits networks (cpn/opn) eval applies logsigmoid, which
+                    # is what the torch exporters emit and what HSSM consumes
+                    # as log-likelihood. Parameters are head-independent, so
+                    # the trained state applies to the eval twin unchanged.
+                    eval_model = JaxMLP(
+                        layer_sizes=self.model.layer_sizes,
+                        activations=self.model.activations,
+                        train_output_type=self.model.train_output_type,
+                        train=False,
+                    )
+                    onnx_path = f"{full_path}_model.onnx"
+                    export_forward_to_onnx(
+                        _partial(eval_model.apply, state.params),
+                        input_shape=int(self.train_dl.dataset.input_dim),
+                        output_onnx_file=onnx_path,
+                        model_name=network_type,
+                    )
+                    print("Saving ONNX export to: " + onnx_path)
+                except Exception as e:
+                    onnx_path = None
+                    print(f"Failed to export ONNX: {e}")
+
             if self.mlflow_on:
                 try:
                     mlflow.log_artifact(
@@ -665,6 +702,8 @@ class ModelTrainerJaxMLP:
                     mlflow.log_artifact(
                         data_details_path, artifact_path="training_output"
                     )
+                    if onnx_path is not None:
+                        mlflow.log_artifact(onnx_path, artifact_path="training_output")
                     mlflow.end_run()
                 except Exception as e:
                     print(f"Failed to log artifacts to MLflow: {e}")
