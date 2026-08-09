@@ -84,12 +84,12 @@ class DatasetTorch(torch.utils.data.Dataset):
         self.features_key = features_key
         self.label_key = label_key
         self.out_framework = out_framework
-        self.data_generator_config: str = "None"
+        self.data_generator_config: str | dict = "None"
         # model_config from the training data (param_bounds, params, choices):
         # the provenance HSSM-facing consumers need. Populated from the first
         # data file when present; training pickles embed it alongside
         # generator_config (ssm-simulators lan_mlp.py).
-        self.data_model_config: str = "None"
+        self.data_model_config: str | dict = "None"
 
         self.tmp_data: dict = {}
 
