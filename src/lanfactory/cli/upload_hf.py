@@ -106,6 +106,16 @@ def main(
         help="Fail when model_card.yaml is missing instead of generating one.",
         is_flag=True,
     ),
+    canonical_onnx: Path = typer.Option(
+        None,
+        "--canonical-onnx",
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        help="Which ONNX in the model folder to publish at the repo root. "
+        "Needed when the artifact filename does not name the model (the "
+        "trainers' names do).",
+    ),
     overwrite_root: bool = typer.Option(
         False,
         "--overwrite-root",
@@ -190,6 +200,7 @@ def main(
             update_manifest=update_manifest,
             require_model_card=require_model_card,
             overwrite_root=overwrite_root,
+            canonical_onnx=canonical_onnx,
         )
 
         if url and not dry_run:

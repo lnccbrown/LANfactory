@@ -6,6 +6,7 @@ to HuggingFace Hub with proper organization and metadata.
 
 import json
 import logging
+import re
 import tempfile
 from pathlib import Path
 
@@ -55,6 +56,48 @@ def canonical_root_filename(network_type: str, model_name: str) -> str:
     return f"{model_name}{ROOT_ONNX_SUFFIX[network_type]}.onnx"
 
 
+def validate_model_name(model_name: str) -> None:
+    """Reject a model name that would escape its folder or the repo root.
+
+    ``model_name`` is interpolated into both ``{network_type}/{model}/`` and
+    the root filename, so ``foo/bar`` would publish ``foo/bar.onnx`` — not at
+    the root at all, defeating the guarantee this module exists to provide.
+    """
+    if not model_name or "/" in model_name or "\\" in model_name or model_name == "..":
+        raise ValueError(
+            f"model_name must be a single path component, got {model_name!r}. "
+            "It becomes both the folder name and the root filename."
+        )
+
+
+# The two artifact-naming conventions the trainers emit. jax_mlp writes
+# "{run_id}_{network_type}_{model}__{kind}", torch_mlp writes
+# "{model}_{network_type}_{run_id}_{kind}". Both are anchored on the network
+# type, which is what lets the model field be *extracted* rather than searched
+# for. Model names contain underscores (ddm_seq2_no_bias), so a substring or
+# token search cannot tell "ddm" from "ddm_seq2" — and guessing wrong here
+# publishes one model's weights under another's root filename.
+_NT = "lan|cpn|opn|gonogo"
+_ARTIFACT_NAME_PATTERNS = (
+    re.compile(rf"^[^_]+_(?:{_NT})_(?P<model>.+?)__"),  # jax
+    re.compile(rf"^(?P<model>.+?)_(?:{_NT})_[^_]+_"),  # torch
+)
+
+
+def names_model(filename: str, model_name: str) -> bool:
+    """Whether an artifact filename names exactly this model.
+
+    Returns False for names that follow no known convention: the caller then
+    demands an explicit ``canonical_onnx``, which is the safe default for a
+    file about to be published under a name released HSSM versions download.
+    """
+    return any(
+        match.group("model") == model_name
+        for match in (p.match(filename) for p in _ARTIFACT_NAME_PATTERNS)
+        if match
+    )
+
+
 def select_canonical_onnx(files: list[Path], model_name: str) -> Path:
     """Pick the ONNX artifact to publish at the repo root.
 
@@ -74,7 +117,7 @@ def select_canonical_onnx(files: list[Path], model_name: str) -> Path:
             "consumable."
         )
 
-    matching = [f for f in onnx_files if model_name in f.name]
+    matching = [f for f in onnx_files if names_model(f.name, model_name)]
     if len(matching) == 1:
         return matching[0]
     if len(matching) > 1:
@@ -222,6 +265,8 @@ def upload_model(
             f"network_type must be one of {list(VALID_NETWORK_TYPES)}, got: {network_type}"
         )
 
+    validate_model_name(model_name)
+
     # model_card.yaml: generate a minimal one from the artifacts when absent.
     # The card's substance (architecture, training config) is recovered from
     # the pickles by load_model_card_yaml's _fill_from_pickle_configs anyway,
@@ -264,6 +309,16 @@ def upload_model(
         )
         if not root_source.exists():
             raise FileNotFoundError(f"canonical_onnx does not exist: {root_source}")
+        # The root alias must also exist inside the published folder, or the
+        # manifest would record a folder that does not contain the network
+        # HSSM actually downloads.
+        if root_source.resolve().parent != model_folder.resolve():
+            raise ValueError(
+                f"canonical_onnx must live in {model_folder}, got {root_source}. "
+                "The root alias is a copy of a folder artifact; publishing a "
+                "file from elsewhere would leave the folder without the "
+                "network recorded in the manifest."
+            )
         root_filename = canonical_root_filename(network_type, model_name)
 
     logger.info(f"Upload destination: {repo_id}/{path_in_repo}")
@@ -495,13 +550,23 @@ def _upload_to_hf(  # pragma: no cover
             logger.error(f"Failed to create repository: {e}")
             raise
 
+    # Resolve the parent commit BEFORE reading anything: a publish that lands
+    # between the read and the commit must invalidate our parent, otherwise the
+    # optimistic lock accepts the write and drops the other publisher's entry.
+    parent_commit = None
+    if update_manifest:
+        try:
+            parent_commit = api.repo_info(repo_id=repo_id, revision=revision).sha
+        except Exception as e:  # noqa: BLE001 - optimistic locking is a bonus
+            logger.warning(f"Could not resolve parent commit for {repo_id}: {e}")
+
     # Refuse to silently replace a network that released HSSM versions are
     # already downloading. The root namespace is shared with the legacy 2023
     # artifacts, and HSSM resolves those names at `main` with no revision pin,
     # so an unguarded overwrite changes the likelihood under every installed
     # copy of HSSM on the next cache revalidation.
     if root_filename is not None and not overwrite_root:
-        existing_root = list_root_files(api, repo_id, revision)
+        existing_root = list_root_files(api, repo_id, parent_commit or revision)
         if root_filename in existing_root:
             raise RootArtifactExistsError(
                 f"{repo_id} already publishes {root_filename} at its root, and "
@@ -528,7 +593,10 @@ def _upload_to_hf(  # pragma: no cover
         files_to_upload.append(readme_path)
 
     existing_manifest = (
-        fetch_existing_manifest(repo_id, revision, token) if update_manifest else None
+        # Read at the pinned revision so the manifest and the parent match.
+        fetch_existing_manifest(repo_id, parent_commit or revision, token)
+        if update_manifest
+        else None
     )
 
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -569,16 +637,6 @@ def _upload_to_hf(  # pragma: no cover
             CommitOperationAdd(path_in_repo=dest, path_or_fileobj=str(source))
             for dest, source in placements
         ]
-        # parent_commit makes the write conditional: a concurrent publish that
-        # landed after we read the manifest causes a clean failure instead of
-        # silently dropping that publisher's manifest entry.
-        parent_commit = None
-        if update_manifest:
-            try:
-                parent_commit = api.repo_info(repo_id=repo_id, revision=revision).sha
-            except Exception as e:  # noqa: BLE001 - optimistic locking is a bonus
-                logger.warning(f"Could not resolve parent commit for {repo_id}: {e}")
-
         try:
             api.create_commit(
                 repo_id=repo_id,

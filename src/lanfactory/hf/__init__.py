@@ -5,7 +5,10 @@ downloading models from HuggingFace Hub.
 """
 
 DEFAULT_REPO_ID = "franklab/HSSM"
-VALID_NETWORK_TYPES = ("lan", "cpn", "opn")
+# gonogo included: the trainers already build gonogo networks (cli/utils.py
+# train_output_type_dict) and HSSM resolves "{model}_gonogo.onnx", so excluding
+# it here made a trainable, loadable network type unpublishable.
+VALID_NETWORK_TYPES = ("lan", "cpn", "opn", "gonogo")
 
 from lanfactory.hf.model_card import (  # noqa: E402
     load_model_card_yaml,

@@ -19,6 +19,7 @@ from lanfactory.hf.upload import (
     build_manifest_entry,
     canonical_root_filename,
     merge_manifest,
+    names_model,
     plan_upload_placements,
     select_canonical_onnx,
     upload_model,
@@ -151,10 +152,11 @@ class TestSelectCanonicalOnnx:
             select_canonical_onnx([onnx], "ddm")
 
     def test_ambiguous_onnx_refuses_to_guess(self, tmp_path):
-        # Publishing the wrong network under the canonical name would be
-        # silent and wrong; fail instead.
-        a = tmp_path / "ddm_a.onnx"
-        b = tmp_path / "ddm_b.onnx"
+        # Two runs of the same model in one folder: both legitimately name
+        # ddm, so there is no basis to pick one. Publishing either under the
+        # canonical name would be a silent coin flip; fail instead.
+        a = tmp_path / "run1_lan_ddm__model.onnx"
+        b = tmp_path / "run2_lan_ddm__model.onnx"
         a.write_bytes(b"x")
         b.write_bytes(b"x")
         with pytest.raises(ValueError, match="Cannot determine which ONNX"):
@@ -627,3 +629,122 @@ class TestPlacementDedup:
         )
         destinations = [dest for dest, _ in placements]
         assert len(destinations) == len(set(destinations))
+
+
+class TestReviewFixes:
+    """Regressions for the CodeRabbit/Copilot findings on #110."""
+
+    @pytest.mark.parametrize(
+        ("filename", "model", "expected"),
+        [
+            ("abc123_lan_ddm__model.onnx", "ddm", True),  # jax convention
+            ("ddm_lan_abc123_model.onnx", "ddm", True),  # torch convention
+            ("run_lan_ddm_seq2__model.onnx", "ddm", False),  # prefix, not the model
+            ("run_lan_ddm2__model.onnx", "ddm", False),  # prefix, not the model
+            ("run_lan_ddm_seq2__model.onnx", "ddm_seq2", True),  # underscored name
+            ("model.onnx", "ddm", False),  # no convention -> explicit choice
+        ],
+    )
+    def test_model_match_is_exact_not_substring(self, filename, model, expected):
+        # A substring test made "ddm" match ddm_seq2/ddm2 and publish another
+        # model's weights as ddm.onnx — the swap this guard exists to stop.
+        assert names_model(filename, model) is expected
+
+    @pytest.mark.parametrize("bad", ["foo/bar", "..", "a\\b", ""])
+    def test_model_name_must_be_one_path_component(self, model_folder, bad):
+        # model_name becomes both the folder and the root filename, so a
+        # separator would publish outside the root entirely.
+        with pytest.raises(ValueError, match="single path component"):
+            upload_model(
+                model_folder=model_folder,
+                network_type="lan",
+                model_name=bad,
+                dry_run=True,
+            )
+
+    def test_canonical_onnx_outside_the_folder_is_rejected(
+        self, model_folder, tmp_path
+    ):
+        # Otherwise the root gets a network the published folder does not
+        # contain, and the manifest records a folder that lacks it.
+        stray = tmp_path / "elsewhere.onnx"
+        stray.write_bytes(b"x")
+        with pytest.raises(ValueError, match="must live in"):
+            upload_model(
+                model_folder=model_folder,
+                network_type="lan",
+                model_name="ddm",
+                dry_run=True,
+                canonical_onnx=stray,
+            )
+
+    def test_canonical_onnx_inside_the_folder_is_accepted(self, model_folder):
+        chosen = model_folder / "abc123_lan_ddm__model.onnx"
+        assert (
+            upload_model(
+                model_folder=model_folder,
+                network_type="lan",
+                model_name="ddm",
+                dry_run=True,
+                canonical_onnx=chosen,
+            )
+            is None
+        )
+
+    def test_gonogo_is_uploadable(self, tmp_path):
+        # ROOT_ONNX_SUFFIX claimed gonogo support while VALID_NETWORK_TYPES
+        # rejected it, so a trainable, HSSM-loadable type was unpublishable.
+        folder = tmp_path / "gonogo"
+        folder.mkdir()
+        (folder / "abc_gonogo_ddm__model.onnx").write_bytes(b"x")
+        assert (
+            upload_model(
+                model_folder=folder,
+                network_type="gonogo",
+                model_name="ddm",
+                dry_run=True,
+            )
+            is None
+        )
+
+    def test_parent_commit_is_resolved_before_the_manifest_is_read(
+        self, model_folder, monkeypatch
+    ):
+        """Order matters: reading first would let a concurrent publish slip in
+        between the read and the parent, and the lock would accept the write."""
+        import lanfactory.hf.upload as upload_module
+
+        calls = []
+        commits = []
+        install_fake_hub(monkeypatch, commits=commits, repo_sha="sha1")
+
+        real_repo_info_marker = "repo_info"
+
+        def spy_fetch(repo_id, revision, token):
+            calls.append(("fetch_manifest", revision))
+            return None
+
+        monkeypatch.setattr(upload_module, "fetch_existing_manifest", spy_fetch)
+
+        import huggingface_hub
+
+        original = huggingface_hub.HfApi.repo_info
+
+        def spy_repo_info(self, repo_id, revision=None):
+            calls.append((real_repo_info_marker, revision))
+            return original(self, repo_id, revision)
+
+        monkeypatch.setattr(huggingface_hub.HfApi, "repo_info", spy_repo_info)
+
+        upload_model(
+            model_folder=model_folder,
+            network_type="lan",
+            model_name="ddm",
+            repo_id="franklab/HSSM_staging",
+        )
+
+        kinds = [c[0] for c in calls]
+        assert kinds.index("repo_info") < kinds.index("fetch_manifest")
+        # and the manifest is read AT that parent, not at the moving branch
+        assert dict(calls)["fetch_manifest"] == "sha1"
+        assert commits[0]["parent_commit"] == "sha1"
