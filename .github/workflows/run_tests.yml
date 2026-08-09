@@ -2,6 +2,7 @@ name: Run tests
 
 on:
   pull_request:
+  workflow_call: # Called by drift.yml (scheduled drift detection)
 
 jobs:
   run_tests:
@@ -27,22 +28,19 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
-          version: "0.6.5"
-          # enable-cache: true
-          # cache-dependency-glob: "pyproject.toml pdm.lock"
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
 
-      - name: Clear all caches
-        run: |
-            rm -rf ~/.cache/pip
-            rm -rf ~/.cache/uv
-            rm -rf ~/.cache/conda
-            rm -rf ~/.cache/npm
-
+      # (a cache-nuking block used to sit here: rm -rf of every cache plus
+      # `uv sync --reinstall` with PIP_NO_CACHE_DIR — every PR run cold-
+      # downloaded the multi-GB torch/bayesflow/keras/sbi stack, and uv was
+      # pinned to the ancient 0.6.5. It was added during an undiagnosed hour
+      # of trial and error in June 2025; the SIGILL it was flailing at came
+      # from ssm-simulators' `-march=native` wheels and is pinned out by
+      # `ssm-simulators>=0.13.1`. Don't reinstate it on a hunch.)
       - name: Install package
-        run: uv sync --all-groups --reinstall
-        env:
-          # UV_CACHE_DIR: ""
-          PIP_NO_CACHE_DIR: "1"
+        run: uv sync --all-groups
 
       - name: Run pytest
         run: uv run pytest
@@ -75,7 +73,9 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
-          version: "0.6.5"
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
 
       - name: Install package (with notebook + backend deps)
         run: uv sync --all-groups
