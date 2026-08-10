@@ -103,7 +103,8 @@ def _download_model_hf(  # pragma: no cover
     except ImportError as exc:
         raise ImportError(
             "huggingface_hub is required for HuggingFace downloads. "
-            "Install it with: pip install lanfactory[hf]"
+            "Install it with: pip install 'lanfactory[hf]' "
+            "(or, in a checkout: uv sync --extra hf)."
         ) from exc
 
     output_folder.mkdir(parents=True, exist_ok=True)

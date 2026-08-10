@@ -10,7 +10,7 @@ import re
 import tempfile
 from pathlib import Path
 
-from lanfactory.hf import DEFAULT_REPO_ID, VALID_NETWORK_TYPES
+from lanfactory.hf import DEFAULT_LICENSE, DEFAULT_REPO_ID, VALID_NETWORK_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -424,7 +424,7 @@ def write_default_model_card(
     card = {
         "tags": [network_type, "ssm", "hssm"],
         "library_name": "onnx",
-        "license": "mit",
+        "license": DEFAULT_LICENSE,
         "title": f"{model_name} ({network_type.upper()})",
         "description": (
             f"{network_type.upper()} for the {model_name} sequential sampling "
@@ -531,7 +531,8 @@ def _upload_to_hf(  # pragma: no cover
     except ImportError as exc:
         raise ImportError(
             "huggingface_hub is required for HuggingFace uploads. "
-            "Install it with: pip install lanfactory[hf]"
+            "Install it with: pip install 'lanfactory[hf]' "
+            "(or, in a checkout: uv sync --extra hf)."
         ) from exc
 
     api = HfApi(token=token)

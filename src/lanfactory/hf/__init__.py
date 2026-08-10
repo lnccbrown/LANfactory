@@ -5,6 +5,10 @@ downloading models from HuggingFace Hub.
 """
 
 DEFAULT_REPO_ID = "franklab/HSSM"
+# Matches what franklab/HSSM actually declares. The *code* in this ecosystem is
+# MIT, but a model card describes the published artifact, so it follows the
+# artifact repo — auto-generated cards claiming MIT would contradict it.
+DEFAULT_LICENSE = "bsd-2-clause"
 # gonogo included: the trainers already build gonogo networks (cli/utils.py
 # train_output_type_dict) and HSSM resolves "{model}_gonogo.onnx", so excluding
 # it here made a trainable, loadable network type unpublishable.

@@ -12,6 +12,8 @@ from typing import Any
 
 import yaml
 
+from lanfactory.hf import DEFAULT_LICENSE
+
 logger = logging.getLogger(__name__)
 
 
@@ -82,7 +84,7 @@ def load_model_card_yaml(model_folder: Path) -> ModelCardConfig:
     config = ModelCardConfig(
         tags=data.get("tags", ["lan", "ssm", "hssm"]),
         library_name=data.get("library_name", "onnx"),
-        license=data.get("license", "mit"),
+        license=data.get("license", DEFAULT_LICENSE),
         title=data.get("title", "LAN Model"),
         description=data.get(
             "description", "Likelihood Approximation Network trained with LANfactory."
