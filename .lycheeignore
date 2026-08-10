@@ -1,0 +1,8 @@
+# URLs excluded from the weekly lychee link check (.github/workflows/docs.yml).
+# One URL or regex per line.
+
+# Local MLflow UI address used in the MLflow guide — never reachable from CI.
+http://localhost:5000
+
+# doi.org rate-limits anonymous CI requests, producing flaky 429s.
+https://doi.org/.*
