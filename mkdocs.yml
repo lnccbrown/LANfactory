@@ -1,6 +1,7 @@
-site_name: LANFactory
-repo_name: AlexanderFengler/LANFactory
-repo_url: htps://github.com/AlexanderFengler/LANFactory
+site_name: LANfactory
+site_url: https://lnccbrown.github.io/LANfactory/
+repo_name: lnccbrown/LANfactory
+repo_url: https://github.com/lnccbrown/LANfactory
 edit_uri: edit/main/docs
 
 nav:
@@ -19,16 +20,23 @@ nav:
       - Exporting sbi Models: exporting_sbi_models.md
       - Exporting bayesflow Models: exporting_bayesflow_models.md
   - API:
-      - lanfactory: api/lanfactory.md
       - config: api/config.md
       - hf: api/hf.md
       - onnx: api/onnx.md
       - trainers: api/trainers.md
       - utils: api/utils.md
 
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
+
 plugins:
   - search
   - autorefs
+  - redirects:
+      redirect_maps: {}
   - mkdocs-jupyter:
       execute: True
       execute_ignore:
@@ -104,7 +112,7 @@ theme:
         name: Switch to automatic mode
 
 extra:
-  homepage: "https://AlexanderFengler.github.io/LANFactory/"
+  homepage: "https://lnccbrown.github.io/LANfactory/"
 
 extra_css:
   - "styles/extra.css"
@@ -120,5 +128,5 @@ markdown_extensions:
   - pymdownx.superfences
   - attr_list
   - pymdownx.emoji:
-      emoji_index: !!python/name:materialx.emoji.twemoji
-      emoji_generator: !!python/name:materialx.emoji.to_svg
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
