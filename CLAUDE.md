@@ -79,24 +79,38 @@ but differ in output type and loss function.
 - **PyTorch** (`torchtrain` CLI, `trainers/torch_mlp.py`) — primary backend.
   Supports CUDA, ONNX export, full training loop with validation.
 - **JAX/Flax** (`jaxtrain` CLI, `trainers/jax_mlp.py`) — alternative backend.
-  Uses optax optimizers. No native ONNX export (train in JAX, convert via PyTorch if needed).
+  Uses optax optimizers. Exports ONNX directly via `jax2onnx` (`onnx/jax_export.py`);
+  `jaxtrain` writes the artifact by default (`--no-export-onnx` to skip).
 
 ### ONNX Export Pipeline
 
-Three exporters (all in `src/lanfactory/onnx/`) produce `.onnx` via `torch.onnx.export()`:
-- **LAN/CPN/OPN MLPs** — `transform_onnx.py` (`transform-onnx` CLI)
+Four exporters, all in `src/lanfactory/onnx/`:
+- **LAN/CPN/OPN MLPs (torch)** — `transform_onnx.py` (`transform-onnx` CLI)
+- **LAN/CPN/OPN MLPs (jax)** — `jax_export.py` (`transform-jax-onnx` CLI), via `jax2onnx`
 - **sbi** posterior/likelihood/ratio estimators — `sbi.py` (`transform_sbi_to_onnx`)
 - **bayesflow** networks — `bayesflow.py` (`transform_bayesflow_to_onnx`)
 
-All follow the single-trial contract: export with a concrete rank-1 per-trial
-input shape (no `dynamic_axes`); HSSM batches per-trial via `jax.vmap`. This is
-the format HSSM consumes at runtime.
+All follow the single-trial contract: **every input dim concrete, no
+`dynamic_axes`**; HSSM batches per-trial via `jax.vmap`.
+
+The *rank* is not part of the contract — it follows from how your tracer lowers
+a dense layer. The MLP exporters (torch and jax) trace `(1, D)` and lower to
+`Gemm`, whose ONNX spec requires rank 2; the sbi and bayesflow exporters trace
+rank-1 `(D,)` because `torch.onnx.export` lowers `Linear` to rank-agnostic
+`MatMul`+`Add`. Both load in HSSM and, measured under `vmap`+`jit`, run
+identically. The production networks on franklab/HSSM are `(1, D)` Gemm.
+`assert_single_trial_contract` in `onnx/contract.py` is the executable version
+of this paragraph — call it from any new exporter's tests.
 
 ### HuggingFace Integration
 
 - **Upload:** `lanfactory.hf.upload_model()` — uploads `.onnx`, `.pt`, config pickles,
-  and auto-generated README to `franklab/HSSM` on HuggingFace.
-  Requires `model_card.yaml` in the model folder.
+  and auto-generated README to `franklab/HSSM` on HuggingFace. Publishes the
+  canonical ONNX at the repo *root* under the filename HSSM downloads, plus the
+  full artifact set under `{network_type}/{model}/`, plus a root `manifest.json`
+  — in one atomic commit. Refuses to replace an existing root network without
+  `--overwrite-root`. `model_card.yaml` is generated when absent
+  (`--require-model-card` to demand one).
 - **Download:** `lanfactory.hf.download_model()` — downloads by network type + model name.
 - **Default repo:** `franklab/HSSM`
 - **Optional dependency:** `huggingface-hub>=0.20.0` (install via `uv sync --extra hf`)
@@ -104,7 +118,7 @@ the format HSSM consumes at runtime.
 ### Config System
 
 Training configs are YAML files parsed by the CLI. Key fields:
-- `NETWORK_TYPE`: `lan`, `cpn`, or `opn`
+- `NETWORK_TYPE`: `lan`, `cpn`, `opn`, or `gonogo`
 - `layer_sizes`, `activations`: network architecture
 - `n_epochs`, `learning_rate`, `loss`, `optimizer`: training hyperparams
 - `cpu_batch_size`, `gpu_batch_size`: device-specific batch sizes
@@ -123,6 +137,7 @@ Optional experiment tracking via MLflow. CLI flags: `--mlflow-run-name`, `--mlfl
 | `torchtrain` | `lanfactory.cli.torch_train` | Train PyTorch networks from YAML config |
 | `jaxtrain` | `lanfactory.cli.jax_train` | Train JAX networks from YAML config |
 | `transform-onnx` | `lanfactory.onnx.transform_onnx` | Convert PyTorch model → ONNX |
+| `transform-jax-onnx` | `lanfactory.onnx.jax_export` | Convert a jaxtrain network → ONNX |
 | `upload-hf` | `lanfactory.cli.upload_hf` | Upload trained models to HuggingFace |
 | `download-hf` | `lanfactory.cli.download_hf` | Download models from HuggingFace |
 

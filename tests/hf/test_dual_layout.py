@@ -748,3 +748,18 @@ class TestReviewFixes:
         # and the manifest is read AT that parent, not at the moving branch
         assert dict(calls)["fetch_manifest"] == "sha1"
         assert commits[0]["parent_commit"] == "sha1"
+
+
+def test_generated_card_uses_the_artifact_repo_license(tmp_path):
+    """franklab/HSSM declares bsd-2-clause; the code is MIT but a model card
+    describes the artifact, so a generated card must not contradict the repo."""
+    import yaml
+
+    from lanfactory.hf import DEFAULT_LICENSE
+    from lanfactory.hf.upload import write_default_model_card
+
+    # One literal pin of the value, then wiring checked against the constant.
+    assert DEFAULT_LICENSE == "bsd-2-clause"
+    write_default_model_card(tmp_path, "lan", "ddm")
+    card = yaml.safe_load((tmp_path / "model_card.yaml").read_text())
+    assert card["license"] == DEFAULT_LICENSE

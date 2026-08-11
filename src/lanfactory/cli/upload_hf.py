@@ -32,7 +32,7 @@ def main(
     network_type: str = typer.Option(
         ...,
         "--network-type",
-        help="Network type: lan, cpn, or opn.",
+        help=f"Network type: one of {', '.join(VALID_NETWORK_TYPES)}.",
     ),
     model_name: str = typer.Option(
         ...,
@@ -174,7 +174,8 @@ def main(
     except ImportError as e:
         logger.error(
             "huggingface_hub is required for HuggingFace uploads. "
-            "Install it with: pip install lanfactory[hf]"
+            "Install it with: pip install 'lanfactory[hf]' "
+            "(or, in a checkout: uv sync --extra hf)."
         )
         raise typer.Exit(code=1) from e
 
