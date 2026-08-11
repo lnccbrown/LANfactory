@@ -50,28 +50,36 @@ plugins:
       default_handler: python
       handlers:
         python:
-          import:
+          inventories:
             - https://docs.python.org/3/objects.inv
             - https://mkdocstrings.github.io/objects.inv
             - https://mkdocstrings.github.io/griffe/objects.inv
           options:
-            show_submodules: true
             separate_signature: true
             merge_init_into_class: true
             docstring_options:
               ignore_init_summary: true
-            docstring_style: "numpy"
-            docstring_section_style: "list"
+            docstring_style: numpy
+            docstring_section_style: list
             show_root_members_full_path: true
             show_object_full_path: false
-            show_category_heading: true
-            show_signature_annotations: false
+            show_category_heading: false
+            show_signature_annotations: true
+            show_docstring_attributes: false
             show_source: false
-            group_by_category: false
-            signature_crossrefs: true
+            show_root_heading: true
+            group_by_category: true
+            signature_crossrefs: false
+            summary: true
+            line_length: 80
+            unwrap_annotated: false
+            modernize_annotations: true
+            filters:
+              - "!^_"
 
 theme:
   logo: images/navlogo.png
+  favicon: images/navlogo.png
   name: material
   custom_dir: docs/overrides
   features:
@@ -86,6 +94,8 @@ theme:
     - content.action.edit
     - header.autohide
     - announce.dismiss
+    - navigation.footer
+    - navigation.indexes
   palette:
     # Palette toggle for automatic mode
     - media: "(prefers-color-scheme)"
@@ -111,14 +121,27 @@ theme:
         icon: material/brightness-4
         name: Switch to automatic mode
 
+copyright: >-
+  Copyright &copy; Brown University —
+  <a href="https://lnccbrown.github.io/HSSM/">HSSM</a> ·
+  <a href="https://lnccbrown.github.io/ssm-simulators/">ssm-simulators</a> ·
+  <a href="https://lnccbrown.github.io/LANfactory/">LANfactory</a>
+
 extra:
   homepage: "https://lnccbrown.github.io/LANfactory/"
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/lnccbrown/LANfactory
+    - icon: material/forum
+      link: https://github.com/lnccbrown/HSSM/discussions
 
 extra_css:
   - "styles/extra.css"
 
 markdown_extensions:
   - admonition
+  - toc:
+      permalink: true
   - pymdownx.highlight:
       anchor_linenums: true
       line_spans: __span
