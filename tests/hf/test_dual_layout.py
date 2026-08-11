@@ -758,7 +758,8 @@ def test_generated_card_uses_the_artifact_repo_license(tmp_path):
     from lanfactory.hf import DEFAULT_LICENSE
     from lanfactory.hf.upload import write_default_model_card
 
+    # One literal pin of the value, then wiring checked against the constant.
     assert DEFAULT_LICENSE == "bsd-2-clause"
     write_default_model_card(tmp_path, "lan", "ddm")
     card = yaml.safe_load((tmp_path / "model_card.yaml").read_text())
-    assert card["license"] == "bsd-2-clause"
+    assert card["license"] == DEFAULT_LICENSE

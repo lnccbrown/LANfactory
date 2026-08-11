@@ -28,7 +28,8 @@ class ModelCardConfig:
     library_name : str
         Library name for HuggingFace (default: "onnx").
     license : str
-        License identifier (default: "mit").
+        License identifier (defaults to DEFAULT_LICENSE, which tracks the
+        artifact repo franklab/HSSM — currently bsd-2-clause).
     title : str
         Model title.
     description : str
@@ -43,7 +44,7 @@ class ModelCardConfig:
 
     tags: list[str] = field(default_factory=lambda: ["lan", "ssm", "hssm"])
     library_name: str = "onnx"
-    license: str = "mit"
+    license: str = DEFAULT_LICENSE
     title: str = "LAN Model"
     description: str = "Likelihood Approximation Network trained with LANfactory."
     architecture: dict | None = None

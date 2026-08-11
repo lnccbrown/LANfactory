@@ -24,6 +24,7 @@ from lanfactory.hf.download import download_model  # noqa: E402
 
 __all__ = [
     "DEFAULT_REPO_ID",
+    "DEFAULT_LICENSE",
     "VALID_NETWORK_TYPES",
     "load_model_card_yaml",
     "generate_readme",

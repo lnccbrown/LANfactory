@@ -60,6 +60,11 @@ def assert_single_trial_contract(
                 "HSSM's make_jax_func rejects dynamic axes at load, and a graph "
                 "that slips through returns wrong numbers rather than failing"
             )
+            # A dim_value of 0 is set-but-not-concrete: some producers use it
+            # for "unknown", and it is a degenerate axis either way.
+            assert dim.dim_value > 0, (
+                f"zero dim in input {graph_input.name!r}: not a concrete shape"
+            )
 
     # onnxruntime is the arbiter of whether the graph is actually runnable:
     # a rank-1-traced Gemm passes the checker and fails here.

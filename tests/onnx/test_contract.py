@@ -10,8 +10,11 @@ from lanfactory.onnx import assert_single_trial_contract
 
 def make_onnx(path, input_dims):
     width = input_dims[-1] if isinstance(input_dims[-1], int) else 6
+    # MatMul drops the leading axis for a rank-1 input, so declare the shape
+    # the graph actually produces rather than leaning on a permissive checker.
+    output_dims = [1, 1] if len(input_dims) == 2 else [1]
     x = helper.make_tensor_value_info("x", TensorProto.FLOAT, list(input_dims))
-    y = helper.make_tensor_value_info("y", TensorProto.FLOAT, [1, 1])
+    y = helper.make_tensor_value_info("y", TensorProto.FLOAT, output_dims)
     w = helper.make_tensor(
         "w", TensorProto.FLOAT, [width, 1], np.zeros(width, dtype=np.float32).tolist()
     )
@@ -58,3 +61,18 @@ def test_rank_is_not_part_of_the_contract(tmp_path):
     valid — only concreteness is required."""
     assert assert_single_trial_contract(make_onnx(tmp_path / "r1.onnx", (6,)))
     assert assert_single_trial_contract(make_onnx(tmp_path / "r2.onnx", (1, 6)))
+
+
+def test_rejects_a_zero_dim(tmp_path):
+    """A dim_value of 0 is set-but-not-concrete — some producers use it for
+    "unknown" — so HasField alone is not enough."""
+    path = make_onnx(tmp_path / "zero.onnx", (0, 6))
+    with pytest.raises(AssertionError, match="zero dim"):
+        assert_single_trial_contract(path)
+
+
+def test_model_card_config_default_license_is_not_mit():
+    """A direct ModelCardConfig() must not mint a card contradicting the repo."""
+    from lanfactory.hf import DEFAULT_LICENSE, ModelCardConfig
+
+    assert ModelCardConfig().license == DEFAULT_LICENSE
