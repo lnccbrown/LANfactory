@@ -8,13 +8,12 @@ nav:
   - Home:
       - Overview: index.md
   - Tutorials:
-      - LAN (JAX): basic_tutorial/basic_tutorial_lan_jax.ipynb
-      - LAN (PyTorch): basic_tutorial/basic_tutorial_lan_torch.ipynb
-      - CPN (PyTorch): basic_tutorial/basic_tutorial_cpn_torch.ipynb
-      - OPN (PyTorch): basic_tutorial/basic_tutorial_opn_torch.ipynb
+      - Train a network (PyTorch LAN): basic_tutorial/basic_tutorial_lan_torch.ipynb
+      - How to train with the JAX backend: basic_tutorial/basic_tutorial_lan_jax.ipynb
       - Exporting sbi → ONNX: tutorials/exporting_sbi_to_onnx.ipynb
       - Exporting bayesflow → ONNX: tutorials/exporting_bayesflow_to_onnx.ipynb
   - Guides:
+      - "Network types: LAN, CPN, OPN": network_types.md
       - MLflow Integration: using_mlflow.md
       - HuggingFace Hub: using_huggingface.md
       - Exporting sbi Models: exporting_sbi_models.md
@@ -36,14 +35,14 @@ plugins:
   - search
   - autorefs
   - redirects:
-      redirect_maps: {}
+      redirect_maps:
+        basic_tutorial/basic_tutorial_cpn_torch.md: network_types.md
+        basic_tutorial/basic_tutorial_opn_torch.md: network_types.md
   - mkdocs-jupyter:
       execute: True
       execute_ignore:
         - basic_tutorial/basic_tutorial_lan_jax.ipynb
         - basic_tutorial/basic_tutorial_lan_torch.ipynb
-        - basic_tutorial/basic_tutorial_cpn_torch.ipynb
-        - basic_tutorial/basic_tutorial_opn_torch.ipynb
         - tutorials/exporting_sbi_to_onnx.ipynb
         - tutorials/exporting_bayesflow_to_onnx.ipynb
   - mkdocstrings:
