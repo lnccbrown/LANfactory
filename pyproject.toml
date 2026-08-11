@@ -99,6 +99,18 @@ dev = [
     "sbi>=0.26",
     "marimo>=0.23",
 ]
+docs = [
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.26",
+    "mkdocs-jupyter>=0.25",
+    "mkdocs-autorefs>=1.2",
+    # <1.2.3: the 1.2.3 release (2026-03-28) adds a dependency on "properdocs",
+    # an MkDocs impostor fork that injects a deceptive migration banner into
+    # every build. 1.2.2 depends only on mkdocs. Bump deliberately, after
+    # verifying upstream has removed the properdocs dependency.
+    "mkdocs-redirects>=1.2,<1.2.3",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

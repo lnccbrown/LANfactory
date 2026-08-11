@@ -1,0 +1,97 @@
+name: Docs
+
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "pyproject.toml"
+      - "lanfactory/**"
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "pyproject.toml"
+      - "lanfactory/**"
+  release:
+    types:
+      - published
+  schedule:
+    # Weekly link check, Monday 06:17 UTC (off-peak).
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # Strict build: any mkdocs warning (broken nav entry, bad link, autorefs
+    # duplicate, deprecated option) fails the job.
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: Install docs dependencies
+        run: uv sync --group docs
+
+      - name: Build docs (strict)
+        run: uv run mkdocs build --strict
+
+  deploy:
+    # Deploy the live site on release, on docs changes landing in main, or on
+    # manual dispatch — never for PRs.
+    if: >-
+      github.event_name == 'release' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      github.event_name == 'workflow_dispatch'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: Install docs dependencies
+        run: uv sync --group docs
+
+      - name: Deploy docs to GitHub Pages
+        run: uv run mkdocs gh-deploy --force
+
+  linkcheck:
+    # External links rot independently of code changes, so this runs on a
+    # weekly schedule (plus manual dispatch) rather than on every PR.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Check links
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: --no-progress "docs/**/*.md" "README.md"
+          fail: true

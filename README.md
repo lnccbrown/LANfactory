@@ -25,7 +25,7 @@ neural likelihood (NLE) and neural ratio (NRE) estimators, producing files
 HSSM can consume via its `loglik_kind="approx_differentiable"` path. See the
 [Exporting sbi Models guide](docs/exporting_sbi_models.md).
 
-Please find the original [documentation here](https://alexanderfengler.github.io/LANfactory/).
+Please find the original [documentation here](https://lnccbrown.github.io/LANfactory/).
 
 ### Cite LANfactory
 
