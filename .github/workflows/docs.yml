@@ -5,12 +5,16 @@ on:
     paths:
       - "docs/**"
       - "mkdocs.yml"
+      - "pyproject.toml"
+      - "lanfactory/**"
   push:
     branches:
       - main
     paths:
       - "docs/**"
       - "mkdocs.yml"
+      - "pyproject.toml"
+      - "lanfactory/**"
   release:
     types:
       - published
@@ -18,6 +22,9 @@ on:
     # Weekly link check, Monday 06:17 UTC (off-peak).
     - cron: "17 6 * * 1"
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
