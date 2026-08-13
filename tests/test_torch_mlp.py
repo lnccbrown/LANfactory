@@ -1240,3 +1240,62 @@ def test_shuffle_still_mixes_parameter_sets_within_a_batch(tmp_path):
         f"batch saw {distinct} of {n_theta} theta; contiguous access would "
         f"give {contiguous_would_give}. The load-time shuffle is not working."
     )
+
+
+def _scheduler_trainer(lr_scheduler, params, n_epochs=10, lr=0.01):
+    """A trainer built only far enough to construct its scheduler."""
+    train_config = {
+        "n_epochs": n_epochs,
+        "learning_rate": lr,
+        "weight_decay": 0.0,
+        "optimizer": "adam",
+        "loss": "huber",
+        "lr_scheduler": lr_scheduler,
+        "lr_scheduler_params": params,
+    }
+    network_config = {
+        "layer_sizes": [100, 100, 1],
+        "activations": ["tanh", "tanh", "linear"],
+        "train_output_type": "logprob",
+    }
+    return ModelTrainerTorchMLP(
+        train_config=train_config,
+        model=TorchMLP(network_config=network_config, input_shape=6),
+        train_dl=MagicMock(),
+        valid_dl=MagicMock(),
+    )
+
+
+def test_cosine_scheduler_anneals_over_the_full_run():
+    # The point of cosine here is that the rate reaches its floor exactly when
+    # training ends, with no dependence on when a plateau was detected — so two
+    # runs of one config share an identical lr trajectory.
+    trainer = _scheduler_trainer("cosine", {}, n_epochs=10, lr=0.01)
+    assert isinstance(trainer.scheduler, torch.optim.lr_scheduler.CosineAnnealingLR)
+
+    seen = []
+    for _ in range(10):
+        seen.append(trainer.optimizer.param_groups[0]["lr"])
+        trainer.scheduler.step()
+
+    assert seen[0] == pytest.approx(0.01)
+    assert seen == sorted(seen, reverse=True)  # monotone descent, no restarts
+    assert trainer.optimizer.param_groups[0]["lr"] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_cosine_scheduler_honours_t_max_and_min_lr():
+    trainer = _scheduler_trainer("cosine", {"t_max": 4, "min_lr": 1e-4}, lr=0.01)
+    for _ in range(4):
+        trainer.scheduler.step()
+    assert trainer.optimizer.param_groups[0]["lr"] == pytest.approx(1e-4)
+
+
+def test_an_unknown_scheduler_is_refused_rather_than_ignored():
+    # Silently training at a constant rate would cost a whole run and leave no
+    # trace in the record that the requested schedule never existed.
+    with pytest.raises(ValueError, match="Unknown lr_scheduler"):
+        _scheduler_trainer("cosine_annealing", {})
+
+
+def test_no_scheduler_is_still_allowed():
+    assert _scheduler_trainer(None, {}).scheduler is None
