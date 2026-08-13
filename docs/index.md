@@ -24,13 +24,13 @@ exports the trained networks to ONNX so they can serve as likelihoods in
 
 ## Ecosystem fit
 
-LANfactory is the network-training layer of the HSSM ecosystem:
+LANfactory is the network-training layer of the HSSM ecosystem: it trains
+LAN/CPN/OPN networks on simulated data and exports them to ONNX, in the form
+HSSM consumes as likelihoods.
 
-| Package | Role |
-| --- | --- |
-| [ssm-simulators](https://lnccbrown.github.io/ssm-simulators/) | Simulates SSMs and generates the training data LANfactory consumes. |
-| LANfactory (this package) | Trains LAN/CPN/OPN networks on that data; exports them to ONNX. |
-| [HSSM](https://lnccbrown.github.io/HSSM/) | Consumes the exported ONNX networks as likelihoods for Bayesian inference. |
+For the full map — what each package owns, how artifacts flow between them,
+and which versions work together — see
+[The HSSM ecosystem](https://lnccbrown.github.io/HSSM/ecosystem/).
 
 ---
 

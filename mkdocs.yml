@@ -7,6 +7,7 @@ edit_uri: edit/main/docs
 nav:
   - Home:
       - Overview: index.md
+      - The HSSM ecosystem: https://lnccbrown.github.io/HSSM/ecosystem/
   - Learn:
       - Train your first LAN (PyTorch): basic_tutorial/basic_tutorial_lan_torch.ipynb
   - How-to guides:
