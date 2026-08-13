@@ -7,23 +7,26 @@ edit_uri: edit/main/docs
 nav:
   - Home:
       - Overview: index.md
-  - Tutorials:
-      - Train a network (PyTorch LAN): basic_tutorial/basic_tutorial_lan_torch.ipynb
-      - How to train with the JAX backend: basic_tutorial/basic_tutorial_lan_jax.ipynb
-      - Exporting sbi → ONNX: tutorials/exporting_sbi_to_onnx.ipynb
-      - Exporting bayesflow → ONNX: tutorials/exporting_bayesflow_to_onnx.ipynb
-  - Guides:
+  - Learn:
+      - Train your first LAN (PyTorch): basic_tutorial/basic_tutorial_lan_torch.ipynb
+  - How-to guides:
+      - Train with the JAX backend: basic_tutorial/basic_tutorial_lan_jax.ipynb
+      - Export an sbi model to ONNX: tutorials/exporting_sbi_to_onnx.ipynb
+      - Export a bayesflow model to ONNX: tutorials/exporting_bayesflow_to_onnx.ipynb
+      - Track training runs with MLflow: using_mlflow.md
+      - Share trained networks on HuggingFace Hub: using_huggingface.md
+  - Explanations:
+      - What LANs are, and where LANfactory fits: what_are_lans.md
+  - Reference:
       - "Network types: LAN, CPN, OPN": network_types.md
-      - MLflow Integration: using_mlflow.md
-      - HuggingFace Hub: using_huggingface.md
-      - Exporting sbi Models: exporting_sbi_models.md
-      - Exporting bayesflow Models: exporting_bayesflow_models.md
-  - API:
-      - config: api/config.md
-      - hf: api/hf.md
-      - onnx: api/onnx.md
-      - trainers: api/trainers.md
-      - utils: api/utils.md
+      - sbi export — architectures and constraints: exporting_sbi_models.md
+      - bayesflow export — architectures and constraints: exporting_bayesflow_models.md
+      - API:
+          - config: api/config.md
+          - hf: api/hf.md
+          - onnx: api/onnx.md
+          - trainers: api/trainers.md
+          - utils: api/utils.md
 
 validation:
   omitted_files: warn

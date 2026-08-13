@@ -1,4 +1,4 @@
-# Exporting sbi-trained networks to ONNX
+# sbi export: architectures and constraints
 
 LANfactory's [`transform_sbi_to_onnx`](api/onnx.md) wraps a trained
 [`sbi`](https://github.com/sbi-dev/sbi) estimator and writes a single-trial
