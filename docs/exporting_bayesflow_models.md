@@ -1,4 +1,4 @@
-# Exporting bayesflow-trained networks to ONNX
+# bayesflow export: architectures and constraints
 
 > The artifact rules every exporter here satisfies are collected in
 > [The ONNX likelihood contract](https://lnccbrown.github.io/HSSM/how_to/custom_onnx_likelihoods/).

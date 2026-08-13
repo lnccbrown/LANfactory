@@ -1,4 +1,4 @@
-# Using HuggingFace Hub
+# Share trained networks on HuggingFace Hub
 
 LANfactory provides CLI commands for uploading trained models to and downloading models from HuggingFace Hub.
 
