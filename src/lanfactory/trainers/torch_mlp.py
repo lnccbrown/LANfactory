@@ -572,6 +572,7 @@ class ModelTrainerTorchMLP:
         self.scheduler: (
             optim.lr_scheduler.ExponentialLR
             | optim.lr_scheduler.ReduceLROnPlateau
+            | optim.lr_scheduler.CosineAnnealingLR
             | None
         ) = None
 
@@ -656,6 +657,33 @@ class ModelTrainerTorchMLP:
                         else 0.1
                     ),
                     last_epoch=-1,
+                )
+            elif self.train_config["lr_scheduler"] == "cosine":
+                # T_max defaults to the run length, which is what makes cosine
+                # worth having: the rate reaches eta_min exactly as training
+                # ends, with no dependence on when a plateau happened to be
+                # detected. Two runs of one config therefore share an identical
+                # lr trajectory, which reduce_on_plateau cannot promise.
+                self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
+                    self.optimizer,
+                    T_max=(
+                        self.train_config["lr_scheduler_params"]["t_max"]
+                        if "t_max" in self.train_config["lr_scheduler_params"]
+                        else self.train_config["n_epochs"]
+                    ),
+                    eta_min=(
+                        self.train_config["lr_scheduler_params"]["min_lr"]
+                        if "min_lr" in self.train_config["lr_scheduler_params"]
+                        else 0.0
+                    ),
+                )
+            else:
+                # Silently ignoring a typo here costs a whole training run:
+                # the job trains fine, at a constant rate, and nothing in the
+                # record says the requested schedule never existed.
+                raise ValueError(
+                    f"Unknown lr_scheduler {self.train_config['lr_scheduler']!r}. "
+                    "Expected 'reduce_on_plateau', 'multiply', 'cosine', or None."
                 )
 
     def __load_weights(self) -> None:
@@ -760,11 +788,17 @@ class ModelTrainerTorchMLP:
                 f"epoch {epoch} / {self.train_config['n_epochs']}, validation_loss: {val_loss:2.4}"
             )
 
+            # Read before stepping: this is the rate the epoch just reported on.
+            # Logged because otherwise a schedule leaves no trace in the record —
+            # comparing two runs means re-deriving when the scheduler fired from
+            # the loss curve, which only works at all for reduce_on_plateau.
+            epoch_lr = self.optimizer.param_groups[0]["lr"]
+
             # Scheduler step:
             if self.train_config["lr_scheduler"] is not None:
                 if self.train_config["lr_scheduler"] == "reduce_on_plateau":
                     self.scheduler.step(val_loss)
-                elif self.train_config["lr_scheduler"] == "multiply":
+                elif self.train_config["lr_scheduler"] in ("multiply", "cosine"):
                     self.scheduler.step()
 
             # Append training history
@@ -782,7 +816,7 @@ class ModelTrainerTorchMLP:
                         step=step_cnt,
                     )
                     mlflow.log_metrics(
-                        {"train_loss": epoch_loss_mean},
+                        {"train_loss": epoch_loss_mean, "learning_rate": epoch_lr},
                         step=int(epoch),
                     )
                 except Exception as e:
