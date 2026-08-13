@@ -5,8 +5,10 @@ flax parameter bytes (``*_train_state.jax``) which nothing downstream could
 convert — ``transform-onnx`` only reads torch state dicts, and HSSM consumes
 ONNX exclusively.
 
-The export follows the ecosystem's single-trial ONNX contract (see HSSMSpine
-CLAUDE.md): the graph is traced with a **concrete** ``(1, input_dim)`` dummy
+The export follows the ecosystem's single-trial ONNX contract; the canonical
+statement lives in HSSM's docs:
+https://lnccbrown.github.io/HSSM/how_to/custom_onnx_likelihoods/
+The graph is traced with a **concrete** ``(1, input_dim)`` dummy
 and no dynamic axes, exactly like the torch MLP exporter and the production
 networks on franklab/HSSM. Every dim is static, so HSSM's load-time check
 passes, and HSSM's rank-1-per-trial + ``jax.vmap`` consumption works because

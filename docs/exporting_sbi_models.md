@@ -3,7 +3,8 @@
 LANfactory's [`transform_sbi_to_onnx`](api/onnx.md) wraps a trained
 [`sbi`](https://github.com/sbi-dev/sbi) estimator and writes a single-trial
 ONNX file that HSSM's `loglik_kind="approx_differentiable"` path can consume
-exactly like a LAN export. Use it to bring sbi-trained NLE density estimators
+exactly like a LAN export (the artifact rules are collected in
+[The ONNX likelihood contract](https://lnccbrown.github.io/HSSM/how_to/custom_onnx_likelihoods/)). Use it to bring sbi-trained NLE density estimators
 or NRE ratio classifiers into a [HSSM](https://github.com/lnccbrown/HSSM) model.
 
 ## Installation

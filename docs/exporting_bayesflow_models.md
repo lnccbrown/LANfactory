@@ -1,5 +1,8 @@
 # Exporting bayesflow-trained networks to ONNX
 
+> The artifact rules every exporter here satisfies are collected in
+> [The ONNX likelihood contract](https://lnccbrown.github.io/HSSM/how_to/custom_onnx_likelihoods/).
+
 LANfactory's [`transform_bayesflow_to_onnx`](api/onnx.md) is the bayesflow
 sibling of [`transform_sbi_to_onnx`](exporting_sbi_models.md). It wraps a
 trained [`bayesflow`](https://github.com/bayesflow-org/bayesflow)
@@ -220,7 +223,7 @@ the caller.
 | Non-identity adapters | Numpy-only operations can't be baked into ONNX; see Constraint 4 above. Pointwise tensor adapter ops (log, sqrt, scale) are a candidate for v1.x. |
 | Transformer / attention summary networks | Contain `LayerNormalization` (no jaxonnxruntime handler) and dynamic-shape attention. |
 | FlowMatching, DiffusionModel, ConsistencyModel inference networks | `log_prob` requires ODE integration, not ONNX-exportable. |
-| `KERAS_BACKEND=jax` workflows | Use the bayesflow LRE-style in-memory JAX callable path (see [`bayesflow_lre_integration.ipynb`](https://github.com/lnccbrown/HSSM/blob/main/docs/tutorials/bayesflow_lre_integration.ipynb) in HSSM). |
+| `KERAS_BACKEND=jax` workflows | Use the bayesflow LRE-style in-memory JAX callable path (see [`bayesflow_lre_integration.ipynb`](https://lnccbrown.github.io/HSSM/tutorials/bayesflow_lre_integration/) in HSSM). |
 
 ## Numerical guarantees
 

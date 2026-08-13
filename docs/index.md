@@ -93,7 +93,8 @@ transform-onnx --network-config-file <network_config.pickle> \
 ```
 
 The resulting file can be used directly with
-[HSSM](https://lnccbrown.github.io/HSSM/). Networks trained outside LANfactory
+[HSSM](https://lnccbrown.github.io/HSSM/) — see
+[The ONNX likelihood contract](https://lnccbrown.github.io/HSSM/how_to/custom_onnx_likelihoods/) for the artifact rules. Networks trained outside LANfactory
 can be exported the same way — see the
 [sbi](exporting_sbi_models.md) and [bayesflow](exporting_bayesflow_models.md)
 export guides.
