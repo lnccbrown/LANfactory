@@ -1145,3 +1145,98 @@ def test_torch_mlp_factory_with_pickle_path(tmp_path):
 
     assert isinstance(model, TorchMLP)
     assert model.input_shape == 6
+
+
+# --- Batch path: views, not copies -----------------------------------------
+#
+# The per-batch range is always contiguous, so it is taken as a slice. That
+# makes both returns views into the loaded file, which is only sound because
+# the label bounds are applied once at load time — clamping per batch would
+# write through the view and mutate the cached file.
+
+
+def _theta_blocked_file(tmp_path, n_theta=20, per_theta=50, n_param=5):
+    """A file shaped like real training data: rows blocked by parameter set.
+
+    ssm-simulators writes N_SAMPLES_PER_PARAM consecutive rows per theta, so a
+    contiguous batch sees very few distinct theta and a shuffled one sees many.
+    """
+    import pickle
+
+    import numpy as np
+
+    n = n_theta * per_theta
+    theta = np.random.rand(n_theta, n_param).astype(np.float32)
+    X = np.empty((n, n_param + 2), dtype=np.float32)
+    X[:, :n_param] = np.repeat(theta, per_theta, axis=0)
+    X[:, n_param:] = np.random.randn(n, 2).astype(np.float32)
+    y = (np.random.randn(n) * 5).astype(np.float32)
+    path = tmp_path / "theta_blocked.pickle"
+    with open(path, "wb") as f:
+        pickle.dump({"lan_data": X, "lan_labels": y}, f, protocol=5)
+    return str(path), n_theta, n
+
+
+def test_batch_is_a_view_not_a_copy(tmp_path):
+    path, _, n = _theta_blocked_file(tmp_path)
+    ds = DatasetTorch(
+        file_ids=[path],
+        batch_size=n // 4,
+        features_key="lan_data",
+        label_key="lan_labels",
+    )
+    X, y = ds[0]
+    assert X.base is not None, "features batch should be a view, not a copy"
+    assert y.base is not None, "label batch should be a view, not a copy"
+
+
+def test_label_bounds_are_applied_to_the_whole_file_at_load(tmp_path):
+    """The clamp moved from per-batch to per-load.
+
+    Per batch it only ever touched the rows being served; at load it covers
+    the whole array. Checking the cached array directly is what distinguishes
+    the two — every served batch is clamped under either scheme.
+    """
+    path, _, n = _theta_blocked_file(tmp_path)
+    lower = -1.0
+    ds = DatasetTorch(
+        file_ids=[path],
+        batch_size=n // 4,
+        features_key="lan_data",
+        label_key="lan_labels",
+        label_lower_bound=lower,
+    )
+    ds[0]  # trigger a load
+    cached = ds.tmp_data["lan_labels"]
+    assert float(cached.min()) >= lower - 1e-6, (
+        "the whole cached file should be clamped, not just the served rows"
+    )
+    assert all(float(ds[i][1].min()) >= lower - 1e-6 for i in range(len(ds)))
+
+
+def test_shuffle_still_mixes_parameter_sets_within_a_batch(tmp_path):
+    """The load-time shuffle is load-bearing, not cosmetic.
+
+    Rows arrive blocked by theta, so an unshuffled contiguous batch would see
+    only batch_size / rows_per_theta distinct parameter vectors. Gradients over
+    such a batch are dominated by within-theta noise.
+    """
+    import numpy as np
+
+    path, n_theta, n = _theta_blocked_file(tmp_path, n_theta=20, per_theta=50)
+    batch_size = n // 4  # spans 5 theta blocks if taken contiguously
+    ds = DatasetTorch(
+        file_ids=[path],
+        batch_size=batch_size,
+        features_key="lan_data",
+        label_key="lan_labels",
+    )
+    X, _ = ds[0]
+    distinct = len(np.unique(X[:, :5], axis=0))
+    contiguous_would_give = batch_size // 50  # 5 blocks spanned by this slice
+    # A batch can never exceed min(batch_size, n_theta), so compare against
+    # the achievable ceiling rather than a multiple of the contiguous figure.
+    assert distinct >= 0.75 * n_theta, (
+        f"batch saw {distinct} of {n_theta} theta; contiguous access would "
+        f"give {contiguous_would_give}. The load-time shuffle is not working."
+    )

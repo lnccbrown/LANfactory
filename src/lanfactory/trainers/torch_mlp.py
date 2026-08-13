@@ -105,11 +105,12 @@ class DatasetTorch(torch.utils.data.Dataset):
         if ((index % self.batches_per_file) == 0) or (self.tmp_data == {}):
             self.__load_file(file_index=self.indexes[index // self.batches_per_file])
 
-        # Generate and return a batch
+        # Generate and return a batch.
+        #
+        # A slice, not np.arange: the range is always contiguous, and fancy
+        # indexing with it copies the batch where a slice is a free view.
         start_idx = (index % self.batches_per_file) * self.batch_size
-        end_idx = start_idx + self.batch_size
-        batch_ids = np.arange(start_idx, end_idx, 1)
-        X, y = self.__data_generation(batch_ids)
+        X, y = self.__data_generation(slice(start_idx, start_idx + self.batch_size))
         return X, y
 
     def __load_file(self, file_index: int) -> None:
@@ -124,6 +125,7 @@ class DatasetTorch(torch.utils.data.Dataset):
             shuffle_idx, :
         ]
         self.tmp_data[self.label_key] = self.tmp_data[self.label_key][shuffle_idx]
+        self.__apply_label_bounds()
         return
 
     def __init_file_shape(self) -> None:
@@ -165,25 +167,38 @@ class DatasetTorch(torch.utils.data.Dataset):
         return
 
     def __data_generation(
-        self, batch_ids: np.ndarray | None = None
+        self, batch_ids: np.ndarray | slice | None = None
     ) -> tuple[np.ndarray, np.ndarray]:
-        # Generates data containing batch_size samples
-        X = self.tmp_data[self.features_key][batch_ids, :]
-        if self.tmp_data[self.label_key].ndim == 1:
-            y = np.expand_dims(self.tmp_data[self.label_key][batch_ids], axis=1)
-        elif self.tmp_data[self.label_key].ndim == 2:
-            y = self.tmp_data[self.label_key][batch_ids]
+        """Return one batch.
+
+        With a slice (the normal path) both returns are *views* into the
+        loaded file — no copy. That is only safe because the label bounds are
+        applied once in ``__load_file`` rather than per batch: clamping here
+        would write through the view and mutate the cached file.
+        """
+        X = self.tmp_data[self.features_key][batch_ids]
+        labels = self.tmp_data[self.label_key]
+        if labels.ndim == 1:
+            y = labels[batch_ids][:, None]
+        elif labels.ndim == 2:
+            y = labels[batch_ids]
         else:  # pragma: no cover
-            bad_shape = str(self.tmp_data[self.label_key].shape)
-            raise ValueError(f"Label data has unexpected shape: {bad_shape}")
-
-        if self.label_lower_bound is not None:
-            y[y < self.label_lower_bound] = self.label_lower_bound
-
-        if self.label_upper_bound is not None:  # pragma: no cover
-            y[y > self.label_upper_bound] = self.label_upper_bound
+            raise ValueError(f"Label data has unexpected shape: {labels.shape}")
 
         return X, y
+
+    def __apply_label_bounds(self) -> None:
+        """Clamp labels once per file load, not once per batch.
+
+        Same total work — every row is visited exactly once either way — but
+        doing it here keeps the per-batch path free of in-place writes, which
+        is what lets it hand out views.
+        """
+        labels = self.tmp_data[self.label_key]
+        if self.label_lower_bound is not None:
+            np.maximum(labels, self.label_lower_bound, out=labels)
+        if self.label_upper_bound is not None:  # pragma: no cover
+            np.minimum(labels, self.label_upper_bound, out=labels)
 
 
 # --- Helper Functions for DataLoader Creation ---
@@ -695,7 +710,12 @@ class ModelTrainerTorchMLP:
         for epoch in range(self.train_config["n_epochs"]):
             cnt = 0
             epoch_s_t = time()
-            epoch_loss_sum = 0.0
+            # Accumulated ON DEVICE. `float(loss)` per step forced a
+            # host-device synchronisation on every iteration, so the CPU
+            # blocked until the GPU drained and the two never overlapped —
+            # pin_memory and non_blocking transfers were being paid for and
+            # then thrown away. Read it once at the end of the epoch instead.
+            epoch_loss_sum = torch.zeros((), device=self.dev)
 
             # Training loop
             for xb, yb in self.train_dl:
@@ -717,9 +737,12 @@ class ModelTrainerTorchMLP:
                 # Log training progress
                 self._log_training_progress(epoch, cnt, loss, verbose)
 
-                epoch_loss_sum += float(loss)
+                epoch_loss_sum += loss.detach()
                 cnt += 1
                 step_cnt += 1
+
+            # The one sync per epoch, after the loop has been queued.
+            epoch_loss_mean = float(epoch_loss_sum) / max(cnt, 1)
 
             print(
                 f"Epoch took {epoch} / {self.train_config['n_epochs']}, took {time() - epoch_s_t} seconds"
@@ -759,7 +782,7 @@ class ModelTrainerTorchMLP:
                         step=step_cnt,
                     )
                     mlflow.log_metrics(
-                        {"train_loss": epoch_loss_sum / max(cnt, 1)},
+                        {"train_loss": epoch_loss_mean},
                         step=int(epoch),
                     )
                 except Exception as e:
