@@ -20,14 +20,20 @@ That has two consequences worth internalising:
 
 ## The three network types
 
-LANfactory trains three variants, which differ in what they learn rather than
-in architecture:
+LANfactory trains three variants, which differ in what they learn — and in what
+their raw output means — rather than in architecture:
 
-| | Learns | Used for |
-|---|---|---|
-| **LAN** | log-likelihood of `(rt, choice)` | RT + choice inference |
-| **CPN** | choice probability | choice-only models |
-| **OPN** | probability of responding before a deadline | deadline / omission models |
+| | Learns | Training output | Loss | Used for |
+|---|---|---|---|---|
+| **LAN** | log-likelihood of `(rt, choice)` | `logprob` | Huber | RT + choice inference |
+| **CPN** | choice probability | `logits` | BCE-with-logits | choice-only models |
+| **OPN** | probability of responding before a deadline | `logits` | BCE-with-logits | deadline / omission models |
+
+The output column matters when you consume or validate an exported network:
+CPN and OPN heads emit **logits**, not probabilities. LANfactory's exporters
+apply the log-sigmoid transform at export time so the ONNX artifact emits log
+probabilities for every network type — but a network read straight from a
+training checkpoint has not had that applied.
 
 The [network types reference](network_types.md) carries the exact config
 deltas for each.
