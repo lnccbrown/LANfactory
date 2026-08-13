@@ -9,8 +9,9 @@ This module is a sibling of :mod:`lanfactory.onnx.transform_onnx` (the LAN
 exporter): "train a network and emit an ONNX HSSM can read" stays a single
 conceptual home in LANfactory regardless of which library trained the network.
 
-The exported graph follows the LAN-and-HSSM convention: a single concatenated
-input of **rank 1, shape ``(theta_dim + x_dim,)``**. Inside the graph the
+The exported graph is a single concatenated single-trial input of
+**rank 1, shape ``(theta_dim + x_dim,)``** (the contract invariant is concrete
+dims — rank is tracer-specific; the LAN exporters emit rank-2 ``(1, D)`` Gemm). Inside the graph the
 input is split into ``theta`` and ``x``, upranked to ``(1, …)`` to satisfy
 sbi's batched ``log_prob`` API, and routed through the trained estimator.
 HSSM vmaps this graph over trials, so the per-call input rank from HSSM is 1
