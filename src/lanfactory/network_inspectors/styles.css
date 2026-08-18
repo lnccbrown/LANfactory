@@ -19,6 +19,11 @@ div[role="radiogroup"] > label * {
     color: #0b1f3a !important;
 }
 
+div[data-baseweb="tab-list"] button[data-baseweb="tab"] {
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
 div[role="radiogroup"] > label:has(input:checked) {
     background: #dbeafe;
     color: #052249;
