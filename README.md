@@ -52,6 +52,23 @@ Necessary dependency should be installed automatically in the process.
 
 Check the basic tutorial [here](docs/basic_tutorial/basic_tutorial_lan_torch.ipynb).
 
+### Network Inspectors UI
+
+LANfactory includes a Streamlit interface for interactive network inspection
+workflows (KDE vs LAN likelihoods and LAN manifold plots).
+
+Install the UI dependencies:
+
+```bash
+uv sync --extra ui
+```
+
+Launch the app:
+
+```bash
+uv run network-inspectors-ui
+```
+
 ### Command Line Interface
 
 LANfactory includes a command line interface with the commands `jaxtrain` and `torchtrain`, which train neural networks using `jax` and `torch` as backends, respectively.

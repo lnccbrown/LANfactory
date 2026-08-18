@@ -4,44 +4,38 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import TYPE_CHECKING, TypedDict
 
 import matplotlib.pyplot as plt
 import numpy as np
 import plotly.graph_objects as go
 import seaborn as sns
+from matplotlib.figure import Figure
 from numpy.typing import NDArray
 
 from .config import ModelSpec, PlotConfig
-
-if TYPE_CHECKING:
-    import pandas as pd
+from .contracts import LikelihoodComparison, LikelihoodRow, ManifoldComputation
 
 logger = logging.getLogger(__name__)
 
 
-class LikelihoodResult(TypedDict):
-    """Likelihood arrays for one parameter vector."""
-
-    lan: NDArray[np.float64]
-    kdes: list[NDArray[np.float64]]
-
-
-def _save_figure(filename: str, cfg: PlotConfig) -> None:
+def _save_figure(fig: Figure, filename: str, cfg: PlotConfig) -> None:
     os.makedirs(cfg.save_dir, exist_ok=True)
-    plt.savefig(os.path.join(cfg.save_dir, filename), format="png", transparent=False)
+    fig.savefig(os.path.join(cfg.save_dir, filename), format="png", transparent=False)
 
 
-def plot_kde_vs_lan(
-    grid: NDArray[np.float64],
-    results: list[LikelihoodResult],
-    spec: ModelSpec,
+def _build_plot_data(
+    comparison: LikelihoodComparison,
+) -> tuple[NDArray[np.float64], list[LikelihoodRow], ModelSpec]:
+    return comparison.grid, comparison.rows, comparison.spec
+
+
+def build_kde_vs_lan_figure(
+    comparison: LikelihoodComparison,
     cfg: PlotConfig,
-) -> None:
-    """Render the KDE-vs-LAN comparison from precomputed likelihoods.
+) -> Figure:
+    """Build and return a matplotlib figure for KDE-vs-LAN likelihoods."""
+    grid, results, spec = _build_plot_data(comparison)
 
-    results: list of {"lan": array, "kdes": [arrays]}, one per parameter vector.
-    """
     rows = int(np.ceil(len(results) / cfg.cols))
     per_choice = grid.shape[0] // spec.n_choices
     sns.set(style="white", palette="muted", color_codes=True, font_scale=cfg.font_scale)
@@ -62,7 +56,7 @@ def plot_kde_vs_lan(
         row_tmp = i // cfg.cols
         col_tmp = i - (cfg.cols * row_tmp)
 
-        for j, kde_like in enumerate(res["kdes"]):
+        for j, kde_like in enumerate(res.kdes):
             if j == 0:
                 label = "KDE"
             else:
@@ -90,11 +84,10 @@ def plot_kde_vs_lan(
                         ax=ax[row_tmp, col_tmp],
                     )
 
-        lan_like = res["lan"]
         if spec.n_choices == 2:
             sns.lineplot(
                 x=grid[:, 0] * grid[:, 1],
-                y=lan_like,
+                y=res.lan,
                 color="green",
                 label="MLP",
                 alpha=1,
@@ -109,7 +102,7 @@ def plot_kde_vs_lan(
 
                 sns.lineplot(
                     x=grid[per_choice * k : per_choice * (k + 1), 0],
-                    y=lan_like[per_choice * k : per_choice * (k + 1)],
+                    y=res.lan[per_choice * k : per_choice * (k + 1)],
                     color="green",
                     label=label,
                     alpha=1,
@@ -140,22 +133,39 @@ def plot_kde_vs_lan(
         col_tmp = i - (cfg.cols * row_tmp)
         ax[row_tmp, col_tmp].axis("off")
 
-    plt.subplots_adjust(top=0.9)
-    plt.subplots_adjust(hspace=0.3, wspace=0.3)
+    fig.subplots_adjust(top=0.9)
+    fig.subplots_adjust(hspace=0.3, wspace=0.3)
+
+    return fig
+
+
+def plot_kde_vs_lan(
+    comparison: LikelihoodComparison,
+    cfg: PlotConfig,
+) -> None:
+    """Render the KDE-vs-LAN comparison from precomputed likelihoods.
+
+    comparison: computed likelihood payload from compute_kde_vs_lan_likelihoods.
+    """
+    fig = build_kde_vs_lan_figure(comparison, cfg)
 
     if cfg.save:
-        _save_figure("kde_vs_mlp_plot.png", cfg)
+        _save_figure(fig, "kde_vs_mlp_plot.png", cfg)
 
     if cfg.show:
         plt.show()
 
-    plt.close()
+    plt.close(fig)
 
 
-def plot_manifold(
-    manifold: pd.DataFrame, spec: ModelSpec, vary_name: str, cfg: PlotConfig
+def build_manifold_figure(
+    computation: ManifoldComputation, cfg: PlotConfig
 ) -> go.Figure:
-    """Render an interactive 3D LAN likelihood manifold."""
+    """Build and return an interactive Plotly manifold figure."""
+    manifold = computation.manifold
+    spec = computation.spec
+    vary_name = computation.vary_name
+
     plot_data = manifold.assign(signed_rt=manifold["rt"] * manifold["choice"])
     surface = (
         plot_data.pivot(index="vary", columns="signed_rt", values="likelihood")
@@ -184,6 +194,14 @@ def plot_manifold(
             "zaxis_title": "Likelihood",
         },
     )
+
+    return fig
+
+
+def plot_manifold(computation: ManifoldComputation, cfg: PlotConfig) -> go.Figure:
+    """Render an interactive 3D LAN likelihood manifold."""
+    fig = build_manifold_figure(computation, cfg)
+    spec = computation.spec
 
     if cfg.save:
         os.makedirs(cfg.save_dir, exist_ok=True)
