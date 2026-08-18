@@ -170,14 +170,14 @@ def _kde_tab(model: str, predictor, grid_spec: GridSpec, plot_cfg: PlotConfig) -
         value=6,
         help="Number of parameter vectors sampled from the model bounds.",
     )
-    n_samples = col_b.slider(
+    n_samples = samples_col.slider(
         "Simulator samples",
         min_value=100,
         max_value=5000,
         value=1000,
         help="Number of samples used per simulated dataset.",
     )
-    n_reps = col_c.slider(
+    n_reps = reps_col.slider(
         "KDE repetitions",
         min_value=1,
         max_value=30,
@@ -187,7 +187,7 @@ def _kde_tab(model: str, predictor, grid_spec: GridSpec, plot_cfg: PlotConfig) -
 
     parameter_df = _make_parameter_df(model=model, n_rows=n_parameter_sets, seed=seed)
     st.caption("Generated parameter vectors")
-    st.dataframe(parameter_df, use_container_width=True)
+    st.dataframe(parameter_df, width="content")
 
     if st.button("Run KDE vs LAN", use_container_width=True):
         with st.spinner("Computing likelihoods..."):
@@ -221,7 +221,7 @@ def _manifold_tab(
     edited_df = st.data_editor(
         base_parameter_df,
         num_rows="fixed",
-        use_container_width=True,
+        width="content",
     )
 
     vary_param = st.selectbox(
@@ -279,7 +279,7 @@ def _manifold_tab(
         )
         st.plotly_chart(fig, use_container_width=True)
         st.caption("Computed manifold table")
-        st.dataframe(computation.manifold, use_container_width=True)
+        st.dataframe(computation.manifold, width="content")
 
 
 def run() -> None:
@@ -421,20 +421,12 @@ def run() -> None:
         st.error(str(exc))
         st.stop()
 
-    st.markdown("## Choose Analysis View")
-    st.info("Select a view below. The 3D surface plot is in the '3D Manifold' view.")
-    view = st.radio(
-        "Analysis view",
-        options=["KDE vs LAN", "3D Manifold"],
-        horizontal=True,
-        help="Choose between 2D KDE/LAN comparison plots and the 3D manifold surface.",
-    )
+    kde_view, manifold_view = st.tabs(["KDE vs LAN", "3D Manifold"])
 
-    if view == "KDE vs LAN":
-        st.markdown("### KDE vs LAN Likelihood Comparison")
+    with kde_view:
         _kde_tab(model, predictor, grid_spec, plot_cfg)
-    else:
-        st.markdown("### 3D LAN Manifold Surface")
+
+    with manifold_view:
         _manifold_tab(model, predictor, grid_spec, plot_cfg)
 
 
