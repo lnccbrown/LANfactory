@@ -109,43 +109,6 @@ def _default_base_dir() -> str:
     return "data/torch_models"
 
 
-def _detected_torch_model_dirs() -> list[str]:
-    """Return likely torch model directories that contain at least one valid model."""
-    candidate_paths = [
-        Path("data/torch_models"),
-        Path("data/torch_models/lan"),
-        Path("data/torch_models/cpn"),
-        Path("data/torch_models/opn"),
-        Path("../data/torch_models"),
-        Path("../data/torch_models/lan"),
-        Path("../data/torch_models/cpn"),
-        Path("../data/torch_models/opn"),
-        Path.cwd() / "data" / "torch_models",
-        Path.cwd() / "data" / "torch_models" / "lan",
-        Path.cwd() / "data" / "torch_models" / "cpn",
-        Path.cwd() / "data" / "torch_models" / "opn",
-    ]
-
-    data_dir = Path("data")
-    if data_dir.exists():
-        candidate_paths.extend(data_dir.glob("**/torch_models"))
-        candidate_paths.extend(data_dir.glob("**/torch_models/lan"))
-        candidate_paths.extend(data_dir.glob("**/torch_models/cpn"))
-        candidate_paths.extend(data_dir.glob("**/torch_models/opn"))
-
-    discovered: list[str] = []
-    seen: set[str] = set()
-    for candidate in candidate_paths:
-        path_str = str(candidate)
-        if path_str in seen:
-            continue
-        seen.add(path_str)
-        if _available_models(path_str):
-            discovered.append(path_str)
-
-    return discovered
-
-
 def _make_parameter_df(model: str, n_rows: int, seed: int) -> pd.DataFrame:
     params = ssms.config.model_config[model]["params"]
     lb, ub = ssms.config.model_config[model]["param_bounds"]
@@ -376,21 +339,6 @@ def run() -> None:
     with st.sidebar, st.expander("Model Selection", expanded=True):
         if "torch_models_base_dir" not in st.session_state:
             st.session_state["torch_models_base_dir"] = _default_base_dir()
-
-        detected_dirs = _detected_torch_model_dirs()
-        if detected_dirs:
-            default_detected_idx = (
-                detected_dirs.index(st.session_state["torch_models_base_dir"])
-                if st.session_state["torch_models_base_dir"] in detected_dirs
-                else 0
-            )
-            selected_dir = st.selectbox(
-                "Detected torch model folders",
-                options=detected_dirs,
-                index=default_detected_idx,
-                help="Select a detected folder, or type a custom path below.",
-            )
-            st.session_state["torch_models_base_dir"] = selected_dir
 
         base_dir = st.text_input(
             "Torch models base directory",
