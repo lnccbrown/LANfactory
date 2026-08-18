@@ -155,8 +155,15 @@ def _make_parameter_df(model: str, n_rows: int, seed: int) -> pd.DataFrame:
 
 def _kde_tab(model: str, predictor, grid_spec: GridSpec, plot_cfg: PlotConfig) -> None:
     st.subheader("KDE vs LAN Likelihoods")
-    col_a, col_b, col_c = st.columns(3)
-    n_parameter_sets = col_a.slider(
+    seed_col, parameter_col, samples_col, reps_col = st.columns(4)
+    seed = seed_col.number_input(
+        "Random seed",
+        min_value=0,
+        max_value=2_000_000,
+        value=123,
+        help="Controls reproducible generation of parameter vectors.",
+    )
+    n_parameter_sets = parameter_col.slider(
         "Parameter sets",
         min_value=1,
         max_value=20,
@@ -176,13 +183,6 @@ def _kde_tab(model: str, predictor, grid_spec: GridSpec, plot_cfg: PlotConfig) -
         max_value=30,
         value=8,
         help="How many KDE estimates are overlaid for each parameter set.",
-    )
-    seed = st.number_input(
-        "Random seed",
-        min_value=0,
-        max_value=2_000_000,
-        value=123,
-        help="Controls reproducible generation of parameter vectors.",
     )
 
     parameter_df = _make_parameter_df(model=model, n_rows=n_parameter_sets, seed=seed)
