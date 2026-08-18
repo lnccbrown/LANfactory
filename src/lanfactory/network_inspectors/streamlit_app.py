@@ -50,30 +50,34 @@ def _load_stylesheet() -> str:
 
 
 def _available_models(base_dir: str) -> list[str]:
+    return sorted(_model_directories(base_dir))
+
+
+def _model_directories(base_dir: str) -> dict[str, Path]:
     model_root = Path(base_dir).expanduser()
     if not model_root.exists() or not model_root.is_dir():
-        return []
+        return {}
 
     valid_ssms_models = set(ssms.config.model_config.keys())
-    available = []
-    for model_dir in sorted(path for path in model_root.iterdir() if path.is_dir()):
+    model_directories: dict[str, Path] = {}
+    for model_dir in sorted(path for path in model_root.rglob("*") if path.is_dir()):
         if model_dir.name not in valid_ssms_models:
             continue
         has_state = any(model_dir.glob("*state_dict*"))
         has_cfg = any(model_dir.glob("*network_config*"))
         if has_state and has_cfg:
-            available.append(model_dir.name)
+            model_directories.setdefault(model_dir.name, model_dir)
 
-    return available
+    return model_directories
 
 
 def _resolve_model_paths(base_dir: str, model: str) -> tuple[Path, Path]:
-    model_dir = Path(base_dir).expanduser() / model
-    if not model_dir.exists():
+    model_dir = _model_directories(base_dir).get(model)
+    if model_dir is None:
         available = _available_models(base_dir)
         available_str = ", ".join(available) if available else "none detected"
         raise FileNotFoundError(
-            f"Model directory not found: {model_dir}. "
+            f"Model directory not found for '{model}' under {base_dir}. "
             "Set the base directory to your torch_models folder. "
             f"Detected models in this base dir: {available_str}."
         )
@@ -326,6 +330,10 @@ def run() -> None:
     st.title("LANfactory Network Inspectors")
     st.write(
         "Inspect trained LAN likelihood behavior with KDE comparisons and manifold plots."
+    )
+    st.caption(
+        "Network Inspectors currently support Torch models only. "
+        "Each model needs a state dict (.pt) and network config (.pickle)."
     )
     # st.caption(
     #     "Accessibility: all controls include visible labels, keyboard focus outlines, "
