@@ -153,7 +153,7 @@ def _make_parameter_df(model: str, n_rows: int, seed: int) -> pd.DataFrame:
     return pd.DataFrame(rng.uniform(lb, ub, size=(n_rows, len(params))), columns=params)
 
 
-def _kde_tab(model: str, predictor, grid_spec: GridSpec, plot_cfg: PlotConfig) -> None:
+def _kde_tab(model: str, predictor) -> None:
     st.subheader("KDE vs LAN Likelihoods")
     seed = st.number_input(
         "Random seed",
@@ -187,6 +187,52 @@ def _kde_tab(model: str, predictor, grid_spec: GridSpec, plot_cfg: PlotConfig) -
         help="How many KDE estimates are overlaid for each parameter set.",
     )
 
+    grid_col, plot_col = st.columns(2)
+    with grid_col, grid_col.expander("KDE Grid", expanded=True):
+        n_points_2c = st.slider(
+            "KDE grid points (2-choice)",
+            min_value=200,
+            max_value=5000,
+            value=2000,
+            help="Number of reaction-time grid points used for KDE/LAN comparison.",
+        )
+        rt_step_2c = st.number_input(
+            "KDE grid step (2-choice)",
+            value=0.0025,
+            help="Reaction-time spacing in the KDE/LAN evaluation grid.",
+        )
+
+    with plot_col, plot_col.expander("Plot", expanded=True):
+        cols = st.slider(
+            "KDE plot columns",
+            min_value=1,
+            max_value=6,
+            value=3,
+            help="Number of subplot columns for KDE/LAN comparison charts.",
+        )
+        alpha = st.slider(
+            "KDE alpha",
+            min_value=0.01,
+            max_value=0.8,
+            value=0.1,
+            help="Opacity of KDE overlay lines.",
+        )
+        font_scale = st.slider(
+            "KDE font scale",
+            min_value=0.8,
+            max_value=2.5,
+            value=1.3,
+            help="Scale factor for Seaborn text in the KDE chart.",
+        )
+
+    grid_spec = GridSpec(
+        n_points_2c=n_points_2c,
+        rt_step_2c=float(rt_step_2c),
+    )
+    plot_cfg = PlotConfig(
+        show=False, save=False, cols=cols, alpha=alpha, font_scale=font_scale
+    )
+
     parameter_df = _make_parameter_df(model=model, n_rows=n_parameter_sets, seed=seed)
     st.caption("Generated parameter vectors")
     st.dataframe(parameter_df, width="content")
@@ -210,31 +256,34 @@ def _kde_tab(model: str, predictor, grid_spec: GridSpec, plot_cfg: PlotConfig) -
         st.pyplot(fig, clear_figure=True, use_container_width=True)
 
 
-def _manifold_tab(
-    model: str, predictor, grid_spec: GridSpec, plot_cfg: PlotConfig
-) -> None:
+def _manifold_tab(model: str, predictor) -> None:
     st.subheader("LAN Manifold")
     params = ssms.config.model_config[model]["params"]
     defaults = ssms.config.model_config[model]["default_params"]
     lb, ub = ssms.config.model_config[model]["param_bounds"]
 
-    base_parameter_df = pd.DataFrame([defaults], columns=params)
-    st.caption("Base parameter vector")
-    edited_df = st.data_editor(
-        base_parameter_df,
-        num_rows="fixed",
-        width="content",
-    )
-
-    vary_param = st.selectbox(
-        "Parameter to sweep",
-        options=params,
-        index=0,
-        help="Choose one parameter to vary while others remain fixed.",
-    )
-    vary_idx = params.index(vary_param)
+    selected_vary_param = st.session_state.get("manifold_vary_param", params[0])
+    if selected_vary_param not in params:
+        selected_vary_param = params[0]
+    vary_idx = params.index(selected_vary_param)
     p_min = float(lb[vary_idx])
     p_max = float(ub[vary_idx])
+
+    with st.expander("Manifold Grid", expanded=True):
+        n_rt_steps = st.slider(
+            "Manifold RT steps",
+            min_value=50,
+            max_value=800,
+            value=300,
+            help="Number of reaction-time points for manifold evaluation.",
+        )
+        max_rt = st.slider(
+            "Manifold max RT",
+            min_value=1.0,
+            max_value=10.0,
+            value=5.0,
+            help="Maximum reaction time represented in manifold plots.",
+        )
 
     col_a, col_b, col_c = st.columns(3)
     sweep_min = col_a.number_input(
@@ -255,7 +304,27 @@ def _manifold_tab(
         help="Number of points between sweep min and sweep max.",
     )
 
-    if st.button("Run Manifold", use_container_width=True):
+    run_manifold = st.button("Run Manifold", use_container_width=True)
+
+    st.caption("Base parameter vector")
+    base_parameter_df = pd.DataFrame([defaults], columns=params)
+    edited_df = st.data_editor(
+        base_parameter_df,
+        num_rows="fixed",
+        width="content",
+    )
+    vary_param = st.selectbox(
+        "Parameter to sweep",
+        options=params,
+        index=params.index(selected_vary_param),
+        key="manifold_vary_param",
+        help="Choose one parameter to vary while others remain fixed.",
+    )
+
+    grid_spec = GridSpec(n_rt_steps=n_rt_steps, max_rt=max_rt)
+    plot_cfg = PlotConfig(show=False, save=False)
+
+    if run_manifold:
         if sweep_max <= sweep_min:
             st.error("Sweep max must be larger than sweep min.")
             return
@@ -304,118 +373,54 @@ def run() -> None:
 
     all_models = sorted(ssms.config.model_config.keys())
 
-    with st.sidebar:
-        with st.expander("Model Setup", expanded=True):
-            if "torch_models_base_dir" not in st.session_state:
-                st.session_state["torch_models_base_dir"] = _default_base_dir()
+    with st.sidebar, st.expander("Model Selection", expanded=True):
+        if "torch_models_base_dir" not in st.session_state:
+            st.session_state["torch_models_base_dir"] = _default_base_dir()
 
-            detected_dirs = _detected_torch_model_dirs()
-            if detected_dirs:
-                default_detected_idx = (
-                    detected_dirs.index(st.session_state["torch_models_base_dir"])
-                    if st.session_state["torch_models_base_dir"] in detected_dirs
-                    else 0
-                )
-                selected_dir = st.selectbox(
-                    "Detected torch model folders",
-                    options=detected_dirs,
-                    index=default_detected_idx,
-                    help="Select a detected folder, or type a custom path below.",
-                )
-                st.session_state["torch_models_base_dir"] = selected_dir
+        detected_dirs = _detected_torch_model_dirs()
+        if detected_dirs:
+            default_detected_idx = (
+                detected_dirs.index(st.session_state["torch_models_base_dir"])
+                if st.session_state["torch_models_base_dir"] in detected_dirs
+                else 0
+            )
+            selected_dir = st.selectbox(
+                "Detected torch model folders",
+                options=detected_dirs,
+                index=default_detected_idx,
+                help="Select a detected folder, or type a custom path below.",
+            )
+            st.session_state["torch_models_base_dir"] = selected_dir
 
-            base_dir = st.text_input(
-                "Torch models base directory",
-                key="torch_models_base_dir",
-                help="Folder containing model subfolders, each with state_dict and network_config files.",
-            )
-            available_models = _available_models(base_dir)
+        base_dir = st.text_input(
+            "Torch models base directory",
+            key="torch_models_base_dir",
+            help="Folder containing model subfolders, each with state_dict and network_config files.",
+        )
+        available_models = _available_models(base_dir)
 
-            if available_models:
-                default_model = (
-                    "ddm" if "ddm" in available_models else available_models[0]
-                )
-                model = st.selectbox(
-                    "Model",
-                    options=available_models,
-                    index=available_models.index(default_model),
-                    help="Choose a model that exists in the selected torch models directory.",
-                )
-                st.caption("Models detected on disk: " + ", ".join(available_models))
-            else:
-                default_model = "ddm" if "ddm" in all_models else all_models[0]
-                model = st.selectbox(
-                    "Model",
-                    options=all_models,
-                    index=all_models.index(default_model),
-                    help="Choose a model name. You still need matching files on disk.",
-                )
-                st.warning(
-                    "No valid model folders found in the selected base directory. "
-                    "Set a folder containing per-model subdirectories with both "
-                    "*state_dict* and *network_config* files."
-                )
-
-        with st.expander("Grid", expanded=True):
-            n_rt_steps = st.slider(
-                "Manifold RT steps",
-                min_value=50,
-                max_value=800,
-                value=300,
-                help="Number of reaction-time points for manifold evaluation.",
+        if available_models:
+            default_model = "ddm" if "ddm" in available_models else available_models[0]
+            model = st.selectbox(
+                "Model",
+                options=available_models,
+                index=available_models.index(default_model),
+                help="Choose a model that exists in the selected torch models directory.",
             )
-            max_rt = st.slider(
-                "Manifold max RT",
-                min_value=1.0,
-                max_value=10.0,
-                value=5.0,
-                help="Maximum reaction time represented in manifold plots.",
+            st.caption("Models detected on disk: " + ", ".join(available_models))
+        else:
+            default_model = "ddm" if "ddm" in all_models else all_models[0]
+            model = st.selectbox(
+                "Model",
+                options=all_models,
+                index=all_models.index(default_model),
+                help="Choose a model name. You still need matching files on disk.",
             )
-            n_points_2c = st.slider(
-                "KDE grid points (2-choice)",
-                200,
-                5000,
-                2000,
-                help="Number of reaction-time grid points used for KDE/LAN comparison.",
+            st.warning(
+                "No valid model folders found in the selected base directory. "
+                "Set a folder containing per-model subdirectories with both "
+                "*state_dict* and *network_config* files."
             )
-            rt_step_2c = st.number_input(
-                "KDE grid step (2-choice)",
-                value=0.0025,
-                help="Reaction-time spacing in the KDE/LAN evaluation grid.",
-            )
-
-        with st.expander("Plot", expanded=True):
-            cols = st.slider(
-                "KDE plot columns",
-                min_value=1,
-                max_value=6,
-                value=3,
-                help="Number of subplot columns for KDE/LAN comparison charts.",
-            )
-            alpha = st.slider(
-                "KDE alpha",
-                min_value=0.01,
-                max_value=0.8,
-                value=0.1,
-                help="Opacity of KDE overlay lines.",
-            )
-            font_scale = st.slider(
-                "Font scale",
-                min_value=0.8,
-                max_value=2.5,
-                value=1.3,
-                help="Scale factor for chart text.",
-            )
-
-    grid_spec = GridSpec(
-        n_rt_steps=n_rt_steps,
-        max_rt=max_rt,
-        n_points_2c=n_points_2c,
-        rt_step_2c=float(rt_step_2c),
-    )
-    plot_cfg = PlotConfig(
-        show=False, save=False, cols=cols, alpha=alpha, font_scale=font_scale
-    )
 
     try:
         predictor = _load_predictor(base_dir, model)
@@ -426,10 +431,10 @@ def run() -> None:
     kde_view, manifold_view = st.tabs(["KDE vs LAN", "3D Manifold"])
 
     with kde_view:
-        _kde_tab(model, predictor, grid_spec, plot_cfg)
+        _kde_tab(model, predictor)
 
     with manifold_view:
-        _manifold_tab(model, predictor, grid_spec, plot_cfg)
+        _manifold_tab(model, predictor)
 
 
 if __name__ == "__main__":
