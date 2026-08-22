@@ -3,6 +3,7 @@ requires = ["setuptools", "wheel"]
 
 [project.urls]
 "Homepage" = "https://github.com/lnccbrown/LANFactory"
+"Documentation" = "https://lnccbrown.github.io/LANfactory/"
 "Bug Tracker" = "https://github.com/lnccbrown/LANFactory/issues"
 
 [project]

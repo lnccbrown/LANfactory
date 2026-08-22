@@ -1,169 +1,61 @@
 <div style="position: relative; width: 100%;">
-  <img src="docs/images/mainlogo.png" style="width: 175px;">
+  <img src="docs/images/mainlogo.png" alt="LANfactory" style="width: 175px;">
   <a href="https://ccbs.carney.brown.edu/brainstorm" style="position: absolute; right: 0; top: 50%; transform: translateY(-50%);">
-    <img src="docs/images/Brain-Bolt-%2B-Circuits.gif" style="width: 100px;">
+    <img src="docs/images/Brain-Bolt-%2B-Circuits.gif" alt="Brown Brainstorm" style="width: 100px;">
   </a>
 </div>
 
-## LANfactory
+# LANfactory
 
 [![DOI](https://zenodo.org/badge/386076271.svg)](https://doi.org/10.5281/zenodo.17137303)
 ![PyPI](https://img.shields.io/pypi/v/lanfactory)
-![PyPI_dl](https://img.shields.io/pypi/dm/lanfactory)
-[![GitHub pull requests](https://img.shields.io/github/issues-pr/lnccbrown/LANfactory)](https://github.com/lnccbrown/LANfactory/pulls)
-![Python Version](https://img.shields.io/pypi/pyversions/lanfactory)
+![PyPI downloads](https://img.shields.io/pypi/dm/lanfactory)
 [![Run tests](https://github.com/lnccbrown/LANfactory/actions/workflows/run_tests.yml/badge.svg)](https://github.com/lnccbrown/LANfactory/actions/workflows/run_tests.yml)
-[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![codecov](https://codecov.io/gh/lnccbrown/LANfactory/branch/main/graph/badge.svg)](https://codecov.io/gh/lnccbrown/LANfactory)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+LANfactory trains likelihood approximation networks (LANs), choice probability
+networks (CPNs), and option probability networks (OPNs) with PyTorch or
+JAX/Flax. It exports concrete-shape ONNX artifacts for use as likelihoods in
+[HSSM](https://lnccbrown.github.io/HSSM/).
 
-Lightweight python package to help with training [LANs](https://elifesciences.org/articles/65074) (Likelihood approximation networks).
+[Documentation](https://lnccbrown.github.io/LANfactory/) ·
+[Start with the PyTorch tutorial](https://lnccbrown.github.io/LANfactory/basic_tutorial/basic_tutorial_lan_torch/) ·
+[API reference](https://lnccbrown.github.io/LANfactory/api/trainers/) ·
+[HSSM ecosystem map](https://lnccbrown.github.io/HSSM/ecosystem/)
 
-LANfactory also ships an ONNX exporter for [`sbi`](https://github.com/sbi-dev/sbi)-trained
-neural likelihood (NLE) and neural ratio (NRE) estimators, producing files
-HSSM can consume via its `loglik_kind="approx_differentiable"` path. See the
-[Exporting sbi Models guide](docs/exporting_sbi_models.md).
+## Install
 
-Please find the original [documentation here](https://lnccbrown.github.io/LANfactory/).
-
-### Cite LANfactory
-
-Use this DOI to cite `lanfactory`: [https://doi.org/10.5281/zenodo.17137303](https://doi.org/10.5281/zenodo.17137303)
-
-### Quick Start
-
-The `LANfactory` package is a light-weight convenience package for training `likelihood approximation networks` (LANs) in torch (or jaxtrain), starting from supplied training data.
-
-[LANs](https://elifesciences.org/articles/65074), although more general in potential scope of applications, were conceived in the context of sequential sampling modeling
-to account for cognitive processes giving rise to *choice* and *reaction time* data in *n-alternative forced choice experiments* commonly encountered in the cognitive sciences.
-
-For a basic tutorial on how to use the `LANfactory` package, please refer to the [basic tutorial notebook](docs/basic_tutorial/basic_tutorial_lan_torch.ipynb).
-
-#### Install
-
-To install the `LANfactory` package type,
-
-`pip install lanfactory`
-
-Necessary dependency should be installed automatically in the process.
-
-### Basic Tutorial
-
-Check the basic tutorial [here](docs/basic_tutorial/basic_tutorial_lan_torch.ipynb).
-
-### Command Line Interface
-
-LANfactory includes a command line interface with the commands `jaxtrain` and `torchtrain`, which train neural networks using `jax` and `torch` as backends, respectively.
-
-**Examples**
 ```bash
-jaxtrain --config-path config.yaml --training-data-folder my_generated_data --network-id 0 --dl-workers 3 --networks-path-base my_trained_network
+pip install lanfactory
 ```
+
+Optional integrations are available through the `mlflow`, `hf`, `sbi`, and
+`bayesflow` extras, or together through `lanfactory[all]`. The documentation is
+the canonical source for training, export, configuration, and sharing guidance.
+
+## Contributor bootstrap
+
+Install the development environment and run the package gates:
+
 ```bash
-torchtrain --config-path config.yaml --training-data-folder my_generated_data --network-id 0 --dl-workers 3 --networks-path-base my_trained_network
+uv sync --all-groups
+uv run pytest tests/
+uv run ruff check src/lanfactory
+uv run ruff format --check .
 ```
 
-`jaxtrain` and `torchtrain` share these core arguments
-* `--config-path`: Path to the YAML config file (optional)
-* `--training-data-folder`: Path to folder with data to train the neural network on
-* `--networks-path-base`: Path to the output folder for trained neural network
-* `--network-id`: ID for the neural network to train (default: 0)
-* `--dl-workers`: Number of cores to use with the dataloader class (default: 1)
-* `--log-level`: Set the logging level (default: WARNING)
+Build or serve the documentation through the repository-owned entry point:
 
-You can also view the help to see further documentation.
-
-Below is a sample (default) configuration file you can use with `jaxtrain` or `torchtrain`.
-
-```yaml
-NETWORK_TYPE: "lan"
-CPU_BATCH_SIZE: 1000
-GPU_BATCH_SIZE: 50000
-GENERATOR_APPROACH: "lan"
-OPTIMIZER_: "adam"
-N_EPOCHS: 20
-MODEL: "ddm"
-SHUFFLE: True
-LAYER_SIZES: [[100, 100, 100, 1], [100, 100, 100, 100, 1], [100, 100, 100, 100, 100, 1],
-              [120, 120, 120, 1], [120, 120, 120, 120, 1], [120, 120, 120, 120, 120, 1]]
-ACTIVATIONS: [['tanh', 'tanh', 'tanh'],
-              ['tanh', 'tanh', 'tanh', 'tanh'],
-              ['tanh', 'tanh', 'tanh', 'tanh', 'tanh'],
-              ['tanh', 'tanh', 'tanh'],
-              ['tanh', 'tanh', 'tanh', 'tanh'],
-              ['tanh', 'tanh', 'tanh', 'tanh', 'tanh']] # specifies all but output layer activation (output layer activation is determined by)
-WEIGHT_DECAY: 0.0
-TRAIN_VAL_SPLIT: 0.5
-N_TRAINING_FILES: 10000 # can be list
-LABELS_LOWER_BOUND: np.log(1e-7)
-LEARNING_RATE: 0.001
-LR_SCHEDULER: 'reduce_on_plateau'
-LR_SCHEDULER_PARAMS:
-  factor: 0.1
-  patience: 2
-  threshold: 0.001
-  min_lr: 0.00000001
-  verbose: True
+```bash
+./scripts/docs.sh build
+./scripts/docs.sh serve
 ```
 
-Configuration file parameter details follow:
+Notebook execution remains a separate package test workflow; the documentation
+build renders the committed notebook outputs without executing them.
 
-| Option | Definition |
-| ------ | ---------- |
-| `NETWORK_TYPE` | The type of network you want to train. Other options include "cpn", "opn", "gonogo" and "cpn_bce" |
-| `CPU_BATCH_SIZE` | Number of samples to work through before updating internal model parameters, when CPU is being used |
-| `GPU_BATCH_SIZE` | Number of samples to work through before updating internal model parameters, when GPU is being used |
-| `GENERATOR_APPROACH` | Compatible training data generator to train the respective LAN |
-| `OPTIMIZER` | Optimization algorithm used to train the network |
-| `N_EPOCHS` | Number of passes through the entire training dataset |
-| `MODEL` | Type of model that was simulated |
-| `SHUFFLE` | Boolean that represents whether training data is shuffled before each epoch |
-| `LAYER_SIZES` | Number of neurons in each layer of the neural network. Contains multiple vectors of layer sizes to choose the best network after iterating through all networks |
-| `ACTIVATIONS` | Type of function that decides whether a neuron should be activated or not, depending on the weighted sum of the inputs it receives. Contains multiple options due to iteration through multiple networks |
-| `WEIGHT_DECAY` | Controls the amount of regularization to prevent overfitting, also known as L2 regularization |
-| `TRAIN_VAL_SPLIT` | Percentage of files used for training data vs. validation |
-| `N_TRAINING_FILES` | Max number of training files to use for training and validation |
-| `LABELS_LOWER_BOUND` | Minimum value for training labels to prevent extreme or undefined values |
-| `LEARNING_RATE` | A hyperparameter that controls how much the model weights are adjusted during training. A smaller learning rate means slower training but potentially more accurate results |
-| `LR_SCHEDULER` | The learning rate scheduler used to adapt the learning rate during training. `reduce_on_plateau` reduces the learning rate when the validation loss stops improving. |
-| `LR_SCHEDULER_PARAMS` | A dictionary specifying the parameters for the learning rate scheduler. It includes: `factor` (multiplier applied to reduce the LR), `patience` (number of epochs with no improvement before reducing LR), `threshold` (minimum change to qualify as improvement), `min_lr` (minimum LR allowed), and `verbose` (whether to print updates). |
+## Citation
 
-To make your own configuration file, you can copy the example above into a new `.yaml` file and modify it with your preferences.
-
-If you are using `uv`, you can also use the `uv run` command to run `jaxtrain` or `torchtrain` from the command line
-
-### TorchMLP to ONNX Converter
-
-Once you have trained your model, you can convert it to the ONNX format using the provided `transform-onnx` command.
-
-```sh
-$ transform-onnx --help
- Usage: transform-onnx [OPTIONS]
-
- Convert a TorchMLP model to ONNX format.
-
-
-╭─ Options ───────────────────────────────────────────────────────────────────────────────────╮
-│ *  --network-config-file        TEXT     Path to the network configuration file (pickle).   │
-│                                          [required]                                         │
-│ *  --state-dict-file            TEXT     Path to the state dictionary file. [required]      │
-│ *  --input-shape                INTEGER  Size of the input tensor for the model. [required] │
-│ *  --output-onnx-file           TEXT     Path to the output ONNX file. [required]           │
-│    --help                                Show this message and exit.                        │
-╰─────────────────────────────────────────────────────────────────────────────────────────────╯
-```
-
-#### Example
-
-```sh
-$ transform-onnx --network-config-file my_lca_no_bias_4_torch_network_config.pkl \
-                 --state-dict-file my_lca_no_bias_4_torch_state_dict.pt \
-                 --input-shape 11 \
-                 --output-onnx-file my_lca_no_bias_4_torch.onnx
-```
-The produced onnx file can be used directly with the [`HSSM`](https://github.com/lnccbrown/HSSM) package.
-
-We hope this package may be helpful in case you attempt to train [LANs](https://elifesciences.org/articles/65074) for your own research.
-
-#### END
+Use the archived LANfactory release DOI:
+[10.5281/zenodo.17137303](https://doi.org/10.5281/zenodo.17137303).

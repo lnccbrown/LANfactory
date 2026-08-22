@@ -3,6 +3,7 @@ site_url: https://lnccbrown.github.io/LANfactory/
 repo_name: lnccbrown/LANfactory
 repo_url: https://github.com/lnccbrown/LANfactory
 edit_uri: edit/main/docs
+exclude_docs: overrides/
 
 nav:
   - Home:
@@ -124,14 +125,11 @@ theme:
         icon: material/brightness-4
         name: Switch to automatic mode
 
-copyright: >-
-  Copyright &copy; Brown University —
-  <a href="https://lnccbrown.github.io/HSSM/">HSSM</a> ·
-  <a href="https://lnccbrown.github.io/ssm-simulators/">ssm-simulators</a> ·
-  <a href="https://lnccbrown.github.io/LANfactory/">LANfactory</a>
+copyright: Copyright &copy; 2021 Alexander Fengler. MIT License.
 
 extra:
   homepage: "https://lnccbrown.github.io/LANfactory/"
+  release_announcement: true
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/lnccbrown/LANfactory
