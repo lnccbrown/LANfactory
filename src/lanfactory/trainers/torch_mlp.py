@@ -659,23 +659,41 @@ class ModelTrainerTorchMLP:
                     last_epoch=-1,
                 )
             elif self.train_config["lr_scheduler"] == "cosine":
-                # T_max defaults to the run length, which is what makes cosine
-                # worth having: the rate reaches eta_min exactly as training
-                # ends, with no dependence on when a plateau happened to be
-                # detected. Two runs of one config therefore share an identical
-                # lr trajectory, which reduce_on_plateau cannot promise.
+                # T_max defaults to the run length. What makes cosine worth
+                # having is that the whole trajectory is fixed in advance by
+                # that number, so two runs of one config anneal identically —
+                # something reduce_on_plateau cannot promise, since its cuts
+                # land wherever the validation noise puts them.
+                #
+                # The final epoch trains near eta_min rather than exactly at
+                # it: the loop reads the rate before stepping, so epoch n uses
+                # lr(n-1). Setting T_max = n_epochs - 1 would hit eta_min
+                # exactly and is worse — with the default eta_min=0 the last
+                # epoch would train at a learning rate of zero and learn
+                # nothing. At T_max = n_epochs the last epoch runs at a few
+                # percent of the initial rate, which is the intent.
+                params = self.train_config["lr_scheduler_params"]
+                t_max = params.get("t_max", self.train_config["n_epochs"])
+                eta_min = params.get("min_lr", 0.0)
+                # Both are fatal rather than merely odd, and both are quiet:
+                # T_max=0 raises ZeroDivisionError from inside the first
+                # step(), after training has already begun; an eta_min above
+                # the initial rate makes cosine *raise* the learning rate for
+                # the whole run (measured: 0.010 -> 0.453 over five epochs).
+                if t_max <= 0:
+                    raise ValueError(
+                        f"cosine needs t_max > 0, got {t_max}. It defaults to "
+                        "n_epochs, so check that n_epochs is set."
+                    )
+                base_lr = self.train_config["learning_rate"]
+                if not 0.0 <= eta_min <= base_lr:
+                    raise ValueError(
+                        f"cosine needs 0 <= min_lr <= learning_rate, got "
+                        f"min_lr={eta_min} with learning_rate={base_lr}. Above "
+                        "the initial rate the schedule anneals upward."
+                    )
                 self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
-                    self.optimizer,
-                    T_max=(
-                        self.train_config["lr_scheduler_params"]["t_max"]
-                        if "t_max" in self.train_config["lr_scheduler_params"]
-                        else self.train_config["n_epochs"]
-                    ),
-                    eta_min=(
-                        self.train_config["lr_scheduler_params"]["min_lr"]
-                        if "min_lr" in self.train_config["lr_scheduler_params"]
-                        else 0.0
-                    ),
+                    self.optimizer, T_max=t_max, eta_min=eta_min
                 )
             else:
                 # Silently ignoring a typo here costs a whole training run:
