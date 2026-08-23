@@ -1369,5 +1369,14 @@ def test_the_logged_learning_rate_is_the_one_the_epoch_actually_used(
     assert logged[-1] > 0.0
 
 
+@pytest.mark.parametrize("name", ["cosinne", "plateau", "CosineAnnealingLR"])
+def test_an_unrecognised_scheduler_name_is_refused(name):
+    # The expensive failure mode: a typo used to fall through silently, and the
+    # job then trained a full run at a constant rate with nothing in the record
+    # saying the requested schedule never existed.
+    with pytest.raises(ValueError, match="Unknown lr_scheduler"):
+        _scheduler_trainer(name, {})
+
+
 def test_no_scheduler_is_still_allowed():
     assert _scheduler_trainer(None, {}).scheduler is None
