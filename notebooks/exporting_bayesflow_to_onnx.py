@@ -33,10 +33,10 @@ def _(mo):
     hssm.HSSM(loglik="model.onnx", loglik_kind="approx_differentiable")
     ```
 
-    This is the bayesflow sibling of the [sbi tutorial](exporting_sbi_to_onnx.ipynb):
+    This is the bayesflow sibling of the [sbi tutorial](../exporting_sbi_to_onnx/):
     same **train → export → verify** loop, with bayesflow's Keras-backed specifics.
     For the supported-architecture matrix and constraints, see the reference guide
-    [Exporting bayesflow Models](../exporting_bayesflow_models.md).
+    [Exporting bayesflow Models](../../exporting_bayesflow_models/).
     """)
     return
 
