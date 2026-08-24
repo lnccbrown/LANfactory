@@ -22,16 +22,12 @@ def _():
 @app.cell
 def _(mo):
     mo.md(r"""
-    # Exporting a `bayesflow` model to ONNX for HSSM
+    # Export a `bayesflow` model to ONNX
 
     [`bayesflow`](https://github.com/bayesflow-org/bayesflow) trains amortized
     neural likelihood (`ContinuousApproximator`) and ratio (`RatioApproximator`)
     estimators. LANfactory's `transform_bayesflow_to_onnx` exports them to the
-    same single-trial ONNX graph HSSM consumes from any source:
-
-    ```python
-    hssm.HSSM(loglik="model.onnx", loglik_kind="approx_differentiable")
-    ```
+    same single-trial ONNX graph HSSM consumes from any source.
 
     This is the bayesflow sibling of the [sbi tutorial](../exporting_sbi_to_onnx/):
     same **train → export → verify** loop, with bayesflow's Keras-backed specifics.
@@ -169,8 +165,10 @@ def _(mo):
 
     `transform_bayesflow_to_onnx` bakes the standardizer's accumulated mean/std
     into the graph as constants (sidestepping the dynamic-shape ops the live Keras
-    layer would emit) and writes a **rank-1** single-trial graph, opset 17 — the
-    same contract as the sbi and LAN exporters, so HSSM consumes it identically.
+    layer would emit) and writes a **rank-1** single-trial graph, opset 17. Rank
+    1 is an exporter detail: LAN graphs may instead use a concrete `(1, D)`
+    input. Fully concrete single-trial dimensions are the shared contract, so
+    HSSM consumes both forms identically.
     """)
     return
 
@@ -290,28 +288,15 @@ def _(eval_all, mo, np, theta_ui, x_ui):
 @app.cell
 def _(mo):
     mo.md(r"""
-    ## 4. Consume it in HSSM
+    ## 4. Continue in HSSM
 
-    The `.onnx` file drops into HSSM exactly like a LAN or sbi export:
+    LANfactory owns training, export, and cross-runtime verification. HSSM owns
+    model configuration and sampling with the resulting file. Continue with
+    HSSM's [single-trial ONNX contract](https://lnccbrown.github.io/HSSM/how_to/custom_onnx_likelihoods/)
+    and [BayesFlow NLE integration tutorial](https://lnccbrown.github.io/HSSM/tutorials/bayesflow_nle_onnx_integration/)
+    for model configuration and sampling.
 
-    ```python
-    import jax
-    jax.config.update("jax_enable_x64", True)  # if your HSSM version doesn't self-manage it
-
-    import hssm
-    model = hssm.HSSM(
-        data=obs_data,
-        model="ddm",
-        loglik_kind="approx_differentiable",
-        loglik="ddm_bayesflow_nle.onnx",
-        p_outlier=0,
-    )
-    idata = model.sample(sampler="numpyro", draws=500, tune=500, chains=2)
-    ```
-
-    For the consumption side end to end, see HSSM's
-    [Build HSSM models starting from ONNX files](https://github.com/lnccbrown/HSSM/blob/main/docs/tutorials/blackbox_contribution_onnx_example.ipynb)
-    tutorial. The **NRE** path is analogous: train a `RatioApproximator` and pass
+    The **NRE** export path is analogous: train a `RatioApproximator` and pass
     `mode="nre"` to `transform_bayesflow_to_onnx`.
     """)
     return

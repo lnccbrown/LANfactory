@@ -22,17 +22,12 @@ def _():
 @app.cell
 def _(mo):
     mo.md(r"""
-    # Exporting an `sbi` model to ONNX for HSSM
+    # Export an `sbi` model to ONNX
 
     [`sbi`](https://github.com/sbi-dev/sbi) trains neural likelihood (NLE) and
     ratio (NRE) estimators. HSSM can use them as differentiable likelihoods —
     *if* they are exported to a single-trial ONNX graph. LANfactory's
-    `transform_sbi_to_onnx` does exactly that, so the user gesture into HSSM is
-    identical to a native LAN file:
-
-    ```python
-    hssm.HSSM(loglik="model.onnx", loglik_kind="approx_differentiable")
-    ```
+    `transform_sbi_to_onnx` does exactly that.
 
     This notebook runs the full **train → export → verify** loop end to end on
     a tiny toy, then points you at HSSM for the consumption side. For the
@@ -121,7 +116,11 @@ def _(BoxUniform, NLE_A, THETA_DIM, torch):
         low=torch.full((THETA_DIM,), -3.0),
         high=torch.full((THETA_DIM,), 3.0),
     )
-    _inference = NLE_A(prior=prior, density_estimator="maf")
+    _inference = NLE_A(
+        prior=prior,
+        density_estimator="maf",
+        show_progress_bars=False,
+    )
     _theta = prior.sample((2000,))
     _x = _theta + torch.randn_like(_theta)  # x | θ ~ N(θ, I)
 
@@ -140,8 +139,10 @@ def _(mo):
     ## 2. Export to ONNX
 
     `transform_sbi_to_onnx` wraps the trained estimator into a **rank-1**
-    single-trial graph (parameters first, observations second; opset 17). The
-    rank-1 contract is what lets HSSM `vmap` the graph over trials.
+    single-trial graph (parameters first, observations second; opset 17). Rank
+    1 is specific to this exporter; the shared contract is that every input
+    dimension is concrete. HSSM then `vmap`s the compliant single-trial graph
+    over trials.
     """)
     return
 
@@ -252,32 +253,17 @@ def _(estimator, eval_backends, mo, np, theta_ui, torch, x_ui):
 @app.cell
 def _(mo):
     mo.md(r"""
-    ## 4. Consume it in HSSM
+    ## 4. Continue in HSSM
 
-    The `.onnx` file drops into HSSM exactly like a LAN export — HSSM handles
-    the `vmap` over trials and (recent versions) the x64 flag:
+    LANfactory owns training, export, and cross-runtime verification. HSSM owns
+    model configuration and sampling with the resulting file. Continue with
+    HSSM's [single-trial ONNX contract](https://lnccbrown.github.io/HSSM/how_to/custom_onnx_likelihoods/)
+    and [sbi NRE integration tutorial](https://lnccbrown.github.io/HSSM/tutorials/sbi_nre_integration/)
+    for model configuration and sampling.
 
-    ```python
-    import jax
-    jax.config.update("jax_enable_x64", True)  # if your HSSM version doesn't self-manage it
-
-    import hssm
-    model = hssm.HSSM(
-        data=obs_data,                      # DataFrame with rt / response columns
-        model="ddm",
-        loglik_kind="approx_differentiable",
-        loglik="ddm_nle.onnx",
-        p_outlier=0,
-    )
-    idata = model.sample(sampler="numpyro", draws=500, tune=500, chains=2)
-    ```
-
-    For the consumption side end to end — defining the likelihood, building the
-    model, sampling — see HSSM's
-    [Build HSSM models starting from ONNX files](https://github.com/lnccbrown/HSSM/blob/main/docs/tutorials/blackbox_contribution_onnx_example.ipynb)
-    tutorial. The **NRE** path is identical: train an sbi NRE ratio classifier
-    (e.g. `NRE_A`, `NRE_B`, `NRE_C`, or `BNRE`) and pass `mode="nre"` to
-    `transform_sbi_to_onnx`.
+    The **NRE** export path is identical: train an sbi NRE ratio classifier
+    (for example `NRE_A`, `NRE_B`, `NRE_C`, or `BNRE`) and pass `mode="nre"`
+    to `transform_sbi_to_onnx`.
     """)
     return
 
