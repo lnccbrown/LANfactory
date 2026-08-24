@@ -3,6 +3,7 @@ requires = ["setuptools", "wheel"]
 
 [project.urls]
 "Homepage" = "https://github.com/lnccbrown/LANFactory"
+"Documentation" = "https://lnccbrown.github.io/LANfactory/"
 "Bug Tracker" = "https://github.com/lnccbrown/LANFactory/issues"
 
 [project]
@@ -100,16 +101,14 @@ dev = [
     "marimo>=0.23",
 ]
 docs = [
-    "mkdocs>=1.6",
-    "mkdocs-material>=9.5",
-    "mkdocstrings[python]>=0.26",
-    "mkdocs-jupyter>=0.25",
-    "mkdocs-autorefs>=1.2",
-    # <1.2.3: the 1.2.3 release (2026-03-28) adds a dependency on "properdocs",
-    # an MkDocs impostor fork that injects a deceptive migration banner into
-    # every build. 1.2.2 depends only on mkdocs. Bump deliberately, after
-    # verifying upstream has removed the properdocs dependency.
-    "mkdocs-redirects>=1.2,<1.2.3",
+    "mkdocs==1.6.1",
+    "mkdocs-material==9.7.7",
+    "mkdocstrings==1.0.6",
+    "mkdocstrings-python==2.0.5",
+    "mkdocs-jupyter==0.26.3",
+    "mkdocs-autorefs==1.4.4",
+    # 1.2.3 depends on ProperDocs, which injects an unrelated migration banner.
+    "mkdocs-redirects==1.2.2",
 ]
 
 [tool.setuptools.packages.find]

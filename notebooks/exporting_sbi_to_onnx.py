@@ -37,7 +37,7 @@ def _(mo):
     This notebook runs the full **train → export → verify** loop end to end on
     a tiny toy, then points you at HSSM for the consumption side. For the
     supported-architecture matrix and constraints, see the reference guide
-    [Exporting sbi Models](../exporting_sbi_models.md).
+    [Exporting sbi Models](../../exporting_sbi_models/).
     """)
     return
 

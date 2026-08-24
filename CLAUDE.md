@@ -22,7 +22,7 @@ notebooks/                     # Test notebooks
 ## Build & Tooling
 
 - **Build system:** setuptools (pure Python, no compiled extensions)
-- **Package manager:** uv (with `uv.lock`)
+- **Package manager:** uv (`uv.lock` is intentionally ignored in this repository)
 - **Python:** >=3.12, <3.15 (classifiers target 3.12, 3.13, 3.14)
 - **Linting:** ruff (line length 88, via pre-commit)
 - **Type checking:** mypy
@@ -41,8 +41,8 @@ uv run pytest tests/
 uv run ruff check src/lanfactory && uv run ruff format --check .
 
 # Build docs
-uv run mkdocs build
-uv run mkdocs serve
+./scripts/docs.sh build
+./scripts/docs.sh serve
 
 # Train a network (PyTorch)
 uv run torchtrain --config-path <yaml> --training-data-folder <dir> --networks-path-base <dir>
