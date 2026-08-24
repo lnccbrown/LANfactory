@@ -23,10 +23,12 @@ nav:
       - "Network types: LAN, CPN, OPN": network_types.md
       - sbi export — architectures and constraints: exporting_sbi_models.md
       - bayesflow export — architectures and constraints: exporting_bayesflow_models.md
+      - Command-line interface: api/cli.md
       - API:
           - config: api/config.md
           - hf: api/hf.md
           - onnx: api/onnx.md
+          - network_inspectors: api/network_inspectors.md
           - trainers: api/trainers.md
           - utils: api/utils.md
 

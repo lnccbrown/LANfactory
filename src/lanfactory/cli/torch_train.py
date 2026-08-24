@@ -99,7 +99,7 @@ def main(
         autocompletion=lambda: ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
     ),
 ):
-    """Train a JAX neural network using the provided configuration."""
+    """Train a PyTorch neural network using the provided configuration."""
 
     # Set up logging ------------------------------------------------
     logging.basicConfig(
