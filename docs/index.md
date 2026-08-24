@@ -40,9 +40,9 @@ and `lanfactory[bayesflow]` (ONNX export of externally trained networks), or
 
 ## Ecosystem fit
 
-LANfactory is the network-training layer of the HSSM ecosystem: it trains
-LAN/CPN/OPN networks on simulated data and exports them to ONNX in the form
-that HSSM consumes as likelihoods.
+LANfactory is the network-training layer of the HSSM ecosystem: it trains LAN,
+CPN, OPN, and `gonogo` networks on simulated data and exports them to ONNX in
+the form that HSSM consumes as likelihoods.
 
 For the full map — what each package owns, how artifacts flow between them,
 and which versions work together — see

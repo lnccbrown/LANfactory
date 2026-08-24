@@ -212,7 +212,7 @@ def _(
 
 @app.cell
 def _(MODEL, MODEL_FOLDER, jax_trainer):
-    _train_state = jax_trainer.train_and_evaluate(
+    train_state = jax_trainer.train_and_evaluate(
         output_folder=MODEL_FOLDER,
         output_file_id=MODEL,
         run_id="jax",
@@ -220,7 +220,7 @@ def _(MODEL, MODEL_FOLDER, jax_trainer):
         verbose=1,
         save_outputs=True,
     )
-    return
+    return (train_state,)
 
 
 @app.cell(hide_code=True)
@@ -245,7 +245,9 @@ def _(lanfactory, network_config):
 
 
 @app.cell
-def _(MODEL, MODEL_FOLDER, jax_infer, model_config):
+def _(MODEL, MODEL_FOLDER, jax_infer, model_config, train_state):
+    # Establish the reactive dependency before reloading the saved state.
+    _ = train_state
     _forward_pass, forward_pass_jitted = jax_infer.make_forward_partial(
         seed=42,
         input_dim=model_config["n_params"] + 2,
