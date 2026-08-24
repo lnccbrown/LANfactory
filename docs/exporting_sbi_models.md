@@ -2,71 +2,13 @@
 
 LANfactory's [`transform_sbi_to_onnx`](api/onnx.md) wraps a trained
 [`sbi`](https://github.com/sbi-dev/sbi) estimator and writes a single-trial
-ONNX file that HSSM's `loglik_kind="approx_differentiable"` path can consume
-exactly like a LAN export (the artifact rules are collected in
-[The ONNX likelihood contract](https://lnccbrown.github.io/HSSM/how_to/custom_onnx_likelihoods/)). Use it to bring sbi-trained NLE density estimators
-or NRE ratio classifiers into a [HSSM](https://github.com/lnccbrown/HSSM) model.
-
-## Installation
-
-```bash
-pip install lanfactory[all]
-```
-
-The `all` extra pulls `sbi>=0.26` and `nflows>=0.14` in addition to LANfactory's
-other optional integrations.
-
-## Quick start (NLE)
-
-```python
-import torch
-from sbi.inference import NLE_A
-from sbi.utils import BoxUniform
-from lanfactory.onnx import transform_sbi_to_onnx
-
-# 1. Train a likelihood estimator (your simulator + prior here).
-prior = BoxUniform(low=torch.tensor([-3.0, -3.0]), high=torch.tensor([3.0, 3.0]))
-inference = NLE_A(prior=prior, density_estimator="maf")
-theta = prior.sample((5_000,))
-x = my_simulator(theta)                       # shape: (5000, x_dim)
-estimator = inference.append_simulations(theta, x).train()
-
-# 2. Export to a HSSM-compatible ONNX file.
-transform_sbi_to_onnx(
-    estimator,
-    "ddm_nle.onnx",
-    mode="nle",
-    example_theta_dim=theta.shape[-1],
-    example_x_dim=x.shape[-1],
-)
-
-# 3. Hand it to HSSM exactly like a LAN file.
-import hssm
-model = hssm.HSSM(
-    data=obs_data,
-    model="ddm",
-    model_config=my_model_config,
-    loglik_kind="approx_differentiable",
-    loglik="ddm_nle.onnx",
-    p_outlier=0,
-)
-idata = model.sample(sampler="numpyro", draws=500, tune=500, chains=2)
-```
-
-## Quick start (NRE)
-
-```python
-from sbi.inference import NRE_A
-inference = NRE_A(prior=prior)
-classifier = inference.append_simulations(theta, x).train()
-transform_sbi_to_onnx(
-    classifier,
-    "ddm_nre.onnx",
-    mode="nre",
-    example_theta_dim=theta.shape[-1],
-    example_x_dim=x.shape[-1],
-)
-```
+ONNX file that satisfies the same single-trial artifact contract as a LAN
+export. This page owns exporter architecture support, constraints, and
+numerical guarantees. Follow the runnable
+[sbi export tutorial](tutorials/exporting_sbi_to_onnx.ipynb) for installation,
+training, export, and cross-backend verification. HSSM owns the downstream
+[ONNX likelihood contract](https://lnccbrown.github.io/HSSM/how_to/custom_onnx_likelihoods/)
+and model-loading procedure.
 
 The classifier logit is `log p(x, θ) / p(x) p(θ) = log p(x | θ) − log p(x)`. The
 θ-independent `log p(x)` term drops out under MCMC and under HSSM's posterior
@@ -96,7 +38,7 @@ clear `ValueError`. If you encounter an unsupported architecture, please open an
 
 ## Known constraints
 
-Three constraints arose during validation and apply to anyone training their
+Two constraints arose during validation and apply to anyone training their
 own sbi estimators for export:
 
 1. **For NLE with `density_estimator="maf"`, use ≥2D for both θ and x.** A 1D
@@ -122,21 +64,6 @@ own sbi estimators for export:
    )
    ```
 
-3. **Enable JAX x64 before importing JAX in the consuming process.** ONNX
-   graphs from `torch.onnx.export` carry int64 shape/index tensors. With JAX's
-   default 32-bit mode, those get silently truncated to int32, producing
-   ~0.5-unit drift in log-prob outputs. Set:
-
-   ```python
-   import jax
-   jax.config.update("jax_enable_x64", True)
-   # ...subsequent imports of jaxonnxruntime, hssm, etc.
-   ```
-
-   HSSM's `onnx2jax` consumer sets the related `jaxort_only_allow_initializers_as_static_args = False`
-   flag automatically, but the x64 setting is process-wide and must be opted
-   into by the caller.
-
 ## Numerical guarantees
 
 The C2–C5 regression tests assert:
@@ -151,16 +78,14 @@ an issue with a minimal repro.
 
 ## Float precision
 
-ONNX exports default to float32. PyMC defaults to float64. When sampling, either:
-
-- Cast at the JAX boundary, or
-- Set `pytensor.config.floatX = "float32"` for the whole model.
-
-HSSM handles this consistently in its `approx_differentiable` path; if you're
-hand-rolling a model with `pm.CustomDist` you'll need to do this yourself.
+The exporter writes float32 graphs. Consumer-side dtype configuration belongs
+to HSSM; follow its linked ONNX contract rather than copying a PyMC boundary
+recipe from this exporter reference.
 
 ## Related API
 
 - [`lanfactory.onnx.transform_sbi_to_onnx`](api/onnx.md) — the exporter.
 - [`lanfactory.onnx.transform_to_onnx`](api/onnx.md) — the LAN-MLP exporter.
   Same family, different network source.
+- [Export an sbi model to ONNX](tutorials/exporting_sbi_to_onnx.ipynb) — the
+  executable task guide for this reference.

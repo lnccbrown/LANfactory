@@ -80,8 +80,7 @@ jobs:
       - name: Install package (with notebook + backend deps)
         run: uv sync --all-groups
 
-      # Runs the 2 Jupyter basic tutorials (via nbconvert) and the 2 marimo export
-      # tutorials (via `marimo export`) so the tutorials cannot silently drift out
-      # of sync with the code again.
+      # Executes every committed rendered tutorial and every canonical marimo
+      # source so the published learning path cannot silently drift from the code.
       - name: Execute tutorial notebooks
         run: uv run pytest tests/test_notebooks.py --run-notebooks --no-cov -v

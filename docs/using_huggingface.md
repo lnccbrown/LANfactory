@@ -1,106 +1,32 @@
-# Share trained networks on HuggingFace Hub
+# Share trained networks on Hugging Face Hub
 
-LANfactory provides CLI commands for uploading trained models to and downloading models from HuggingFace Hub.
+Use LANfactory's Hub commands to publish a trained artifact set, make its
+canonical ONNX file discoverable by released HSSM versions, or retrieve the
+folder for inspection and local reuse.
 
-## Installation
+!!! info "Execution status"
 
-HuggingFace support requires the optional `hf` dependencies:
+    Package tests exercise placement, manifest, overwrite, and download logic
+    against a fake Hub. Documentation CI never authenticates, uploads, or
+    downloads. Preview every publication locally with `--dry-run`, then verify
+    the real commit and root alias in the target repository.
 
-```bash
-pip install lanfactory[hf]
-```
+## Install and authenticate
 
-Or install all optional dependencies:
-
-```bash
-pip install lanfactory[all]
-```
-
-## Authentication
-
-Before uploading, authenticate with HuggingFace:
+Install the optional Hub dependency:
 
 ```bash
-# Option 1: Login interactively
-huggingface-cli login
-
-# Option 2: Set environment variable
-export HF_TOKEN="your_token_here"
-
-# Option 3: Pass token via CLI
-upload-hf ... --token "your_token_here"
+pip install 'lanfactory[hf]'
 ```
 
-## Uploading Models
+From a source checkout, use `uv sync --extra hf` instead. Authenticate with
+the Hugging Face CLI or provide `HF_TOKEN` through your shell or secret manager.
+Avoid putting a token directly in a shared command or shell history.
 
-### 1. Create a `model_card.yaml` file
+## Preview the publication
 
-In your trained model folder, create a `model_card.yaml` file with model metadata:
-
-```yaml
-# Required metadata (HuggingFace frontmatter)
-tags:
-  - lan
-  - ssm
-  - ddm
-  - hssm
-library_name: onnx
-license: mit
-
-# Model information
-title: "LAN Model for DDM"
-description: "Likelihood Approximation Network trained on DDM (Drift Diffusion Model) simulations."
-
-# Optional: Network architecture (auto-extracted from network_config.pickle / train_config.pickle if not provided)
-architecture:
-  layer_sizes: [100, 100, 1]
-  activations: [tanh, tanh, linear]
-  network_type: lan
-
-# Optional: Training details
-training:
-  epochs: 20
-  optimizer: adam
-  learning_rate: 0.001
-
-# Usage example (shown in README)
-usage_example: |
-  import hssm
-  model = hssm.HSSM(data=my_data, model="ddm", loglik_kind="approx_differentiable")
-```
-
-### 2. Upload using the CLI
-
-```bash
-upload-hf \
-  --model-folder ./networks/lan/ddm/ \
-  --network-type lan \
-  --model-name ddm \
-  --commit-message "Initial upload"
-```
-
-This uploads to `franklab/HSSM` (default) at path `lan/ddm/`.
-
-### CLI Options
-
-| Option | Required | Description |
-|--------|----------|-------------|
-| `--model-folder` | Yes | Path to folder with trained model artifacts |
-| `--network-type` | Yes | Network type: `lan`, `cpn`, or `opn` |
-| `--model-name` | Yes | Model name (e.g., `ddm`, `angle`) |
-| `--repo-id` | No | HuggingFace repo ID (default: `franklab/HSSM`) |
-| `--commit-message` | No | Git commit message (default: "Upload model") |
-| `--private` | No | Create a private repository |
-| `--create-repo` | No | Create repository if it doesn't exist |
-| `--include-patterns` | No | Comma-separated glob patterns to include |
-| `--exclude-patterns` | No | Comma-separated glob patterns to exclude |
-| `--revision` | No | Branch or tag name for versioning |
-| `--token` | No | HuggingFace API token |
-| `--dry-run` | No | Show what would be uploaded without uploading |
-
-### Dry Run
-
-To preview what will be uploaded without actually uploading:
+Point `upload-hf` at one trained-model folder. The accepted network types are
+`lan`, `cpn`, `opn`, and `gonogo`.
 
 ```bash
 upload-hf \
@@ -110,9 +36,50 @@ upload-hf \
   --dry-run
 ```
 
-## Downloading Models
+By default, LANfactory plans three coordinated placements:
 
-### Download using the CLI
+1. the complete artifact set under `lan/ddm/`;
+2. the canonical ONNX file at the repository root as `ddm.onnx`; and
+3. an updated root `manifest.json` entry.
+
+The other root aliases are `{model}_cpn.onnx`, `{model}_opn.onnx`, and
+`{model}_gonogo.onnx`. Released HSSM versions resolve these root filenames;
+publishing only the folder does not make a network consumable by HSSM.
+
+If the folder has no unambiguous ONNX filename for the requested model, pass
+`--canonical-onnx PATH`. A `model_card.yaml` is optional by default: LANfactory
+can generate one from the saved configuration, using the artifact repository's
+`bsd-2-clause` license metadata. Use `--require-model-card` when publication
+policy requires a reviewed, hand-authored card.
+
+## Publish and verify
+
+Remove `--dry-run` only after the plan identifies the intended artifact and
+root filename:
+
+```bash
+upload-hf \
+  --model-folder ./networks/lan/ddm/ \
+  --network-type lan \
+  --model-name ddm \
+  --commit-message "Publish validated DDM network"
+```
+
+The command refuses to replace an existing root network unless you explicitly
+pass `--overwrite-root`. That guard is consequential: released HSSM versions
+download the root file from `main` without pinning a revision. Test a candidate
+in a staging repository and complete its validation before authorizing a root
+replacement.
+
+After upload, verify that the Hub commit contains the folder, root alias, and
+manifest update together. `--no-publish-root-alias` and
+`--no-update-manifest` are specialized escape hatches; do not use them for a
+normal HSSM-facing publication.
+
+## Retrieve a published folder
+
+`download-hf` copies the selected `{network-type}/{model-name}/` folder into a
+local directory:
 
 ```bash
 download-hf \
@@ -121,79 +88,16 @@ download-hf \
   --output-folder ./models/ddm/
 ```
 
-This downloads from `franklab/HSSM` at path `lan/ddm/`.
+An existing destination is rejected unless `--force` is set. The download
+command does not reconfigure HSSM. To use a downloaded ONNX file directly,
+pass its local path through HSSM's
+[approximate-differentiable ONNX route](https://lnccbrown.github.io/HSSM/how_to/custom_onnx_likelihoods/).
+When a validated root alias is published in `franklab/HSSM`, HSSM's built-in
+model configuration can resolve it from the Hub instead.
 
-### CLI Options
+## Inspect the exact interface
 
-| Option | Required | Description |
-|--------|----------|-------------|
-| `--network-type` | Yes | Network type: `lan`, `cpn`, or `opn` |
-| `--model-name` | Yes | Model name (e.g., `ddm`, `angle`) |
-| `--output-folder` | Yes | Local destination folder |
-| `--repo-id` | No | HuggingFace repo ID (default: `franklab/HSSM`) |
-| `--revision` | No | Branch, tag, or commit to download (default: main) |
-| `--include-patterns` | No | Comma-separated glob patterns to include |
-| `--exclude-patterns` | No | Comma-separated glob patterns to exclude |
-| `--token` | No | HuggingFace API token (for private repos) |
-| `--force` | No | Overwrite existing files |
-
-## Repository Structure
-
-Models are organized in the repository using the following structure:
-
-```
-franklab/HSSM/
-├── lan/
-│   ├── ddm/
-│   │   ├── model.onnx
-│   │   ├── network_config.pickle
-│   │   ├── train_config.pickle
-│   │   └── README.md
-│   ├── angle/
-│   │   └── ...
-│   └── weibull/
-│       └── ...
-├── cpn/
-│   └── ...
-└── opn/
-    └── ...
-```
-
-## Using Downloaded Models with HSSM
-
-After downloading a model, you can use it with HSSM:
-
-```python
-import hssm
-
-# HSSM will look for models in the franklab/HSSM repository
-model = hssm.HSSM(
-    data=my_data,
-    model="ddm",
-    loglik_kind="approx_differentiable"
-)
-```
-
-## Programmatic Usage
-
-You can also use the upload/download functions directly in Python:
-
-```python
-from pathlib import Path
-from lanfactory.hf import upload_model, download_model
-
-# Upload
-upload_model(
-    model_folder=Path("./networks/lan/ddm/"),
-    network_type="lan",
-    model_name="ddm",
-    commit_message="v1.0.0 release",
-)
-
-# Download
-download_model(
-    network_type="lan",
-    model_name="ddm",
-    output_folder=Path("./models/ddm/"),
-)
-```
+Run `upload-hf --help` and `download-hf --help` for the installed version. The
+[command-line reference](api/cli.md#upload-hf) records every flag and safety
+default. The [Hub Python API reference](api/hf.md) documents the public helpers
+and constants owned by LANfactory.

@@ -7,132 +7,12 @@ LANfactory's [`transform_bayesflow_to_onnx`](api/onnx.md) is the bayesflow
 sibling of [`transform_sbi_to_onnx`](exporting_sbi_models.md). It wraps a
 trained [`bayesflow`](https://github.com/bayesflow-org/bayesflow)
 `ContinuousApproximator` (NLE) or `RatioApproximator` (NRE) and writes a
-single-trial ONNX file that HSSM's `loglik_kind="approx_differentiable"`
-path can consume exactly like an sbi export. Same user gesture, same file
-format, same HSSM-side loader — regardless of which training framework you
-came from.
-
-## Installation
-
-```bash
-pip install lanfactory[bayesflow]
-```
-
-The `bayesflow` extra pulls `bayesflow>=2.0.8` and `keras>=3.12`. For both
-libraries side-by-side use `pip install lanfactory[all]`.
-
-## Critical: set the Keras backend before importing
-
-`torch.onnx.export` cannot trace a JAX-backed Keras model. You **must** set
-`KERAS_BACKEND=torch` *before* importing keras or bayesflow:
-
-```python
-import os
-os.environ["KERAS_BACKEND"] = "torch"
-# On Apple silicon, also pin to CPU — the orthogonal initializer needs
-# torch.linalg.qr which MPS does not implement.
-os.environ["KERAS_TORCH_DEVICE"] = "cpu"
-
-import bayesflow as bf   # now safe
-```
-
-The exporter checks this and raises a clear `RuntimeError` if the backend is
-anything other than `torch` at export time.
-
-## Quick start (NLE)
-
-```python
-import os
-os.environ["KERAS_BACKEND"] = "torch"
-os.environ["KERAS_TORCH_DEVICE"] = "cpu"
-
-import bayesflow as bf
-import keras
-from bayesflow.datasets import OfflineDataset
-from bayesflow.networks.inference.coupling.transforms import AffineTransform
-from lanfactory.onnx import transform_bayesflow_to_onnx
-
-# 1. Build an ONNX-friendly ContinuousApproximator.
-#    NLE convention: inference_variables=x (obs), inference_conditions=θ.
-approximator = bf.ContinuousApproximator(
-    inference_network=bf.networks.CouplingFlow(
-        depth=4,
-        subnet_kwargs={"widths": (64, 64), "activation": "silu", "dropout": None},
-        permutation=None,                     # see Known constraints below
-        use_actnorm=False,
-        transform=AffineTransform(clamp=False),
-    ),
-    standardize="inference_variables",
-)
-approximator.build({
-    "inference_variables": (None, x_dim),
-    "inference_conditions": (None, theta_dim),
-})
-approximator.compile(optimizer=keras.optimizers.Adam(learning_rate=5e-4))
-
-# 2. Train on your simulator output.
-#    `x` is observations, `theta` is parameters — numpy float32 arrays.
-dataset = OfflineDataset(
-    data={"inference_variables": x, "inference_conditions": theta},
-    batch_size=200, adapter=None,
-)
-approximator.fit(dataset=dataset, epochs=30, verbose=0)
-
-# 3. Export to a single ONNX file.
-transform_bayesflow_to_onnx(
-    approximator,
-    "ddm_nle.onnx",
-    mode="nle",
-    example_theta_dim=theta_dim,
-    example_x_dim=x_dim,
-)
-
-# 4. Hand it to HSSM exactly like an sbi or LAN file.
-# Enable JAX x64 BEFORE HSSM imports jax: ONNX graphs carry int64 index
-# tensors that JAX's default 32-bit mode silently truncates, producing wrong
-# log-probs (see "Known constraints" below).
-import jax
-
-jax.config.update("jax_enable_x64", True)
-
-import hssm
-model = hssm.HSSM(
-    data=obs_data,
-    model="ddm",
-    loglik_kind="approx_differentiable",
-    loglik="ddm_nle.onnx",
-    p_outlier=0,
-)
-idata = model.sample(sampler="numpyro", draws=500, tune=500, chains=2)
-```
-
-## Quick start (NRE)
-
-```python
-approximator = bf.RatioApproximator(
-    inference_network=bf.networks.MLP(
-        widths=(64, 64),
-        activation="silu",
-        residual=False,
-        dropout=None,
-    ),
-    standardize="inference_variables",
-)
-# NRE convention: inference_variables=θ, inference_conditions=x.
-approximator.build({
-    "inference_variables": (None, theta_dim),
-    "inference_conditions": (None, x_dim),
-})
-# ... train as above with the OfflineDataset keys flipped ...
-
-transform_bayesflow_to_onnx(
-    approximator,
-    "ddm_nre.onnx",
-    mode="nre",
-    example_theta_dim=theta_dim,
-    example_x_dim=x_dim,
-)
-```
+single-trial ONNX file. This page owns exporter architecture support,
+constraints, and numerical guarantees. Follow the runnable
+[bayesflow export tutorial](tutorials/exporting_bayesflow_to_onnx.ipynb) for
+installation, training, export, and cross-backend verification. HSSM owns the
+downstream [ONNX likelihood contract](https://lnccbrown.github.io/HSSM/how_to/custom_onnx_likelihoods/)
+and model-loading procedure.
 
 The classifier logit is `log p(x|θ)/p(x) = log p(x|θ) − log p(x)`. The
 θ-independent `log p(x)` term drops out under MCMC, so the raw logit is the
@@ -198,23 +78,6 @@ style chains. Move pointwise transforms (log/sqrt of observations) into your
 simulator output and apply them externally to your HSSM data before
 sampling.
 
-### 5. Enable JAX x64 in the consuming process
-
-Same caveat as the sbi exporter — ONNX graphs from `torch.onnx.export` carry
-int64 shape/index tensors. With JAX's default 32-bit mode, those get
-silently truncated to int32, producing wrong log-prob outputs. Before
-importing JAX in the consuming process:
-
-```python
-import jax
-jax.config.update("jax_enable_x64", True)
-```
-
-HSSM's `onnx2jax` consumer sets the related
-`jaxort_only_allow_initializers_as_static_args = False` flag
-automatically. The x64 setting is process-wide and must be opted into by
-the caller.
-
 ## Explicitly out of scope (v1)
 
 | Excluded | Reason |
@@ -237,19 +100,17 @@ The bayesflow regression tests (`tests/test_bayesflow_*_export.py`) assert:
 If you observe drift larger than these thresholds, please open an issue
 with a minimal reproducer.
 
-## Two paths into HSSM, side by side
+## HSSM handoff
 
-| Path | Source library | Mechanism | When to use |
-|---|---|---|---|
-| `loglik="file.onnx"` | sbi or bayesflow | ONNX file, framework-agnostic | Portability, reproducibility, sharing trained surrogates |
-| `loglik=<jax_callable>` | bayesflow (LRE tutorial) | In-memory JAX callable | Fast iteration during model development; bayesflow-only |
-
-The two paths produce numerically equivalent results on the same trained
-network. The ONNX path is what you'd ship; the JAX-callable path is what you'd
-prototype with.
+LANfactory owns the portable ONNX exporter. HSSM owns the choice between a
+file-backed likelihood and an in-memory JAX callable, together with its model
+configuration and sampling behavior. Continue with HSSM's rendered ONNX
+contract instead of duplicating that consumer procedure here.
 
 ## Related API
 
 - [`lanfactory.onnx.transform_bayesflow_to_onnx`](api/onnx.md) — this exporter.
 - [`lanfactory.onnx.transform_sbi_to_onnx`](api/onnx.md) — the sbi sibling.
 - [`lanfactory.onnx.transform_to_onnx`](api/onnx.md) — the LAN-MLP exporter.
+- [Export a bayesflow model to ONNX](tutorials/exporting_bayesflow_to_onnx.ipynb)
+  — the executable task guide for this reference.

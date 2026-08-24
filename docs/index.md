@@ -20,17 +20,8 @@ data, it provides dataloaders, network factories, and training loops, and
 exports the trained networks to ONNX so they can serve as likelihoods in
 [HSSM](https://lnccbrown.github.io/HSSM/).
 
----
-
-## Ecosystem fit
-
-LANfactory is the network-training layer of the HSSM ecosystem: it trains
-LAN/CPN/OPN networks on simulated data and exports them to ONNX in the form
-that HSSM consumes as likelihoods.
-
-For the full map — what each package owns, how artifacts flow between them,
-and which versions work together — see
-[The HSSM ecosystem](https://lnccbrown.github.io/HSSM/ecosystem/).
+New to the idea? Read [likelihood approximation networks and LANfactory](what_are_lans.md)
+before choosing a training backend.
 
 ---
 
@@ -47,11 +38,25 @@ and `lanfactory[bayesflow]` (ONNX export of externally trained networks), or
 
 ---
 
+## Ecosystem fit
+
+LANfactory is the network-training layer of the HSSM ecosystem: it trains LAN,
+CPN, OPN, and `gonogo` networks on simulated data and exports them to ONNX in
+the form that HSSM consumes as likelihoods.
+
+For the full map — what each package owns, how artifacts flow between them,
+and which versions work together — see
+[The HSSM ecosystem](https://lnccbrown.github.io/HSSM/ecosystem/).
+
+---
+
 ## Quickstart
 
 Given a folder of training data files generated with
 [ssm-simulators](https://lnccbrown.github.io/ssm-simulators/), the minimal
-PyTorch training loop is:
+PyTorch training loop is shown below. This abbreviated API sketch assumes those
+files already exist; the linked tutorial is the first-success path from data
+generation through a trained network.
 
 ```python
 from pathlib import Path
@@ -112,7 +117,9 @@ export guides.
     - [MLflow integration](using_mlflow.md) — track and compare training runs.
     - [HuggingFace Hub](using_huggingface.md) — upload and download trained networks.
     - [Exporting sbi models](exporting_sbi_models.md) and [exporting bayesflow models](exporting_bayesflow_models.md) — bring externally trained networks into HSSM.
-- **API reference** — [config](api/config.md), [trainers](api/trainers.md), [onnx](api/onnx.md), [hf](api/hf.md), [utils](api/utils.md).
+- **API reference** — [config](api/config.md), [trainers](api/trainers.md),
+  [ONNX](api/onnx.md), [network inspectors](api/network_inspectors.md),
+  [Hugging Face](api/hf.md), and [utilities](api/utils.md).
 
 We hope this package may be helpful in case you attempt to train
 [LANs](https://elifesciences.org/articles/65074) for your own research.

@@ -1,4 +1,4 @@
-# What LANs are, and where LANfactory fits
+# Likelihood approximation networks and LANfactory
 
 Many sequential sampling models (SSMs) have no closed-form likelihood. You can
 *simulate* from them cheaply, but you cannot write down the density that

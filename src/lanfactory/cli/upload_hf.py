@@ -23,7 +23,7 @@ def main(
     model_folder: Path = typer.Option(
         ...,
         "--model-folder",
-        help="Path to the folder containing trained model artifacts (should contain model_card.yaml).",
+        help="Path to trained model artifacts; may contain model_card.yaml.",
         exists=True,
         file_okay=False,
         dir_okay=True,
@@ -138,8 +138,10 @@ def main(
     This command uploads model artifacts to a HuggingFace repository at the path
     {network_type}/{model_name}/ (e.g., lan/ddm/).
 
-    The model folder must contain a model_card.yaml file with model metadata.
-    This YAML file is converted to a README.md for HuggingFace.
+    A model_card.yaml file is optional by default. When it is absent, LANfactory
+    generates metadata from the command arguments; ``--require-model-card``
+    restores strict validation. Publication coordinates the network-type/model
+    folder, optional root alias, and repository manifest.
 
     Example:
         upload-hf --model-folder ./networks/lan/ddm/ --network-type lan --model-name ddm
