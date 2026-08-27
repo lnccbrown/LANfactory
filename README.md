@@ -54,8 +54,14 @@ Check the basic tutorial [here](docs/basic_tutorial/basic_tutorial_lan_torch.ipy
 
 ### Network Inspectors UI
 
-LANfactory includes a Streamlit interface for interactive network inspection
+LANfactory includes a `Streamlit` interface for interactive network inspection
 workflows (KDE vs LAN likelihoods and LAN manifold plots).
+
+The UI currently supports Torch models. Each model must have a Torch state
+dict (`.pt`) and network configuration pickle (`.pickle`).
+
+See the [Network Inspectors tutorial](docs/network_inspectors_tutorial.md) for
+instructions to generate Torch `angle` and `ddm` models and load them in the UI.
 
 Install the UI dependencies:
 
@@ -68,6 +74,11 @@ Launch the app:
 ```bash
 uv run network-inspectors-ui
 ```
+
+In the sidebar, set **Torch models base directory** to the directory containing
+your trained models, for example `data/torch_models`. The UI searches this
+directory recursively and lists models with both required artifacts. Use the
+**KDE vs LAN** and **3D Manifold** tabs to inspect the selected model.
 
 ### Command Line Interface
 
