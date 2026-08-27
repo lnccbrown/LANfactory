@@ -44,19 +44,20 @@ Create `ddm_data.yaml` with the same contents, changing only:
 MODEL: "ddm"
 ```
 
-Generate one data file for each model:
+Generate two data files for each model so the default training/validation split
+has at least one file in each set:
 
 ```bash
 uv run generate \
   --config-path angle_data.yaml \
   --output data/inspector_training \
-  --n-files 1 \
+  --n-files 2 \
   --log-level INFO
 
 uv run generate \
   --config-path ddm_data.yaml \
   --output data/inspector_training \
-  --n-files 1 \
+  --n-files 2 \
   --log-level INFO
 ```
 
@@ -84,11 +85,12 @@ Create `config_angle.yaml`:
 ```yaml
 NETWORK_TYPE: "lan"
 CPU_BATCH_SIZE: 1000
-GPU_BATCH_SIZE: 50000
+GPU_BATCH_SIZE: 2000
 GENERATOR_APPROACH: "lan"
 OPTIMIZER_: "adam"
 N_EPOCHS: 2
 MODEL: "angle"
+TRAINING_DATA_FOLDER: "data/inspector_training/data/training_data/lan/training_data_n_samples_1000_dt_0.001/angle"
 SHUFFLE: true
 LAYER_SIZES: [[100, 100, 100, 1]]
 ACTIVATIONS: [["tanh", "tanh", "tanh"]]
@@ -106,13 +108,17 @@ LR_SCHEDULER_PARAMS:
   verbose: true
 ```
 
-Create `config_ddm.yaml` with the same contents, changing only:
+Create `config_ddm.yaml` with the same contents, changing `MODEL` and
+`TRAINING_DATA_FOLDER` to:
 
 ```yaml
 MODEL: "ddm"
+TRAINING_DATA_FOLDER: "data/inspector_training/data/training_data/lan/training_data_n_samples_1000_dt_0.001/ddm"
 ```
 
-The training-data folder is supplied on the command line, so the same config structure can be used for both models.
+The `TRAINING_DATA_FOLDER` entry is required by the training configuration
+parser. The `--training-data-folder` command-line argument should point to the
+same directory and is the path used for loading the data during training.
 
 ## Train Both Torch Models
 
