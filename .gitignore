@@ -159,3 +159,4 @@ __marimo__/
 uv.lock
 data/
 .vscode/
+notebooks/figures/
