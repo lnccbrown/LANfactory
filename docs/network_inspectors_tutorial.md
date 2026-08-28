@@ -146,10 +146,11 @@ uv run torchtrain \
   --log-level INFO
 ```
 
-After training, verify that both models have a state dict and network config:
+After training, verify that both models have a state dict and network config.
+This filtered tree shows only the artifact names used by the UI:
 
 ```bash
-tree data/torch_models
+tree -P '*state_dict*|*network_config*' --prune data/torch_models
 ```
 
 The exact layout may include a network-type directory, for example:
