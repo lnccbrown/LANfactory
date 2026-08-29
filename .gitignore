@@ -157,3 +157,8 @@ explorations/
 __marimo__/
 
 uv.lock
+
+# Generated per-checkout by HSSMSpine's cross-editor sync
+# (scripts/sync_agent_config.py materializes these from .claude/).
+.cursor/
+.agents/
