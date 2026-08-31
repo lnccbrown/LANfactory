@@ -35,7 +35,7 @@ jobs:
           rm -rf ~/.cache/npm
 
       - name: Install package
-        run: uv sync --all-groups --reinstall
+        run: uv sync --all-groups --extra ui --reinstall
         env:
           # UV_CACHE_DIR: ""
           PIP_NO_CACHE_DIR: "1"
@@ -64,7 +64,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install package (with notebook + backend deps)
-        run: uv sync --all-groups
+        run: uv sync --all-groups --extra ui
 
       # Runs the 4 Jupyter basic tutorials (via nbconvert) and the 2 marimo export
       # tutorials (via `marimo export`) so the tutorials cannot silently drift out

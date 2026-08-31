@@ -30,7 +30,7 @@ def test_kde_vs_lan_uses_model_parameter_order(monkeypatch):
         api, "simulate_ground_truth", lambda spec, params, n_samples: {}
     )
     monkeypatch.setattr(api, "evaluate_kde", lambda sim_out, grid: np.zeros(1))
-    monkeypatch.setattr(api, "plot_kde_vs_lan", lambda grid, results, spec, cfg: None)
+    monkeypatch.setattr(api, "plot_kde_vs_lan", lambda comparison, cfg: None)
 
     parameter_df = pd.DataFrame(
         [{"extra": 99.0, "t": 0.3, "z": 0.5, "a": 1.5, "v": 0.2}]
@@ -42,6 +42,26 @@ def test_kde_vs_lan_uses_model_parameter_order(monkeypatch):
         seen_params[0],
         np.array([0.2, 1.5, 0.5, 0.3], dtype=np.float32),
     )
+
+
+def test_compute_kde_vs_lan_returns_contract(monkeypatch):
+    monkeypatch.setattr(api, "make_rt_choice_grid", lambda spec, grid: np.zeros((2, 2)))
+    monkeypatch.setattr(api, "evaluate_network", lambda spec, params, grid: np.zeros(2))
+    monkeypatch.setattr(
+        api, "simulate_ground_truth", lambda spec, params, n_samples: {}
+    )
+    monkeypatch.setattr(api, "evaluate_kde", lambda sim_out, grid: np.zeros(2))
+
+    parameter_df = pd.DataFrame(
+        [{"extra": 99.0, "t": 0.3, "z": 0.5, "a": 1.5, "v": 0.2}]
+    )
+
+    out = api.compute_kde_vs_lan_likelihoods(parameter_df, "ddm", _predictor, n_reps=2)
+
+    assert out.grid.shape == (2, 2)
+    assert len(out.rows) == 1
+    assert out.rows[0].params.shape == (4,)
+    assert len(out.rows[0].kdes) == 2
 
 
 def test_lan_manifold_validates_vary_dict():
@@ -68,9 +88,7 @@ def test_lan_manifold_normalizes_2d_parameter_array(monkeypatch):
 
     monkeypatch.setattr(api, "make_manifold_grid", lambda grid: np.zeros((1, 2)))
     monkeypatch.setattr(api, "build_manifold", build_manifold_stub)
-    monkeypatch.setattr(
-        api, "plot_manifold", lambda manifold, spec, vary_name, cfg: None
-    )
+    monkeypatch.setattr(api, "plot_manifold", lambda computation, cfg: None)
 
     api.lan_manifold(
         np.array([[0.2, 1.5, 0.5, 0.3]], dtype=np.float32),
@@ -83,6 +101,33 @@ def test_lan_manifold_normalizes_2d_parameter_array(monkeypatch):
         captured["parameters"],
         np.array([0.2, 1.5, 0.5, 0.3], dtype=np.float32),
     )
+
+
+def test_compute_lan_manifold_returns_contract(monkeypatch):
+    monkeypatch.setattr(api, "make_manifold_grid", lambda grid: np.zeros((3, 2)))
+    monkeypatch.setattr(
+        api,
+        "build_manifold",
+        lambda spec, parameters, vary_name, vary_values, grid: pd.DataFrame(
+            {
+                "rt": [1.0],
+                "choice": [1],
+                "vary": [0.2],
+                "likelihood": [0.5],
+            }
+        ),
+    )
+
+    out = api.compute_lan_manifold(
+        parameter_df=np.array([[0.2, 1.5, 0.5, 0.3]], dtype=np.float32),
+        vary_dict={"v": [0.2]},
+        model="ddm",
+        torch_mlp_predict=_predictor,
+    )
+
+    assert out.vary_name == "v"
+    assert out.grid.shape == (3, 2)
+    assert list(out.manifold.columns) == ["rt", "choice", "vary", "likelihood"]
 
 
 def test_lan_manifold_rejects_wrong_parameter_shape():

@@ -57,6 +57,7 @@ mlflow = ["mlflow>=3.14.0"]
 hf = ["huggingface-hub>=0.20.0"]
 sbi = ["sbi>=0.26", "nflows>=0.14"]
 bayesflow = ["bayesflow>=2.0.8", "keras>=3.12"]
+ui = ["streamlit>=1.40.0"]
 all = [
     "mlflow>=3.14.0",
     "huggingface-hub>=0.20.0",
@@ -64,6 +65,7 @@ all = [
     "nflows>=0.14",
     "bayesflow>=2.0.8",
     "keras>=3.12",
+    "streamlit>=1.40.0",
 ]
 
 [dependency-groups]
@@ -137,10 +139,11 @@ omit = [
     "*/tests/*",
     "*/__init__.py",
     "*/conftest.py",
-    "*/cli/jax_train.py",   # CLI entry points are tested via smoke tests
-    "*/cli/torch_train.py", # CLI entry points are tested via smoke tests
-    "*/cli/upload_hf.py",   # CLI entry points are tested via smoke tests
-    "*/cli/download_hf.py", # CLI entry points are tested via smoke tests
+    "*/cli/jax_train.py",
+    "*/cli/torch_train.py",
+    "*/cli/upload_hf.py",
+    "*/cli/download_hf.py",
+    "*/network_inspectors/streamlit_app.py",
 ]
 
 [tool.coverage.report]
@@ -164,6 +167,8 @@ torchtrain = "lanfactory.cli.torch_train:app"
 transform-onnx = "lanfactory.onnx.transform_onnx:app"
 upload-hf = "lanfactory.cli.upload_hf:app"
 download-hf = "lanfactory.cli.download_hf:app"
+network-inspectors-ui = "lanfactory.cli.network_inspectors_ui:app"
 
 [tool.setuptools.package-data]
 "lanfactory.cli" = ["config_network_training_lan.yaml"]
+"lanfactory.network_inspectors" = ["styles.css"]

@@ -157,4 +157,6 @@ explorations/
 __marimo__/
 
 uv.lock
+data/
 .vscode/
+notebooks/figures/
