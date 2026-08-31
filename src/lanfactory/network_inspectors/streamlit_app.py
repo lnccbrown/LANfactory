@@ -166,6 +166,8 @@ def _kde_tab(model: str, predictor) -> None:
         rt_step_2c = st.number_input(
             "KDE grid step (2-choice)",
             value=0.0025,
+            min_value=1e-6,
+            step=0.0025,
             help="Reaction-time spacing in the KDE/LAN evaluation grid.",
         )
 
