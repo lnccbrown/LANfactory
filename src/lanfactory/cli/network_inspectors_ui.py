@@ -19,5 +19,5 @@ def app() -> None:
     app_path = (
         Path(__file__).resolve().parents[1] / "network_inspectors" / "streamlit_app.py"
     )
-    sys.argv = ["streamlit", "run", str(app_path)]
+    sys.argv = ["streamlit", "run", str(app_path), *sys.argv[1:]]
     raise SystemExit(stcli.main())
