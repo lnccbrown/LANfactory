@@ -42,7 +42,7 @@ dependencies = [
     # jax -> ONNX export for jaxtrain networks. Exact-pinned to the 0.15 line:
     # 0.x releases move the API, and the parity test in tests/onnx guards the
     # ecosystem's single-trial ONNX contract against silent changes.
-    "jax2onnx==0.15.*",
+    "jax2onnx>=0.15,<0.17",
     "matplotlib>=3.10.1",
     "plotly>=6.0.0",
     "seaborn>=0.13.2",
