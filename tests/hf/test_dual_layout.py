@@ -37,6 +37,7 @@ def model_folder(tmp_path):
     (folder / "abc123_lan_ddm__network_config.pickle").write_bytes(b"pickle")
     (folder / "abc123_lan_ddm__data_details.pickle").write_bytes(b"pickle")
     (folder / "validation_report.json").write_text('{"gates": {}}')
+    (folder / "recovery_report.json").write_text('{"passed": false}')
     (folder / "abc123_lan_ddm__training_history.csv").write_text("epoch,loss\n")
     return folder
 
@@ -344,6 +345,9 @@ class TestDryRunReporting:
         out = capsys.readouterr().out
         assert "abc123_lan_ddm__data_details.pickle" in out
         assert "validation_report.json" in out
+        # The gate report cannot see a recovery failure; a network whose
+        # recovery verdict is false would otherwise ship looking clean.
+        assert "recovery_report.json" in out
 
 
 class TestUploadCommit:

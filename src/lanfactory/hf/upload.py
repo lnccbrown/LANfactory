@@ -22,6 +22,11 @@ DEFAULT_INCLUDE_PATTERNS = [
     "*_config.pickle",
     "*_data_details.pickle",
     "validation_report.json",
+    # The gate report says the network is structurally sound; this one says
+    # whether anyone could recover parameters with it. Without it the only
+    # quality evidence that travels with an artifact is the gate, which cannot
+    # see a recovery failure at all.
+    "recovery_report.json",
     "*.csv",
     "model_card.yaml",
 ]
