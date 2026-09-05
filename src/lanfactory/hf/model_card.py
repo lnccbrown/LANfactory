@@ -52,6 +52,24 @@ class ModelCardConfig:
     usage_example: str | None = None
 
 
+def _require_mapping(data: dict, key: str, yaml_path: Path) -> dict | None:
+    """Return ``data[key]`` when it is a mapping (or absent), else raise.
+
+    Both ``architecture`` and ``training`` are consumed with ``.get()`` during
+    README generation. A wrong shape here is otherwise only discovered there --
+    after the artifact upload has already started -- and it silently suppresses
+    the pickle fallback, since a bad value is still not ``None``.
+    """
+    value = data.get(key)
+    if value is None or isinstance(value, dict):
+        return value
+    raise ValueError(
+        f"{yaml_path}: '{key}' must be a mapping, got {type(value).__name__}. "
+        "Omit it to have LANfactory fill it in from the pickled configs, which "
+        "are the authoritative record of what was trained."
+    )
+
+
 def load_model_card_yaml(model_folder: Path) -> ModelCardConfig:
     """Load model card configuration from YAML file.
 
@@ -69,6 +87,8 @@ def load_model_card_yaml(model_folder: Path) -> ModelCardConfig:
     ------
     FileNotFoundError
         If model_card.yaml is not found in the model folder.
+    ValueError
+        If 'architecture' or 'training' is present but is not a mapping.
     """
     yaml_path = model_folder / "model_card.yaml"
 
@@ -90,8 +110,8 @@ def load_model_card_yaml(model_folder: Path) -> ModelCardConfig:
         description=data.get(
             "description", "Likelihood Approximation Network trained with LANfactory."
         ),
-        architecture=data.get("architecture"),
-        training=data.get("training"),
+        architecture=_require_mapping(data, "architecture", yaml_path),
+        training=_require_mapping(data, "training", yaml_path),
         usage_example=data.get("usage_example"),
     )
 

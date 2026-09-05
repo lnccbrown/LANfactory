@@ -111,6 +111,21 @@ class TestLoadModelCardYaml:
         assert config.architecture["layer_sizes"] == [100, 100, 1]
         assert config.architecture["network_type"] == "lan"
 
+    @pytest.mark.parametrize("key", ["architecture", "training"])
+    def test_load_yaml_rejects_non_mapping(self, key, tmp_path):
+        """A wrong shape must fail here, not deep inside README generation.
+
+        A list is the plausible mistake -- `architecture: [100, 100, 1]` reads
+        naturally -- and it used to survive load, suppress the pickle fallback,
+        and only blow up on `.get()` after the upload had begun.
+        """
+        yaml_path = tmp_path / "model_card.yaml"
+        with open(yaml_path, "w") as f:
+            yaml.dump({"title": "Test Model", key: [100, 100, 1]}, f)
+
+        with pytest.raises(ValueError, match=f"'{key}' must be a mapping"):
+            load_model_card_yaml(tmp_path)
+
 
 class TestGenerateReadme:
     """Tests for generate_readme function."""
