@@ -108,7 +108,7 @@ docs = [
     "mkdocs-jupyter==0.26.3",
     "mkdocs-autorefs==1.4.4",
     # 1.2.3 depends on ProperDocs, which injects an unrelated migration banner.
-    "mkdocs-redirects==1.2.2",
+    "mkdocs-redirects==1.2.3",
 ]
 
 [tool.setuptools.packages.find]
