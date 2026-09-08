@@ -4,6 +4,9 @@ on:
   pull_request:
   workflow_call: # Called by drift.yml (scheduled drift detection)
 
+permissions:
+  contents: read
+
 jobs:
   lint:
     runs-on: ubuntu-latest
