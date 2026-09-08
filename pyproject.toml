@@ -23,6 +23,7 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
@@ -119,6 +120,7 @@ markers = [
 
 [tool.ruff]
 line-length = 88
+target-version = "py312"
 src = ["src/lanfactory", "tests"]
 exclude = ["notebooks/*", "docs/*", "docs/basic_tutorial/basic_tutorial.ipynb"]
 
