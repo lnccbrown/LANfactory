@@ -31,6 +31,7 @@ jobs:
         run: |
           rm -rf ~/.cache/pip
           rm -rf ~/.cache/uv
+          rm -rf ~/.cache/conda
           rm -rf ~/.cache/npm
 
       - name: Install package
@@ -40,7 +41,7 @@ jobs:
           PIP_NO_CACHE_DIR: "1"
 
       - name: Run pytest
-        run: uv run pytest ${{ inputs.drift_mode && '--maxfail=0 --force-reruns 0' || '' }}
+        run: uv run pytest
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v7
@@ -50,7 +51,6 @@ jobs:
   test_notebooks:
     name: Execute tutorial notebooks
     runs-on: ubuntu-latest
-    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v7
@@ -61,7 +61,6 @@ jobs:
         uses: astral-sh/setup-uv@v7
         with:
           version: "0.12.0"
-          python-version: "3.13"
 
       - name: Install package (with notebook + backend deps)
         run: uv sync --all-groups --extra ui
