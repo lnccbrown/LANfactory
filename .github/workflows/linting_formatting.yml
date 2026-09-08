@@ -13,20 +13,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
           version: "latest"
-          enable-cache: true
-          cache-dependency-glob: "pyproject.toml"
 
-      - name: Install package
-        run: uv sync --group dev
+      - name: Install lint dependencies
+        run: uv sync --only-group lint --no-install-project
 
       - name: Check styling
         run: uv run ruff format --check .
