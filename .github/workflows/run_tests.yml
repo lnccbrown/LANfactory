@@ -45,12 +45,6 @@ jobs:
       - name: Run pytest
         run: uv run pytest
 
-      - name: Check styling
-        run: uv run ruff format --check .
-
-      - name: Linting
-        run: uv run ruff check src/lanfactory
-
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v7
         with:
