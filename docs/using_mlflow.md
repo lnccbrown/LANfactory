@@ -471,5 +471,8 @@ pip install --upgrade mlflow
 
 ## 📚 See Also
 
+- Canonical run schema (params, tags, artifacts per phase, lineage joins) and the
+  shared lab MLflow server setup: `_docs/mlflow-schema.md` and
+  `_docs/mlflow-deployment.md` in the HSSMSpine repository
 - [MLflow Documentation](https://mlflow.org/docs/latest/index.html)
 - [MLflow Tracking](https://mlflow.org/docs/latest/tracking.html)
