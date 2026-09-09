@@ -820,7 +820,7 @@ class ModelTrainerTorchMLP:
                     self.scheduler.step()
 
             # Append training history
-            training_history.values[epoch, :] = [epoch, val_loss.cpu()]
+            training_history.iloc[epoch] = [int(epoch), float(val_loss.cpu())]
 
             if mlflow_on:
                 try:
