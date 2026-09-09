@@ -1,0 +1,31 @@
+name: Linting and Formatting
+
+on:
+  pull_request:
+  workflow_call: # Called by drift.yml (scheduled drift detection)
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Install lint dependencies
+        run: uv sync --only-group lint --no-install-project
+
+      - name: Check styling
+        run: uv run --no-sync ruff format --check .
+
+      - name: Linting
+        run: uv run --no-sync ruff check src/lanfactory
