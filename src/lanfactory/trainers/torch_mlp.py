@@ -1,19 +1,19 @@
 """This module contains the classes for training TorchMLP models."""
 
+import logging
+import pickle
+from collections.abc import Callable
+from pathlib import Path
+from time import time
+
 import numpy as np
 import pandas as pd
-import pickle
-from typing import Callable
-from time import time
-import logging
-from pathlib import Path
-
-
 import torch
-import torch.nn as nn
-import torch.optim as optim
 import torch.nn.functional as F
+from torch import nn, optim
 from torch.utils.data import DataLoader
+
+from lanfactory.utils.util_funs import _create_training_history
 
 try:
     import mlflow
@@ -126,7 +126,6 @@ class DatasetTorch(torch.utils.data.Dataset):
         ]
         self.tmp_data[self.label_key] = self.tmp_data[self.label_key][shuffle_idx]
         self.__apply_label_bounds()
-        return
 
     def __init_file_shape(self) -> None:
         # Function gets dimensionalities form a test data file
@@ -164,7 +163,6 @@ class DatasetTorch(torch.utils.data.Dataset):
             self.label_dim = self.file_shape_dict["labels"][1]
         else:
             self.label_dim = 1
-        return
 
     def __data_generation(
         self, batch_ids: np.ndarray | slice | None = None
@@ -384,7 +382,7 @@ def TorchMLPFactory(
     """
     if isinstance(network_config, str):
         with open(network_config, "rb") as f:
-            network_config = pickle.load(f)  # noqa: S301
+            network_config = pickle.load(f)
 
     assert isinstance(network_config, dict)
     return TorchMLP(
@@ -413,7 +411,7 @@ class TorchMLP(nn.Module):
         input_shape: int = 10,
         network_type: str | None = None,
     ) -> None:
-        super(TorchMLP, self).__init__()
+        super().__init__()
 
         self.input_shape = input_shape
         self.network_config = network_config
@@ -499,7 +497,7 @@ class TorchMLP(nn.Module):
             return self.layers[-1](x)
         elif self.train_output_type == "logits":
             return -torch.log(
-                (1 + torch.exp(-self.layers[-1](x)))
+                1 + torch.exp(-self.layers[-1](x))
             )  # log ( 1 / (1 + exp(-x))), where x = log(p / (1 - p))
         else:
             return self.layers[-1](x)
@@ -548,7 +546,7 @@ class ModelTrainerTorchMLP:
                 self.train_config: dict = pickle.load(open(train_config, "rb"))
             except (OSError, pickle.PickleError) as e:  # pragma: no cover
                 logger.error(
-                    f"Error loading training config from file {train_config}: {str(e)}"
+                    f"Error loading training config from file {train_config}: {e!s}"
                 )
                 raise
         elif isinstance(train_config, dict):
@@ -625,37 +623,23 @@ class ModelTrainerTorchMLP:
                 self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
                     self.optimizer,
                     mode="min",
-                    factor=(
-                        self.train_config["lr_scheduler_params"]["factor"]
-                        if "factor" in self.train_config["lr_scheduler_params"]
-                        else 0.1
+                    factor=self.train_config["lr_scheduler_params"].get("factor", 0.1),
+                    patience=self.train_config["lr_scheduler_params"].get(
+                        "patience", 2
                     ),
-                    patience=(
-                        self.train_config["lr_scheduler_params"]["patience"]
-                        if "patience" in self.train_config["lr_scheduler_params"]
-                        else 2
-                    ),
-                    threshold=(
-                        self.train_config["lr_scheduler_params"]["threshold"]
-                        if "threshold" in self.train_config["lr_scheduler_params"]
-                        else 0.001
+                    threshold=self.train_config["lr_scheduler_params"].get(
+                        "threshold", 0.001
                     ),
                     threshold_mode="rel",
                     cooldown=0,
-                    min_lr=(
-                        self.train_config["lr_scheduler_params"]["min_lr"]
-                        if "min_lr" in self.train_config["lr_scheduler_params"]
-                        else 0.00000001
+                    min_lr=self.train_config["lr_scheduler_params"].get(
+                        "min_lr", 0.00000001
                     ),
                 )
             elif self.train_config["lr_scheduler"] == "multiply":
                 self.scheduler = optim.lr_scheduler.ExponentialLR(
                     self.optimizer,
-                    gamma=(
-                        self.train_config["lr_scheduler_params"]["factor"]
-                        if "factor" in self.train_config["lr_scheduler_params"]
-                        else 0.1
-                    ),
+                    gamma=self.train_config["lr_scheduler_params"].get("factor", 0.1),
                     last_epoch=-1,
                 )
             elif self.train_config["lr_scheduler"] == "cosine":
@@ -747,9 +731,7 @@ class ModelTrainerTorchMLP:
         if mlflow_on:
             self.__try_mlflow(run_id=run_id)
 
-        training_history: pd.DataFrame = pd.DataFrame(
-            np.zeros((self.train_config["n_epochs"], 2)), columns=["epoch", "val_loss"]
-        )
+        training_history = _create_training_history(self.train_config["n_epochs"])
 
         step_cnt = 0
         self.model.train()
@@ -820,7 +802,7 @@ class ModelTrainerTorchMLP:
                     self.scheduler.step()
 
             # Append training history
-            training_history.iloc[epoch] = [int(epoch), float(val_loss.cpu())]
+            training_history.iloc[epoch] = [int(epoch), val_loss.item()]
 
             if mlflow_on:
                 try:
