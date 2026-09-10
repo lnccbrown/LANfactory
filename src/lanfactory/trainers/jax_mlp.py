@@ -592,7 +592,7 @@ class ModelTrainerJaxMLP:
             )
 
             # Collect loss in training history
-            training_history.values[epoch, :] = [int(epoch), float(test_loss)]
+            training_history.iloc[epoch] = [float(epoch), float(test_loss)]
 
             if self.mlflow_on:
                 try:
