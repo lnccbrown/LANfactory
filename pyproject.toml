@@ -39,6 +39,8 @@ dependencies = [
     "tqdm>=4.67.1",
     "frozendict>=2.4.6",
     "onnx>=1.17.0",
+    # lanfactory.derive batches published (1, D) graphs through onnxruntime.
+    "onnxruntime>=1.17",
     # jax -> ONNX export for jaxtrain networks. Exact-pinned to the 0.15 line:
     # 0.x releases move the API, and the parity test in tests/onnx guards the
     # ecosystem's single-trial ONNX contract against silent changes.
@@ -93,7 +95,6 @@ dev = [
     "types-PyYAML",
     "mlflow>=3.14.0",
     "jaxonnxruntime>=0.3",
-    "onnxruntime>=1.17",
     "nflows>=0.14",
     "bayesflow>=2.0.8",
     "keras>=3.12",
