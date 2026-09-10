@@ -1,9 +1,39 @@
 import shutil
 import pathlib
 
+import inspect
 import logging
+import re
+from collections.abc import Callable
+
+import numpy as np
+import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+
+def history_write_is_broken(train_and_evaluate: Callable) -> bool:
+    """Whether ``train_and_evaluate`` still writes its per-epoch history into
+    ``DataFrame.values`` under a pandas that hands out a read-only view.
+
+    pandas >= 3 makes ``DataFrame.values`` read-only and both trainers wrote
+    ``training_history.values[epoch, :] = ...``; fixed upstream in
+    lnccbrown/LANfactory#145. The behaviour is probed rather than inferred
+    from the version, and the statement itself is matched rather than a
+    mention of it, so a skip built on this lifts as soon as the fix is on the
+    branch and is never taken under pandas 2.
+    """
+    read_only = not pd.DataFrame(np.zeros((1, 2))).values.flags.writeable
+    source = inspect.getsource(train_and_evaluate)
+    return read_only and re.search(r"history\.values\[epoch", source) is not None
+
+
+HISTORY_WRITE_SKIP_REASON = (
+    f"pandas {pd.__version__} hands out a read-only DataFrame.values, so the "
+    "trainer's per-epoch history write fails ('assignment destination is "
+    "read-only') until lnccbrown/LANfactory#145 is merged; run with "
+    "`uv run --with 'pandas<3' pytest ...`"
+)
 
 
 def clean_out_folder(folder: str | pathlib.Path | None = None, dry_run=True) -> None:
