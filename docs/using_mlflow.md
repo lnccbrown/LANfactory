@@ -42,6 +42,31 @@ mlflow ui
 - Artifacts: trained model state, training history, config files
 - Lineage: link to data generation experiment (optional)
 
+### Derived corpora
+
+Every training run carries the tag `data_origin`: `simulated` for an
+ssm-simulators corpus, `derived` for one written by
+[`derive-aux`](api/derive.md#derived-corpora) from a trained LAN. A derived
+run additionally carries the LAN it came from, copied from the corpus's
+`generator_config["source"]` under exactly these names (downstream
+publishers read them by name):
+
+| kind | keys |
+| --- | --- |
+| params | `derivation_method` (`derived-from-lan`), `aux_category` (`choice` / `omission` / `nogo`), `source_lan_run_uuid`, `source_lan_sha256`, `source_lan_hf_commit`, `integration_grid`, `integration_max_t`; `source_lan_run_id` only when known |
+| tags | `data_origin=derived`, `derive_total_mass_mean`, `derive_total_mass_min`, `derive_total_mass_max` |
+
+MLflow params are strings, and a corpus derived from a bare `ddm.onnx` or a
+local file has no run uuid or Hub commit to record. Those two keys are still
+logged, as the empty string `""`, so that a consumer can tell "derived, origin
+unknown" (key present, empty) from "not a derived run" (key absent). The
+total-mass statistics are tags rather than params because they describe the
+first file the trainer read, which a resumed run may change.
+
+```python
+runs = mlflow.search_runs(filter_string="tags.data_origin = 'derived'")
+```
+
 ## 📖 Usage Examples
 
 ### Example 1: Basic JAX Training
