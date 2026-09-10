@@ -8,8 +8,9 @@ Lightweight Python package for training Likelihood Approximation Networks (LANs)
 
 ```
 src/lanfactory/                # Main package
-  cli/                         # Typer CLIs: jaxtrain, torchtrain, transform-onnx, upload-hf, download-hf
+  cli/                         # Typer CLIs: jaxtrain, torchtrain, transform-onnx, upload-hf, download-hf, derive-aux
   config/                      # Default network and training configs (LAN, CPN, OPN)
+  derive/                      # Integrate a trained LAN over rt; derive cpn/opn/gonogo corpora from it
   trainers/                    # Training implementations (torch_mlp.py, jax_mlp.py)
   onnx/                        # PyTorch → ONNX export
   hf/                          # HuggingFace Hub integration (upload, download, model cards)
@@ -140,6 +141,7 @@ Optional experiment tracking via MLflow. CLI flags: `--mlflow-run-name`, `--mlfl
 | `transform-jax-onnx` | `lanfactory.onnx.jax_export` | Convert a jaxtrain network → ONNX |
 | `upload-hf` | `lanfactory.cli.upload_hf` | Upload trained models to HuggingFace |
 | `download-hf` | `lanfactory.cli.download_hf` | Download models from HuggingFace |
+| `derive-aux` | `lanfactory.cli.derive_aux` | Derive a cpn/opn/gonogo training corpus from a trained LAN |
 
 ## CI Workflows
 
