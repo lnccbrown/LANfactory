@@ -8,6 +8,19 @@ import lanfactory
 
 logger = logging.getLogger(__name__)
 
+# The provenance keys a derived corpus always carries on its training run
+# (``SourceLAN.provenance`` minus ``source_lan_run_id``, which is logged only
+# when known). LAN_pipeline_minimal's publisher reads them by name.
+_DERIVED_PROVENANCE_PARAMS: tuple[str, ...] = (
+    "derivation_method",
+    "aux_category",
+    "source_lan_run_uuid",
+    "source_lan_sha256",
+    "source_lan_hf_commit",
+    "integration_grid",
+    "integration_max_t",
+)
+
 
 # def non_negative_int(value):
 #     """Convert string value to non-negative integer.
@@ -224,6 +237,24 @@ def log_training_run_identity(
     is the configured *cap*, and reusing that param key with the effective
     value would make MLflow reject the trainer's entire param batch.
 
+    **Derived corpora.** When the training data was written by
+    ``lanfactory.derive.derive_aux_corpus`` (the pickles'
+    ``generator_config["generator_approach"] == "derived"``), the LAN the
+    corpus came from is provenance of *this* network too, so the run carries
+    ``generator_config["source"]`` (``SourceLAN.provenance``) as params under
+    exactly those names — ``derivation_method``, ``aux_category``,
+    ``source_lan_run_uuid``, ``source_lan_sha256``, ``source_lan_hf_commit``,
+    ``integration_grid``, ``integration_max_t`` always, ``source_lan_run_id``
+    when it is not ``None`` — plus the tag ``data_origin=derived`` and the
+    per-file total-mass statistics ``derive_total_mass_{mean,min,max}`` as
+    tags (they describe the first file the dataset read, which a resume may
+    change). MLflow params are strings, so the run uuid and Hub commit, which
+    a derived corpus legitimately lacks (a bare ``ddm.onnx``, a local file),
+    are logged as the empty string ``""``: the key is present, and a
+    downstream publisher can tell "derived, origin unknown" from "not a
+    derived run". Any other corpus is tagged ``data_origin=simulated`` and
+    gets none of the provenance keys.
+
     Best-effort: failures are logged, never raised — training must not die on
     a tracking hiccup. No-op when no MLflow run is active.
     """
@@ -265,6 +296,27 @@ def log_training_run_identity(
                         bounds_json.encode()
                     ).hexdigest()
 
+        # A derived corpus (lanfactory.derive) names the LAN it was integrated
+        # from; that is provenance of this network too. See the docstring for
+        # the key set and the "" convention.
+        generator_config = getattr(dataset, "data_generator_config", None)
+        derived = (
+            isinstance(generator_config, dict)
+            and generator_config.get("generator_approach") == "derived"
+        )
+        derive_tags: dict[str, str] = {
+            "data_origin": "derived" if derived else "simulated"
+        }
+        if derived:
+            source = generator_config.get("source", {})
+            for key in _DERIVED_PROVENANCE_PARAMS:
+                value = source.get(key)
+                params[key] = "" if value is None else value
+            if source.get("source_lan_run_id") is not None:
+                params["source_lan_run_id"] = source["source_lan_run_id"]
+            for key, value in generator_config.get("derive_stats", {}).items():
+                derive_tags[key] = str(value)
+
         mlflow.log_params(params)
 
         tags = {
@@ -272,6 +324,7 @@ def log_training_run_identity(
             "phase": "train",
             "run_uuid": run_uuid,
             "n_training_files_used": str(n_training_files),
+            **derive_tags,
         }
         if training_data_folder is not None:
             tags["training_data_folder"] = str(training_data_folder)

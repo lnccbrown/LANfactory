@@ -55,6 +55,45 @@ MODEL_CONFIG = {
 }
 
 
+# What derive_aux_corpus writes into every pickle's generator_config (the
+# "source" block is SourceLAN.provenance for a bare ddm.onnx: no run uuid, no
+# Hub commit, no MLflow run id).
+DERIVED_GENERATOR_CONFIG = {
+    "generator_approach": "derived",
+    "model": "ddm",
+    "network_type": "opn",
+    "source": {
+        "derivation_method": "derived-from-lan",
+        "aux_category": "omission",
+        "source_lan_run_uuid": None,
+        "source_lan_sha256": "09f685c1" * 8,
+        "source_lan_hf_commit": None,
+        "source_lan_run_id": None,
+        "integration_grid": 1000,
+        "integration_max_t": 20.0,
+    },
+    "derive_stats": {
+        "derive_total_mass_mean": 0.998,
+        "derive_total_mass_min": 0.95,
+        "derive_total_mass_max": 1.002,
+    },
+}
+DERIVED_PARAM_KEYS = {
+    "derivation_method",
+    "aux_category",
+    "source_lan_run_uuid",
+    "source_lan_sha256",
+    "source_lan_hf_commit",
+    "integration_grid",
+    "integration_max_t",
+}
+DERIVED_TAG_KEYS = {
+    "derive_total_mass_mean",
+    "derive_total_mass_min",
+    "derive_total_mass_max",
+}
+
+
 def make_training_pickle(path: Path, features_key="lan_data", label_key="lan_labels"):
     """A minimal training-data pickle shaped like ssm-simulators output."""
     n_samples, n_features = 64, 6
@@ -190,6 +229,79 @@ class TestLogTrainingRunIdentity:
         p = run.data.params
         assert p["input_dim"] == "6"
         assert "param_bounds_json" not in p
+
+    def test_derived_corpus_provenance_is_logged_by_name(self, tmp_tracking, tmp_path):
+        """A derived corpus puts SourceLAN.provenance on the run as params.
+
+        The exact key set matters: LAN_pipeline_minimal's publisher reads them
+        by name. ``source_lan_run_id`` is absent because the corpus has none,
+        and the two legitimately-unknown fields are the empty string rather
+        than a missing key or the string "None".
+        """
+        dataset = SimpleNamespace(
+            input_dim=5,
+            data_model_config=MODEL_CONFIG,
+            data_generator_config=DERIVED_GENERATOR_CONFIG,
+        )
+        run = self._log_and_fetch(
+            tmp_tracking, tmp_path, network_type="opn", dataset=dataset
+        )
+        p, t = run.data.params, run.data.tags
+
+        assert set(p) == DERIVED_PARAM_KEYS | {
+            "model",
+            "network_type",
+            "backend",
+            "input_dim",
+            "param_space",
+            "param_bounds_json",
+            "param_bounds_sha256",
+        }
+        assert p["derivation_method"] == "derived-from-lan"
+        assert p["aux_category"] == "omission"
+        assert p["source_lan_sha256"] == "09f685c1" * 8
+        assert p["integration_grid"] == "1000"
+        assert p["integration_max_t"] == "20.0"
+        assert p["source_lan_run_uuid"] == ""
+        assert p["source_lan_hf_commit"] == ""
+        assert "source_lan_run_id" not in p
+
+        assert t["data_origin"] == "derived"
+        assert DERIVED_TAG_KEYS <= set(t)
+        assert t["derive_total_mass_mean"] == "0.998"
+        assert t["derive_total_mass_min"] == "0.95"
+        assert t["derive_total_mass_max"] == "1.002"
+
+    def test_derived_corpus_logs_source_run_id_when_known(self, tmp_tracking, tmp_path):
+        config = json.loads(json.dumps(DERIVED_GENERATOR_CONFIG))
+        config["source"]["source_lan_run_id"] = "0123456789abcdef"
+        config["source"]["source_lan_run_uuid"] = "56d99936415e11f0a2bf3cecefb6d5ee"
+        dataset = SimpleNamespace(
+            input_dim=5, data_model_config=MODEL_CONFIG, data_generator_config=config
+        )
+        run = self._log_and_fetch(tmp_tracking, tmp_path, dataset=dataset)
+        p = run.data.params
+        assert p["source_lan_run_id"] == "0123456789abcdef"
+        assert p["source_lan_run_uuid"] == "56d99936415e11f0a2bf3cecefb6d5ee"
+
+    def test_simulated_corpus_has_no_provenance(self, tmp_tracking, tmp_path):
+        """An ssms corpus: ``data_origin=simulated`` and none of the derive keys."""
+        dataset = SimpleNamespace(
+            input_dim=6,
+            data_model_config=MODEL_CONFIG,
+            data_generator_config={"model": "ddm", "generator_approach": "lan"},
+        )
+        run = self._log_and_fetch(tmp_tracking, tmp_path, dataset=dataset)
+        p, t = run.data.params, run.data.tags
+
+        assert t["data_origin"] == "simulated"
+        assert not (DERIVED_PARAM_KEYS | {"source_lan_run_id"}) & set(p)
+        assert not DERIVED_TAG_KEYS & set(t)
+        # A dataset that never read a generator_config (DatasetTorch's "None"
+        # default) or no dataset at all is simulated too, not unknown.
+        for ds in (SimpleNamespace(input_dim=6, data_generator_config="None"), None):
+            run = self._log_and_fetch(tmp_tracking, tmp_path, dataset=ds)
+            assert run.data.tags["data_origin"] == "simulated"
 
     def test_noop_without_active_run(self, tmp_tracking, tmp_path):
         # Must be a silent no-op, not an error.
