@@ -5,7 +5,12 @@ Integrates a trained LAN's density over reaction time and writes a cpn, opn or
 gonogo training corpus in the layout ``torchtrain`` / ``jaxtrain`` consume.
 
 Usage:
-    derive-aux --from-onnx ddm.onnx --model ddm --type cpn --out data/cpn/ddm
+    derive-aux --from-onnx ddm.onnx --network-type cpn --model-name ddm \\
+        --output-folder data/cpn/ddm
+
+The option names follow the Hub CLIs (``--network-type``, ``--model-name``,
+``--output-folder``); ``--type``, ``--model`` and ``--out`` are accepted as
+short aliases.
 """
 
 from pathlib import Path
@@ -13,12 +18,12 @@ from pathlib import Path
 import typer
 
 from lanfactory.derive import (
+    MANIFEST_NAME,
     NETWORK_TYPES,
     IntegrationGrid,
     SourceLAN,
     derive_aux_corpus,
 )
-from lanfactory.derive.corpus import MANIFEST_NAME
 
 app = typer.Typer()
 
@@ -33,18 +38,21 @@ def main(
         dir_okay=False,
         resolve_path=True,
     ),
-    model: str = typer.Option(
+    network_type: str = typer.Option(
         ...,
+        "--network-type",
+        "--type",
+        help=f"Auxiliary network type to derive: one of {', '.join(NETWORK_TYPES)}.",
+    ),
+    model_name: str = typer.Option(
+        ...,
+        "--model-name",
         "--model",
         help="ssms model name the LAN was trained for (e.g., ddm, angle).",
     ),
-    network_type: str = typer.Option(
+    output_folder: Path = typer.Option(
         ...,
-        "--type",
-        help=f"Auxiliary network type: one of {', '.join(NETWORK_TYPES)}.",
-    ),
-    out: Path = typer.Option(
-        ...,
+        "--output-folder",
         "--out",
         help="Destination folder for the pickles and the manifest.",
         file_okay=False,
@@ -88,16 +96,18 @@ def main(
 ):
     """Derive a cpn / opn / gonogo training corpus from a trained LAN.
 
-    Writes ``--n-files`` pickles plus ``derive_manifest.json`` to ``--out`` and
-    prints the manifest path. Train on the folder with ``torchtrain`` or
-    ``jaxtrain`` using a batch size that divides the rows per file.
+    Writes ``--n-files`` pickles plus ``derive_manifest.json`` to
+    ``--output-folder`` and prints the manifest path. Train on the folder with
+    ``torchtrain`` or ``jaxtrain`` using a batch size that divides the rows
+    per file.
 
     Example:
-        derive-aux --from-onnx ddm.onnx --model ddm --type cpn --out data/cpn/ddm
+        derive-aux --from-onnx ddm.onnx --network-type cpn --model-name ddm
+        --output-folder data/cpn/ddm
     """
     if network_type not in NETWORK_TYPES:
         raise typer.BadParameter(
-            f"--type must be one of {list(NETWORK_TYPES)}, got: {network_type}"
+            f"--network-type must be one of {list(NETWORK_TYPES)}, got: {network_type}"
         )
     try:
         grid = IntegrationGrid(n_points=grid_points, max_t=max_t)
@@ -113,9 +123,9 @@ def main(
     try:
         files = derive_aux_corpus(
             from_onnx,
-            model,
+            model_name,
             network_type,
-            out,
+            output_folder,
             n_files=n_files,
             n_theta_per_file=n_theta_per_file,
             grid=grid,
@@ -126,8 +136,10 @@ def main(
     except ValueError as e:
         raise typer.BadParameter(str(e)) from e
 
-    typer.echo(f"Wrote {len(files)} {network_type} files for {model} to {out}")
-    typer.echo(f"Manifest: {out / MANIFEST_NAME}")
+    typer.echo(
+        f"Wrote {len(files)} {network_type} files for {model_name} to {output_folder}"
+    )
+    typer.echo(f"Manifest: {output_folder / MANIFEST_NAME}")
 
 
 if __name__ == "__main__":

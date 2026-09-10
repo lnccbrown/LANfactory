@@ -4,15 +4,21 @@ from __future__ import annotations
 
 import json
 import re
-from pathlib import Path
+import subprocess
 
 from typer.testing import CliRunner
 
 from lanfactory.cli.derive_aux import app
-from lanfactory.derive import MANIFEST_NAME
+from lanfactory.derive import (
+    MANIFEST_NAME,
+    IntegrationGrid,
+    SourceLAN,
+    derive_aux_corpus,
+)
+from tests.derive.conftest import DDM_ONNX
 
-DDM_ONNX = Path(__file__).parent.parent / "fixtures" / "onnx" / "ddm.onnx"
 _ANSI_RE = re.compile(r"\x1b\[[\d;]*m")
+RUN_UUID = "56d99936415e11f0a2bf3cecefb6d5ee"
 
 runner = CliRunner()
 
@@ -21,18 +27,35 @@ def _out(result) -> str:
     return _ANSI_RE.sub("", result.output)
 
 
-def test_derive_aux_writes_files_and_manifest(tmp_path):
+def test_derive_aux_is_installed_as_a_console_script():
+    """The ``[project.scripts]`` entry point resolves (the tests below run in-process)."""
+    result = subprocess.run(
+        ["derive-aux", "--help"], capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 0, result.stderr
+    help_text = _ANSI_RE.sub("", result.stdout)
+    for flag in ("--from-onnx", "--network-type", "--model-name", "--output-folder"):
+        assert flag in help_text
+
+
+def test_derive_aux_writes_files_and_manifest(tmp_path, ddm_provenance):
+    """Every option reaches ``derive_aux_corpus``: the CLI output equals the API's.
+
+    The pickles omit the source path, so a CLI run and a library call with the
+    same arguments are byte-identical file by file.
+    """
     out = tmp_path / "opn"
+    hub_commit = ddm_provenance["Hub commit"]
     result = runner.invoke(
         app,
         [
             "--from-onnx",
             str(DDM_ONNX),
-            "--model",
-            "ddm",
-            "--type",
+            "--network-type",
             "opn",
-            "--out",
+            "--model-name",
+            "ddm",
+            "--output-folder",
             str(out),
             "--n-files",
             "3",
@@ -40,31 +63,100 @@ def test_derive_aux_writes_files_and_manifest(tmp_path):
             "16",
             "--grid-points",
             "200",
+            "--max-t",
+            "15",
+            "--deadline-quantile-frac",
+            "0.3",
             "--seed",
             "7",
+            "--source-run-uuid",
+            RUN_UUID,
             "--source-hf-repo",
             "franklab/HSSM",
             "--source-hf-revision",
-            "01f5d4d0fa9188940ab541a979f933550b29616a",
+            hub_commit,
         ],
     )
     assert result.exit_code == 0, _out(result)
     assert str(out / MANIFEST_NAME) in _out(result)
+    assert "Wrote 3 opn files for ddm" in _out(result)
     assert len(list(out.glob("*.pickle"))) == 3
+
     manifest = json.loads((out / MANIFEST_NAME).read_text())
+    assert manifest["model"] == "ddm" and manifest["network_type"] == "opn"
     assert manifest["n_files"] == 3 and manifest["n_theta_per_file"] == 16
-    assert manifest["grid"]["n_points"] == 200 and manifest["seed"] == 7
-    assert manifest["source"]["hf_repo"] == "franklab/HSSM"
-    assert manifest["source"]["source_lan_hf_commit"].startswith("01f5d4d0")
+    assert manifest["grid"] == {"n_points": 200, "max_t": 15.0, "t_min": 1e-4}
+    assert manifest["deadline_quantile_frac"] == 0.3
+    assert manifest["seed"] == 7
+    source = manifest["source"]
+    assert source["hf_repo"] == "franklab/HSSM"
+    assert source["hf_revision"] == source["source_lan_hf_commit"] == hub_commit
+    assert source["run_uuid"] == source["source_lan_run_uuid"] == RUN_UUID
+    assert source["sha256"] == source["source_lan_sha256"] == ddm_provenance["sha256"]
+
+    library = derive_aux_corpus(
+        DDM_ONNX,
+        "ddm",
+        "opn",
+        tmp_path / "lib",
+        n_files=3,
+        n_theta_per_file=16,
+        grid=IntegrationGrid(n_points=200, max_t=15.0),
+        deadline_quantile_frac=0.3,
+        seed=7,
+        source=SourceLAN.from_onnx(
+            DDM_ONNX,
+            run_uuid=RUN_UUID,
+            hf_repo="franklab/HSSM",
+            hf_revision=hub_commit,
+        ),
+    )
+    # The pickles carry the flat provenance (uuid, sha256, Hub commit) but not
+    # the source path, so the two runs are byte-identical file by file.
+    for cli_file, lib_file in zip(sorted(out.glob("*.pickle")), library, strict=True):
+        assert cli_file.name == lib_file.name
+        assert cli_file.read_bytes() == lib_file.read_bytes()
+
+
+def test_derive_aux_short_aliases_match_the_long_options(tmp_path):
+    """``--type`` / ``--model`` / ``--out`` are aliases, not separate options."""
+    result = runner.invoke(
+        app,
+        [
+            "--from-onnx",
+            str(DDM_ONNX),
+            "--type",
+            "cpn",
+            "--model",
+            "ddm",
+            "--out",
+            str(tmp_path / "cpn"),
+            "--n-files",
+            "2",
+            "--n-theta-per-file",
+            "8",
+        ],
+    )
+    assert result.exit_code == 0, _out(result)
+    manifest = json.loads((tmp_path / "cpn" / MANIFEST_NAME).read_text())
+    assert manifest["network_type"] == "cpn" and manifest["model"] == "ddm"
+    assert manifest["n_rows_per_file"] == 16  # 8 thetas x 2 choices
 
 
 def test_derive_aux_requires_type(tmp_path):
     result = runner.invoke(
         app,
-        ["--from-onnx", str(DDM_ONNX), "--model", "ddm", "--out", str(tmp_path)],
+        [
+            "--from-onnx",
+            str(DDM_ONNX),
+            "--model-name",
+            "ddm",
+            "--output-folder",
+            str(tmp_path),
+        ],
     )
     assert result.exit_code == 2
-    assert "Missing option" in _out(result) and "--type" in _out(result)
+    assert "Missing option" in _out(result) and "--network-type" in _out(result)
 
 
 def test_derive_aux_rejects_unknown_type(tmp_path):
@@ -73,16 +165,16 @@ def test_derive_aux_rejects_unknown_type(tmp_path):
         [
             "--from-onnx",
             str(DDM_ONNX),
-            "--model",
-            "ddm",
-            "--type",
+            "--network-type",
             "lan",
-            "--out",
+            "--model-name",
+            "ddm",
+            "--output-folder",
             str(tmp_path),
         ],
     )
     assert result.exit_code == 2
-    assert "--type must be one of" in _out(result)
+    assert "--network-type must be one of" in _out(result)
     assert not list(tmp_path.glob("*.pickle"))
 
 
@@ -92,11 +184,11 @@ def test_derive_aux_rejects_missing_onnx_and_bad_counts(tmp_path):
         [
             "--from-onnx",
             str(tmp_path / "missing.onnx"),
-            "--model",
-            "ddm",
-            "--type",
+            "--network-type",
             "cpn",
-            "--out",
+            "--model-name",
+            "ddm",
+            "--output-folder",
             str(tmp_path),
         ],
     )
@@ -106,11 +198,11 @@ def test_derive_aux_rejects_missing_onnx_and_bad_counts(tmp_path):
         [
             "--from-onnx",
             str(DDM_ONNX),
-            "--model",
-            "ddm",
-            "--type",
+            "--network-type",
             "cpn",
-            "--out",
+            "--model-name",
+            "ddm",
+            "--output-folder",
             str(tmp_path),
             "--n-files",
             "1",

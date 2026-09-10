@@ -16,6 +16,7 @@ src/lanfactory/                # Main package
   hf/                          # HuggingFace Hub integration (upload, download, model cards)
   utils/                       # Config save/load, MLflow utilities
 tests/                         # pytest suite (trainers, CLI, ONNX, HuggingFace, E2E)
+  fixtures/onnx/               # Real LANs (production ddm.onnx, sha256-pinned; see PROVENANCE.md)
 docs/                          # MkDocs documentation + tutorial notebooks
 notebooks/                     # Test notebooks
 ```
@@ -60,6 +61,9 @@ uv run upload-hf --model-folder <dir> --network-type lan --model-name ddm
 
 # Download models from HuggingFace
 uv run download-hf --network-type lan --model-name ddm --output-folder <dir>
+
+# Derive a cpn/opn/gonogo training corpus from a trained LAN
+uv run derive-aux --from-onnx ddm.onnx --network-type cpn --model-name ddm --output-folder <dir>
 ```
 
 ## Key Architecture Patterns
