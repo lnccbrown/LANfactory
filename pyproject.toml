@@ -175,6 +175,7 @@ transform-onnx = "lanfactory.onnx.transform_onnx:app"
 transform-jax-onnx = "lanfactory.onnx.jax_export:app"
 upload-hf = "lanfactory.cli.upload_hf:app"
 download-hf = "lanfactory.cli.download_hf:app"
+derive-aux = "lanfactory.cli.derive_aux:app"
 
 [tool.setuptools.package-data]
 "lanfactory.cli" = ["config_network_training_lan.yaml"]

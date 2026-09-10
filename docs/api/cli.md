@@ -1,10 +1,11 @@
 # Command-line reference
 
-LANfactory installs six commands. The tables below describe the complete
+LANfactory installs seven commands. The tables below describe the complete
 command-line surface; run `COMMAND --help` to inspect the version installed in
 your environment. Training commands consume LANfactory configuration files,
-export commands convert saved trainer artifacts, and Hub commands move reviewed
-artifacts to or from a Hugging Face repository.
+export commands convert saved trainer artifacts, Hub commands move reviewed
+artifacts to or from a Hugging Face repository, and `derive-aux` turns a
+trained LAN into an auxiliary-network training corpus.
 
 ## `jaxtrain`
 
@@ -120,6 +121,30 @@ Retrieve one `{network-type}/{model-name}/` folder from a Hub repository.
 | `--token TEXT` | `HF_TOKEN` or unset | Explicit token or environment fallback for private repositories |
 | `--force` | off | Replace an existing destination |
 | `--log-level LEVEL`, `-l LEVEL` | `WARNING` | Logging threshold |
+
+## `derive-aux`
+
+Derive a CPN, OPN, or go/no-go training corpus from a trained LAN by
+integrating its density over reaction time (see
+[Deriving auxiliary networks](../network_types.md#deriving-auxiliary-networks-from-a-trained-lan)).
+Writes `--n-files` pickles plus `derive_manifest.json` to `--out`, in the
+layout `torchtrain` and `jaxtrain` read, and prints the manifest path.
+
+| Option | Required/default | Contract |
+| --- | --- | --- |
+| `--from-onnx PATH` | required | The trained LAN; a `(1, n_params + 2)` ONNX artifact |
+| `--model TEXT` | required | ssms model name the LAN was trained for (e.g. `ddm`) |
+| `--type TEXT` | required | One of `cpn`, `opn`, or `gonogo` |
+| `--out PATH` | required | Destination folder; created if absent |
+| `--n-files INTEGER` | `100` | Number of pickles to write; at least 2 |
+| `--n-theta-per-file INTEGER` | `4096` | Parameter vectors per file; rows per file for `opn`/`gonogo`, times the number of choices for `cpn` |
+| `--grid-points INTEGER` | `1000` | Reaction-time grid points per choice |
+| `--max-t FLOAT` | `20.0` | Upper edge of the integration grid in seconds; the density is never evaluated past it |
+| `--deadline-quantile-frac FLOAT` | `0.7` | Share of `opn`/`gonogo` deadlines drawn from the LAN's own RT quantiles; the rest are uniform on the deadline bounds |
+| `--seed INTEGER` | `0` | Base seed; file `i` is generated from `[seed, i]` |
+| `--source-run-uuid TEXT` | parsed from the filename | Training run uuid recorded in the provenance |
+| `--source-hf-repo TEXT` | unset | Hub repository the LAN was downloaded from |
+| `--source-hf-revision TEXT` | unset | Hub revision of that download, recorded as `source_lan_hf_commit` |
 
 For task-oriented workflows, see [Track training with MLflow](../using_mlflow.md)
 and [Share trained networks on Hugging Face Hub](../using_huggingface.md). The
