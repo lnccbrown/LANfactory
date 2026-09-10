@@ -3,28 +3,35 @@
 The corpus tests check that a derived folder is what the trainer reads; this
 test drives the trainer's own CLI through it and checks what comes out: an
 artifact that satisfies the single-trial ONNX contract and evaluates to a
-log-probability, and an MLflow run that names the LAN the corpus came from.
+log-probability, and an MLflow run that names the LAN the corpus came from —
+every provenance key exactly as the corpus wrote it.
 """
 
 from __future__ import annotations
 
 import contextlib
 import hashlib
-import inspect
 import pickle
 import shutil
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
+import onnxruntime as ort
 import pytest
 import yaml
+from torch.utils.data import DataLoader
 
 from lanfactory.cli.torch_train import main as torchtrain
-from lanfactory.derive import AUX_CATEGORY, DERIVATION_METHOD, derive_aux_corpus
+from lanfactory.derive import (
+    AUX_CATEGORY,
+    DERIVATION_METHOD,
+    IntegrationGrid,
+    derive_aux_corpus,
+)
 from lanfactory.onnx.contract import assert_single_trial_contract
 from lanfactory.trainers.torch_mlp import ModelTrainerTorchMLP
 from tests.derive.conftest import DDM_ONNX
+from tests.utils import HISTORY_WRITE_SKIP_REASON, history_write_is_broken
 
 mlflow = pytest.importorskip("mlflow")
 
@@ -34,23 +41,9 @@ N_THETA = 64
 # cpn corpus has one row per choice (two for ddm), opn / gonogo one per theta.
 ROWS_PER_FILE = {"cpn": 2 * N_THETA, "opn": N_THETA, "gonogo": N_THETA}
 
-
-def _history_write_is_broken() -> bool:
-    """pandas >= 3 makes ``DataFrame.values`` read-only, and the trainers write
-    their per-epoch history into it (``training_history.values[epoch, :] =``);
-    fixed upstream in lnccbrown/LANfactory#145. The skip lifts itself once that
-    fix is on the branch, and is never taken under pandas 2."""
-    source = inspect.getsource(ModelTrainerTorchMLP.train_and_evaluate)
-    return int(pd.__version__.split(".")[0]) >= 3 and "history.values[" in source
-
-
 pytestmark = pytest.mark.skipif(
-    _history_write_is_broken(),
-    reason=(
-        f"pandas {pd.__version__}: the trainer's per-epoch history write fails "
-        "('assignment destination is read-only') until lnccbrown/LANfactory#145 "
-        "is merged; run with `uv run --with 'pandas<3' pytest ...`"
-    ),
+    history_write_is_broken(ModelTrainerTorchMLP.train_and_evaluate),
+    reason=HISTORY_WRITE_SKIP_REASON,
 )
 
 
@@ -66,6 +59,22 @@ def cleanup_mlflow():
         shutil.rmtree(mlruns)
     with contextlib.suppress(Exception):
         mlflow.set_tracking_uri(original_uri)
+
+
+@pytest.fixture(autouse=True)
+def inprocess_dataloader(monkeypatch):
+    """Load the two tiny files in the test process.
+
+    The CLI cannot ask for it (``dl_workers <= 0`` means "auto", never 0),
+    and spawning a worker per DataLoader costs ~25 s per case here against
+    ~0.2 s in-process — the whole round trip is otherwise worker start-up.
+    """
+    original_init = DataLoader.__init__
+
+    def init_in_process(self, *args, **kwargs):
+        original_init(self, *args, **{**kwargs, "num_workers": 0})
+
+    monkeypatch.setattr(DataLoader, "__init__", init_in_process)
 
 
 def _training_yaml(path: Path, network_type: str, corpus: Path) -> Path:
@@ -105,10 +114,9 @@ def test_derive_train_export_round_trip(tmp_path, network_type):
     tracking_uri = f"sqlite:///{(tmp_path / 'tracking.db').absolute()}"
     networks = tmp_path / "networks"
 
-    # The command function itself, in-process, with every option spelled out
-    # (their defaults are typer OptionInfo objects). CliRunner would do, but
-    # its stdout buffer is closed under it by the trainer's DataLoader worker
-    # teardown, and the run is then unreadable even though it succeeded.
+    # The command function itself, in-process (so the DataLoader patch above
+    # applies), with every option spelled out: their defaults are typer
+    # OptionInfo objects.
     torchtrain(
         config_path=config_path,
         training_data_folder=corpus,
@@ -125,29 +133,57 @@ def test_derive_train_export_round_trip(tmp_path, network_type):
         log_level="WARNING",
     )
 
-    # The artifact: single-trial contract, n_params + 1 wide, log-probability.
+    # The artifact: single-trial contract, n_params + 1 wide, and the
+    # log-sigmoid head (Exp + Log) that the eval-mode logits network exports —
+    # a raw-logit export has only Gemm/Tanh. Its output on a corpus row is
+    # then a finite log-probability.
     (onnx_path,) = list((networks / network_type / "ddm").glob("*_model.onnx"))
-    assert_single_trial_contract(onnx_path, expected_input_width=N_PARAMS + 1)
-    import onnxruntime as ort
-
+    info = assert_single_trial_contract(onnx_path, expected_input_width=N_PARAMS + 1)
+    assert {"Exp", "Log"} <= set(info["ops"]), info["ops"]
     with open(files[0], "rb") as f:
-        row = pickle.load(f)[f"{network_type}_data"][:1].astype(np.float32)
+        pickled = pickle.load(f)
     session = ort.InferenceSession(str(onnx_path))
-    (out,) = session.run(None, {session.get_inputs()[0].name: row})
-    log_prob = float(np.asarray(out).reshape(-1)[0])
-    assert np.isfinite(log_prob) and log_prob <= 0.0, log_prob
+    input_name = session.get_inputs()[0].name
+    for row in pickled[f"{network_type}_data"][:4].astype(np.float32):
+        (out,) = session.run(None, {input_name: row[None, :]})
+        log_prob = float(np.asarray(out).reshape(-1)[0])
+        assert np.isfinite(log_prob) and log_prob <= 0.0, log_prob
 
-    # The run: the LAN the corpus came from, by name, plus the origin tag.
+    # The run: what the corpus wrote, by name, plus the origin tag.
     client = mlflow.MlflowClient(tracking_uri=tracking_uri)
     experiment = client.get_experiment_by_name("derive-roundtrip")
     (run,) = client.search_runs([experiment.experiment_id])
     params, tags = run.data.params, run.data.tags
     assert params["network_type"] == network_type
+    assert tags["data_origin"] == "derived"
+    assert tags["run_uuid"] in onnx_path.name  # the MLflow <-> disk join key
+
+    source = pickled["generator_config"]["source"]
     assert params["derivation_method"] == DERIVATION_METHOD
     assert params["aux_category"] == AUX_CATEGORY[network_type]
     assert (
         params["source_lan_sha256"] == hashlib.sha256(DDM_ONNX.read_bytes()).hexdigest()
     )
-    assert params["source_lan_run_uuid"] == ""  # a bare ddm.onnx has no run uuid
-    assert tags["data_origin"] == "derived"
-    assert tags["run_uuid"] in onnx_path.name  # the MLflow <-> disk join key
+    # A bare ddm.onnx has no run uuid and no Hub commit: logged as "", and
+    # its MLflow run id is unknown: not logged at all.
+    assert params["source_lan_run_uuid"] == ""
+    assert params["source_lan_hf_commit"] == ""
+    assert "source_lan_run_id" not in params
+    assert params["integration_grid"] == str(IntegrationGrid().n_points)
+    assert params["integration_max_t"] == str(IntegrationGrid().max_t)
+    # Every other key the corpus wrote, verbatim.
+    for key, value in source.items():
+        if value is not None:
+            assert params[key] == str(value), key
+
+    # The mass statistics are per file and describe the first file the
+    # dataset read, which file shuffling makes either one: the tags must be
+    # exactly one corpus file's derive_stats, stringified.
+    per_file_stats = []
+    for file in files:
+        with open(file, "rb") as f:
+            stats = pickle.load(f)["generator_config"]["derive_stats"]
+        per_file_stats.append({key: str(value) for key, value in stats.items()})
+    logged_stats = {key: tags[key] for key in per_file_stats[0]}
+    assert logged_stats in per_file_stats, (logged_stats, per_file_stats)
+    assert 0.9 < float(tags["derive_total_mass_mean"]) < 1.1
