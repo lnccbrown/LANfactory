@@ -26,6 +26,7 @@ Train a JAX network. Either `--training-data-folder` or
 | `--mlflow-run-id TEXT` | unset | Resume an existing MLflow run |
 | `--data-generation-experiment-id TEXT` | unset | Derive the data location and lineage from an MLflow experiment |
 | `--mlflow-tracking-uri TEXT` | `MLFLOW_TRACKING_URI` or `sqlite:///mlflow.db` | MLflow tracking backend |
+| `--lineage-id TEXT` | training pickles, then datagen runs' tag, then a fresh UUID | Lineage id tagged on the run and stored in the config pickles; links the network to its data and to later HSSM fits |
 | `--mlflow-artifact-location TEXT` | `MLFLOW_ARTIFACT_LOCATION` or MLflow's default | Artifact root for a newly created experiment; local paths are made absolute, URIs (`s3://`, `gs://`, …) pass through. Omit when the server proxies artifacts |
 | `--log-level LEVEL`, `-l LEVEL` | `WARNING` | Logging threshold |
 
@@ -48,6 +49,7 @@ Train a PyTorch network. Its data-discovery and MLflow options match
 | `--mlflow-run-id TEXT` | unset | Resume an existing MLflow run |
 | `--data-generation-experiment-id TEXT` | unset | Derive the data location and lineage from an MLflow experiment |
 | `--mlflow-tracking-uri TEXT` | `MLFLOW_TRACKING_URI` or `sqlite:///mlflow.db` | MLflow tracking backend |
+| `--lineage-id TEXT` | training pickles, then datagen runs' tag, then a fresh UUID | Lineage id tagged on the run and stored in the config pickles; links the network to its data and to later HSSM fits |
 | `--mlflow-artifact-location TEXT` | `MLFLOW_ARTIFACT_LOCATION` or MLflow's default | Artifact root for a newly created experiment; local paths are made absolute, URIs (`s3://`, `gs://`, …) pass through. Omit when the server proxies artifacts |
 | `--log-level LEVEL`, `-l LEVEL` | `WARNING` | Logging threshold |
 
