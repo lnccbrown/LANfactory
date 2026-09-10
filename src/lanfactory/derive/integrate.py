@@ -9,12 +9,15 @@ the LAN instead of from a fresh simulation.
 Tail policy
 -----------
 The density is integrated only over ``[t_min, max_t]`` with the trapezoid rule
-on a uniform grid. ``max_t = 20`` s is ssms' ``SIMULATOR_MAX_T``, the upper
-edge of the LANs' training support; nothing is extrapolated past it. The
-per-choice masses are **not** renormalised to sum to one: mass beyond
-``max_t`` is an omission at ``max_t``, which matches the denominator ssms
-uses for its own ``choice_p``. Callers record :attr:`ChoiceMass.total`
-alongside the per-choice masses so that deficit stays visible.
+on a uniform grid. ``max_t = 20`` s is ssms' default ``max_t``, the upper edge
+of the LANs' training support; nothing is extrapolated past it. The per-choice
+masses are **not** renormalised to sum to one, so they fall short by whatever
+density the LAN puts past ``max_t``. Note that ssms does not censor a base
+(non-deadline) model there: an un-terminated trial comes back at
+``rt ≈ max_t + t`` with its sign-implied choice, so ssms' own ``choice_p``
+sums to one while these masses do not. Callers record
+:attr:`ChoiceMass.total` alongside the per-choice masses so that deficit
+stays visible.
 """
 
 from __future__ import annotations
@@ -182,9 +185,9 @@ class IntegrationGrid:
     n_points
         Number of grid points.
     max_t
-        Upper edge of the grid, in seconds. Defaults to ssms'
-        ``SIMULATOR_MAX_T`` (20 s), the LANs' training support; the density is
-        never evaluated past it.
+        Upper edge of the grid, in seconds. Defaults to ssms' default
+        ``max_t`` (20 s), the LANs' training support; the density is never
+        evaluated past it.
     t_min
         Lower edge, kept strictly positive so ``rt = 0`` is never fed to a
         network whose training data never contains it.
@@ -225,8 +228,10 @@ class ChoiceMass:
     Notes
     -----
     Masses are not renormalised. ``total`` falls short of one by the density
-    the LAN puts past ``max_t`` (an omission at ``max_t``) plus any
-    approximation error in the network itself; record it with the masses.
+    the LAN puts past ``max_t`` plus any approximation error in the network
+    itself (ssms returns such trials at ``rt ≈ max_t + t`` rather than as
+    omissions, so its ``choice_p`` does not share this deficit); record it
+    with the masses.
     """
 
     t: NDArray[np.float64]
