@@ -22,16 +22,17 @@ from copy import deepcopy
 from importlib.resources import as_file, files
 from pathlib import Path
 
+import lanfactory
 import psutil
 import torch
 import typer
-
-import lanfactory
 from lanfactory.cli.utils import (
+    LINEAGE_ID_KEY,
     _get_train_network_config,
     log_training_run_identity,
     resolve_mlflow_artifact_location,
     resolve_mlflow_tracking_enabled,
+    resolve_training_lineage_id,
 )
 
 app = typer.Typer()
@@ -96,6 +97,14 @@ def main(
         help="Artifact root for a newly created experiment (local path or URI such "
         "as s3://…). Defaults to MLFLOW_ARTIFACT_LOCATION env var, then MLflow's "
         "default. Omit when the tracking server proxies artifacts.",
+    ),
+    lineage_id: str = typer.Option(
+        None,
+        "--lineage-id",
+        help="Identifier linking this network to the data it was trained on and "
+        "to later HSSM fits (MLflow tag `lineage_id`, stored in the train and "
+        "network config pickles). Defaults to the id in the training pickles, "
+        "then the data-generation runs' tag, then a fresh UUID.",
     ),
     log_level: str = typer.Option(
         "WARNING",
@@ -183,8 +192,9 @@ def main(
 
     if mlflow_tracking_enabled:
         try:
-            import mlflow
             import os
+
+            import mlflow
 
             # Set tracking URI with priority: CLI arg > env var > default
             if mlflow_tracking_uri:
@@ -245,6 +255,19 @@ def main(
             logger.error("Failed to initialize MLflow: %s", e)
             mlflow_tracking_enabled = False
 
+    # Record the MLflow run this training belongs to inside train_config, so the
+    # pickled config (and the HF manifest built from it) can point back here.
+    if mlflow_tracking_enabled:
+        try:
+            import mlflow
+
+            active = mlflow.active_run()
+            if active is not None:
+                train_config["mlflow_run_id"] = active.info.run_id
+                train_config["mlflow_tracking_uri"] = mlflow.get_tracking_uri()
+        except Exception as e:  # noqa: BLE001 - tracking must never kill training
+            logger.error("Failed to record MLflow run id in train_config: %s", e)
+
     # Get data lineage information if experiment ID provided
     if data_generation_experiment_id:
         try:
@@ -252,8 +275,9 @@ def main(
 
             if not mlflow_tracking_enabled:
                 # Need to initialize MLflow just for querying
-                import mlflow
                 import os
+
+                import mlflow
 
                 # Use same logic as above for tracking URI
                 if mlflow_tracking_uri:
@@ -464,6 +488,18 @@ def main(
     # Generate unique run_id for file naming (independent of MLflow run_id)
     RUN_ID = uuid.uuid1().hex
 
+    # Lineage id: CLI > training pickles > datagen runs' tag > minted. Stamped
+    # into both config pickles so upload-hf and HSSM can recover it offline.
+    lineage_runs = (mlflow_lineage_info or {}).get("runs_info") or []
+    lineage_id, lineage_source = resolve_training_lineage_id(
+        explicit=lineage_id,
+        dataset=train_dataset,
+        data_generation_runs=lineage_runs,
+    )
+    logger.info("Lineage id: %s (source: %s)", lineage_id, lineage_source)
+    network_config[LINEAGE_ID_KEY] = lineage_id
+    train_config[LINEAGE_ID_KEY] = lineage_id
+
     # save network config for this run
     networks_path = (
         Path(networks_path_base)
@@ -501,6 +537,8 @@ def main(
             training_data_folder=training_data_folder,
             n_training_files=n_training_files,
             dataset=train_dataset,
+            lineage_id=lineage_id,
+            data_generation_run_ids=[r["run_id"] for r in lineage_runs] or None,
         )
         try:
             import mlflow
