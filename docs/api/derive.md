@@ -47,3 +47,60 @@ whole training box.
 ::: lanfactory.derive.ChoiceMass
 
 ::: lanfactory.derive.survey
+
+## Derived corpora
+
+`lanfactory.derive.corpus` turns those masses into training corpora the
+trainers read unchanged (`{type}_data`, `{type}_labels`, `generator_config`,
+`model_config` per pickle), plus a `derive_manifest.json` sidecar. The
+`derive-aux` [command](cli.md#derive-aux) wraps `derive_aux_corpus`; the
+[network types](../network_types.md#deriving-auxiliary-networks-from-a-trained-lan)
+page explains what is derived and how to train on the result.
+
+Every row is `n_params + 1` wide, in ssms parameter order:
+
+| type | training row | label |
+| --- | --- | --- |
+| `cpn` | `[theta..., choice]` — one row per choice code in `model_config["choices"]` | `mass(choice)` |
+| `opn` | `[theta..., deadline]` (deadline last) | `1 - mass_before(deadline)`, summed over choices |
+| `gonogo` | `[theta..., deadline]` | `mass_before(deadline, nogo) + (1 - mass_before(deadline))`, `nogo` = every choice but the largest code (ssms' `nogo_p`) |
+
+Labels are clipped to `[0, 1]` (the LAN's total mass can sit a few
+thousandths above one); they are never renormalised. Each pickle's
+`generator_config["derive_stats"]` and the manifest record the total-mass
+mean / min / max so the deficit stays visible.
+
+**Batch size.** `DatasetTorch` requires the batch size to divide the rows
+per file: `n_theta_per_file` rows for `opn` / `gonogo`, `n_theta_per_file
+× n_choices` for `cpn`. With the default 4096 thetas that is 4096 and 8192
+rows for a two-choice model; `512` divides both.
+
+**Provenance.** `generator_config["source"]` is the flat dict returned by
+`SourceLAN.provenance`, with exactly the keys `derivation_method`
+(`"derived-from-lan"`), `aux_category` (`choice` / `omission` / `nogo`),
+`source_lan_run_uuid`, `source_lan_sha256`, `source_lan_hf_commit`,
+`source_lan_run_id` (`None`; filled in by the tool that knows the MLflow
+run), `integration_grid`, `integration_max_t`. Downstream tools read these
+by name.
+
+::: lanfactory.derive.derive_aux_corpus
+
+::: lanfactory.derive.sample_theta
+
+::: lanfactory.derive.sample_deadlines
+
+::: lanfactory.derive.cpn_labels
+
+::: lanfactory.derive.opn_labels
+
+::: lanfactory.derive.gonogo_labels
+
+::: lanfactory.derive.SourceLAN
+
+::: lanfactory.derive.NETWORK_TYPES
+
+::: lanfactory.derive.AUX_CATEGORY
+
+::: lanfactory.derive.DERIVATION_METHOD
+
+::: lanfactory.derive.MANIFEST_NAME
