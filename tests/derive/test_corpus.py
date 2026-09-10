@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import pickle
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -38,12 +39,13 @@ from lanfactory.derive import (
     sample_deadlines,
     sample_theta,
 )
+from lanfactory.derive.corpus import _nogo_before, _omission
 from lanfactory.trainers.torch_mlp import DatasetTorch
 from tests._onnx_utils import export_tiny_torch_lan
+from tests.derive.conftest import DDM_ONNX
 
-FIXTURE_DIR = Path(__file__).parent.parent / "fixtures" / "onnx"
-DDM_ONNX = FIXTURE_DIR / "ddm.onnx"
 DDM_SHA256 = "09f685c18d3bdbd9b54fa89bed3b5bc0e2c76566e7ed0ae5e24df2c9b04f1b0e"
+DEADLINE_BOUNDS = [0.001, 10.0]  # ssms' DEADLINE_PARAM_CONFIG, as the manifest lists it
 
 CHOICES = [-1, 1]
 # Three parameter vectors well inside the ddm training box
@@ -94,8 +96,12 @@ def _simulate(model: str, theta: np.ndarray, seed: int) -> tuple[np.ndarray, ...
 # --------------------------------------------------------------------------
 
 
-def test_fixture_is_the_production_ddm_lan():
+def test_fixture_is_the_production_ddm_lan(ddm_provenance):
+    """The on-disk file, the in-code constant and PROVENANCE.md agree."""
     assert SourceLAN.from_onnx(DDM_ONNX).sha256 == DDM_SHA256
+    assert ddm_provenance["sha256"] == DDM_SHA256
+    assert re.fullmatch(r"[0-9a-f]{40}", ddm_provenance["Hub commit"])
+    assert ddm_provenance["Source"].endswith("franklab/HSSM/blob/main/ddm.onnx")
     assert load_onnx_predictor(DDM_ONNX).input_width == 6
 
 
@@ -152,23 +158,24 @@ def test_opn_and_gonogo_match_ddm_deadline_simulations(ddm_mass):
 
 
 def test_gonogo_decomposes_into_nogo_mass_plus_opn(ddm_mass):
-    """gonogo = mass_before(d, c_nogo) + opn, with c_nogo every non-max choice."""
+    """gonogo = mass_before(d, c_nogo) + opn, with c_nogo every non-max choice.
+
+    The float64 terms the labels are cast from satisfy the identity to 1e-12
+    against ``ChoiceMass`` directly (ddm has one nogo choice, ``-1``); the
+    emitted float32 labels satisfy it to float32 precision.
+    """
     # Labels are computed at the float32-rounded deadline the row carries.
     d = DEADLINES.astype(np.float32).astype(np.float64)
     nogo_before = ddm_mass.mass_before(d, -1)
     omission = 1.0 - ddm_mass.mass_before(d)
-    # In float64 (the quantities the labels are cast from) the identity is exact.
-    total_nogo = nogo_before + omission
-    np.testing.assert_allclose(
-        total_nogo,
-        ddm_mass.mass_before(d, -1) + 1.0 - ddm_mass.mass_before(d),
-        rtol=0,
-        atol=1e-12,
-    )
+    assert np.all((0.0 < omission) & (omission < 1.0)), "clip must be a no-op here"
+    np.testing.assert_allclose(_nogo_before(ddm_mass, d), nogo_before, atol=1e-12)
+    np.testing.assert_allclose(_omission(ddm_mass, d), omission, atol=1e-12)
+
     _, opn = opn_labels(ddm_mass, THETA, DEADLINES)
     _, gonogo = gonogo_labels(ddm_mass, THETA, DEADLINES)
     np.testing.assert_allclose(opn[:, 0], omission, rtol=0, atol=1e-7)
-    np.testing.assert_allclose(gonogo[:, 0], total_nogo, rtol=0, atol=1e-7)
+    np.testing.assert_allclose(gonogo[:, 0], nogo_before + omission, rtol=0, atol=1e-7)
     np.testing.assert_allclose(
         gonogo[:, 0].astype(np.float64),
         nogo_before + opn[:, 0].astype(np.float64),
@@ -177,22 +184,77 @@ def test_gonogo_decomposes_into_nogo_mass_plus_opn(ddm_mass):
     )
 
 
+def _synthetic_mass(per_choice_total: list[float], n_points: int = 50) -> ChoiceMass:
+    """A ChoiceMass whose per-choice cdf ramps linearly to the given totals."""
+    t = np.linspace(1e-4, 20.0, n_points)
+    ramp = np.linspace(0.0, 1.0, n_points)
+    cdf = np.stack([np.stack([total * ramp for total in per_choice_total])])
+    choices = np.array(CHOICES if len(per_choice_total) == 2 else [0, 1, 2])
+    return ChoiceMass(t=t, choices=choices, cdf=cdf)
+
+
 def test_labels_are_clipped_probabilities():
-    """The LAN's total can exceed one; labels are clipped, never renormalised."""
-    t = np.linspace(1e-4, 20.0, 50)
-    ramp = np.linspace(0.0, 1.0, 50)
-    cdf = np.stack([np.stack([0.6 * ramp, 0.45 * ramp])])  # total 1.05
-    mass = ChoiceMass(t=t, choices=np.array(CHOICES), cdf=cdf)
+    """The LAN's total can exceed one; labels are clipped, never renormalised.
+
+    The omission term is clipped once, before it enters either label, so the
+    corpus decomposition ``gonogo == nogo_before + opn`` survives the clip.
+    """
     theta = np.zeros((1, 2), dtype=np.float32)
+    mass = _synthetic_mass([0.6, 0.45])  # total 1.05, no single choice above 1
     assert mass.total[0] == pytest.approx(1.05)
     _, opn = opn_labels(mass, theta, 20.0)
-    assert opn[0, 0] == 0.0  # 1 - 1.05 clipped
+    assert opn[0, 0] == 0.0  # 1 - 1.05 clipped to 0
     _, cpn = cpn_labels(mass, theta, CHOICES)
     np.testing.assert_allclose(cpn[:, 0], [0.6, 0.45], rtol=1e-6)
-    # gonogo adds the *raw* omission term (-0.05) before clipping the sum, so
-    # the decomposition gonogo = nogo mass + (1 - mass_before) stays exact.
     _, gonogo = gonogo_labels(mass, theta, 20.0)
-    assert gonogo[0, 0] == pytest.approx(0.55)
+    assert gonogo[0, 0] == pytest.approx(0.6)  # nogo mass + clipped omission (0)
+    assert gonogo[0, 0] == pytest.approx(mass.mass(-1)[0] + opn[0, 0])
+
+    # The upper clip, independently of the production LAN's error.
+    over = _synthetic_mass([1.05, 0.02])
+    _, cpn = cpn_labels(over, theta, CHOICES)
+    np.testing.assert_allclose(cpn[:, 0], [1.0, 0.02], rtol=1e-6)
+    _, gonogo = gonogo_labels(over, theta, 20.0)
+    assert gonogo[0, 0] == 1.0  # 1.05 + 0 clipped
+    assert np.all((gonogo >= 0.0) & (gonogo <= 1.0) & (cpn >= 0.0) & (cpn <= 1.0))
+
+
+def test_gonogo_sums_every_non_maximal_choice():
+    """With three choices the nogo set is {0, 1}, not just the smallest code."""
+    mass = _synthetic_mass([0.2, 0.3, 0.4])  # total 0.9 -> omission 0.1
+    theta = np.zeros((1, 2), dtype=np.float32)
+    data, gonogo = gonogo_labels(mass, theta, 20.0)
+    assert gonogo[0, 0] == pytest.approx(0.2 + 0.3 + 0.1)  # min-only would give 0.4
+    _, opn = opn_labels(mass, theta, 20.0)
+    assert opn[0, 0] == pytest.approx(0.1)
+    # Part-way down the ramp every choice term scales, the omission fills up.
+    frac = 24 / 49  # ramp value at grid node 24 of 50
+    _, part = gonogo_labels(mass, theta, mass.t[24])
+    assert part[0, 0] == pytest.approx(frac * (0.2 + 0.3) + (1.0 - frac * 0.9))
+    # cpn emits a row per code, in code order, labelled with that code's mass.
+    data, cpn = cpn_labels(mass, theta, mass.choices)
+    np.testing.assert_array_equal(data[:, -1], [0.0, 1.0, 2.0])
+    np.testing.assert_allclose(cpn[:, 0], [0.2, 0.3, 0.4], rtol=1e-6)
+
+
+def test_deadline_labels_use_the_float32_deadline_the_row_carries():
+    """Row and label describe the same (float32) deadline.
+
+    A steep synthetic cdf makes the float32 rounding of 1.0005 visible: at the
+    float64 deadline the mass before it is exactly 0.5.
+    """
+    t = np.array([1e-4, 1.0, 1.001, 20.0])
+    cdf = np.array([[[0.0, 0.0, 1.0, 1.0], [0.0, 0.0, 0.0, 0.0]]])
+    mass = ChoiceMass(t=t, choices=np.array(CHOICES), cdf=cdf)
+    theta = np.zeros((1, 2), dtype=np.float32)
+    data, opn = opn_labels(mass, theta, 1.0005)
+    d32 = float(np.float32(1.0005))
+    assert data[0, -1] == np.float32(1.0005)
+    assert abs(d32 - 1.0005) > 1e-8, "1.0005 must not be exact in float32"
+    assert opn[0, 0] == pytest.approx(1.0 - (d32 - 1.0) / 0.001, abs=1e-7)
+    assert abs(opn[0, 0] - 0.5) > 1e-6  # the float64 deadline would give 0.5
+    _, gonogo = gonogo_labels(mass, theta, 1.0005)
+    assert gonogo[0, 0] == pytest.approx((d32 - 1.0) / 0.001 + opn[0, 0], abs=1e-7)
 
 
 # --------------------------------------------------------------------------
@@ -224,9 +286,16 @@ def test_deadline_rows_put_the_deadline_last(ddm_mass):
         np.testing.assert_array_equal(data[:, -1], DEADLINES.astype(np.float32))
 
 
-def test_label_functions_reject_mismatched_theta(ddm_mass):
+@pytest.mark.parametrize(
+    "build,extra",
+    [(cpn_labels, CHOICES), (opn_labels, 1.0), (gonogo_labels, 1.0)],
+    ids=["cpn", "opn", "gonogo"],
+)
+def test_label_functions_reject_bad_theta(ddm_mass, build, extra):
     with pytest.raises(ValueError, match="parameter vectors"):
-        opn_labels(ddm_mass, THETA[:2], 1.0)
+        build(ddm_mass, THETA[:2], extra)
+    with pytest.raises(ValueError, match="theta must be"):
+        build(ddm_mass, THETA[:, :, None], extra)
 
 
 # --------------------------------------------------------------------------
@@ -295,18 +364,23 @@ def test_source_lan_hashes_and_parses_run_uuid(tmp_path):
 
     run_uuid = "56d99936415e11f0a2bf3cecefb6d5ee"
     torch_style = tmp_path / f"ddm_lan_{run_uuid}_model.onnx"
-    jax_style = tmp_path / f"{run_uuid}_lan_ddm_model.onnx"
+    jax_style = tmp_path / f"{run_uuid}_lan_ddm__model.onnx"  # jaxtrain's spelling
     shutil.copy(DDM_ONNX, torch_style)
     shutil.copy(DDM_ONNX, jax_style)
     assert SourceLAN.from_onnx(torch_style).run_uuid == run_uuid
     assert SourceLAN.from_onnx(jax_style).run_uuid == run_uuid
     assert SourceLAN.from_onnx(torch_style, run_uuid="explicit").run_uuid == "explicit"
+    # The parsed uuid reaches the provenance record under its contract key.
+    parsed = SourceLAN.from_onnx(torch_style).provenance("cpn", IntegrationGrid())
+    assert parsed["source_lan_run_uuid"] == run_uuid
+    assert parsed["aux_category"] == "choice"
 
     hub = SourceLAN.from_onnx(DDM_ONNX, hf_repo="franklab/HSSM", hf_revision="abc")
     record = hub.provenance("opn", IntegrationGrid(n_points=500, max_t=15.0))
     assert set(record) == PROVENANCE_KEYS
     assert record["derivation_method"] == DERIVATION_METHOD == "derived-from-lan"
     assert record["aux_category"] == "omission"
+    assert record["source_lan_run_uuid"] is None  # a bare ddm.onnx has no uuid
     assert record["source_lan_sha256"] == DDM_SHA256
     assert record["source_lan_hf_commit"] == "abc"
     assert record["source_lan_run_id"] is None
@@ -357,7 +431,7 @@ def test_dataset_torch_loads_a_derived_corpus(derived):
 
 def test_pickle_carries_the_contract_keys(derived):
     network_type, _, files = derived
-    with open(files[0], "rb") as f:
+    with open(files[1], "rb") as f:
         content = pickle.load(f)
     assert set(content) == {
         f"{network_type}_data",
@@ -371,13 +445,27 @@ def test_pickle_carries_the_contract_keys(derived):
     assert generator_config["network_type"] == network_type
     assert generator_config["n_files"] == 2
     assert generator_config["n_theta_per_file"] == N_THETA
+    assert generator_config["file_index"] == 1
     assert set(generator_config["source"]) == PROVENANCE_KEYS
     assert generator_config["source"]["aux_category"] == AUX_CATEGORY[network_type]
     assert generator_config["source"]["source_lan_sha256"] == DDM_SHA256
+    assert generator_config["source"]["source_lan_run_uuid"] is None
     assert set(generator_config["derive_stats"]) == STATS_KEYS
-    assert generator_config["derive"]["integration_grid"] == 1000
-    assert generator_config["derive"]["integration_max_t"] == 20.0
-    assert generator_config["derive"]["seed"] == 0
+    # The stats are total-mass stats of this file's thetas: near one, ordered.
+    stats = generator_config["derive_stats"]
+    assert 0.9 < stats["derive_total_mass_mean"] < 1.1
+    assert stats["derive_total_mass_min"] <= stats["derive_total_mass_mean"]
+    assert stats["derive_total_mass_mean"] <= stats["derive_total_mass_max"]
+    derive = generator_config["derive"]
+    assert derive["integration_grid"] == 1000
+    assert derive["integration_max_t"] == 20.0
+    assert derive["t_min"] == 1e-4
+    assert derive["deadline_quantile_frac"] == 0.7
+    assert derive["seed"] == 0
+    if network_type == "cpn":
+        assert derive["deadline_bounds"] is None
+    else:
+        assert derive["deadline_bounds"] == tuple(DEADLINE_BOUNDS)
 
     model_config = content["model_config"]
     assert not any(callable(v) for v in model_config.values())
@@ -397,18 +485,34 @@ def test_pickle_carries_the_contract_keys(derived):
 
 def test_manifest_lists_the_files(derived):
     network_type, out, files = derived
+    n_rows = N_THETA * (len(CHOICES) if network_type == "cpn" else 1)
     manifest = json.loads((out / MANIFEST_NAME).read_text())
     assert [entry["file"] for entry in manifest["files"]] == [f.name for f in files]
+    assert manifest["model"] == "ddm"
     assert manifest["network_type"] == network_type
+    assert manifest["aux_category"] == AUX_CATEGORY[network_type]
     assert manifest["n_files"] == 2 and manifest["n_theta_per_file"] == N_THETA
+    assert manifest["n_rows_per_file"] == n_rows
+    last = "choice" if network_type == "cpn" else "deadline"
+    assert manifest["input_columns"] == ["v", "a", "z", "t", last]
+    assert manifest["choices"] == CHOICES
     assert set(manifest["derive_stats"]) == STATS_KEYS
+    assert 0.9 < manifest["derive_stats"]["derive_total_mass_mean"] < 1.1
     assert PROVENANCE_KEYS <= set(manifest["source"])
+    assert manifest["source"]["path"] == str(DDM_ONNX)
+    assert manifest["source"]["sha256"] == manifest["source"]["source_lan_sha256"]
+    assert manifest["source"]["run_uuid"] is None
     assert manifest["grid"] == {"n_points": 1000, "max_t": 20.0, "t_min": 1e-4}
+    assert manifest["deadline_quantile_frac"] == 0.7
+    expected_bounds = None if network_type == "cpn" else DEADLINE_BOUNDS
+    assert manifest["deadline_bounds"] == expected_bounds
     assert manifest["seed"] == 0
     assert manifest["lanfactory_version"]
+    per_file_min = min(entry["derive_total_mass_min"] for entry in manifest["files"])
+    assert manifest["derive_stats"]["derive_total_mass_min"] == per_file_min
     for entry in manifest["files"]:
         assert STATS_KEYS <= set(entry)
-        assert entry["n_rows"] == manifest["n_rows_per_file"]
+        assert entry["n_rows"] == n_rows
 
 
 def _arrays(path: Path) -> tuple[np.ndarray, np.ndarray]:
@@ -457,10 +561,9 @@ def test_corpus_rejects_bad_arguments(tmp_path):
 def test_torchtrain_dry_run_accepts_a_derived_corpus(tmp_path):
     """``torchtrain --dry-run`` builds its dataloaders from a derived folder.
 
-    The full one-epoch round trip is not in the unit suite (it needs the
-    trainers' pandas<3 overlay in this environment; L3 owns the committed
-    round trip). The dry run exercises the real file discovery, key lookup,
-    batch-size check and a first batch.
+    A full training round trip is what the trainer E2E tests cover; this test
+    only checks that ``torchtrain``'s file discovery, key lookup, batch-size
+    check and first batch accept a derived folder.
     """
     corpus = tmp_path / "corpus"
     derive_aux_corpus(DDM_ONNX, "ddm", "cpn", corpus, n_files=2, n_theta_per_file=64)

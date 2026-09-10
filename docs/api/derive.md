@@ -66,9 +66,15 @@ Every row is `n_params + 1` wide, in ssms parameter order:
 | `gonogo` | `[theta..., deadline]` | `mass_before(deadline, nogo) + (1 - mass_before(deadline))`, `nogo` = every choice but the largest code (ssms' `nogo_p`) |
 
 Labels are clipped to `[0, 1]` (the LAN's total mass can sit a few
-thousandths above one); they are never renormalised. Each pickle's
-`generator_config["derive_stats"]` and the manifest record the total-mass
-mean / min / max so the deficit stays visible.
+thousandths above one); they are never renormalised. The omission term
+`1 - mass_before(deadline)` is clipped once, before it enters the `opn` and
+`gonogo` labels, so `gonogo == mass_before(deadline, nogo) + opn` holds in
+the written corpus. Each pickle's `generator_config["derive_stats"]` and the
+manifest record the total-mass mean / min / max so the deficit stays visible.
+A derived `cpn` corpus is one column wider than ssms' simulated CPN corpus
+(`[theta...]` with a single `P(choice = 1)` label); see the
+[network types](../network_types.md#deriving-auxiliary-networks-from-a-trained-lan)
+page.
 
 **Batch size.** `DatasetTorch` requires the batch size to divide the rows
 per file: `n_theta_per_file` rows for `opn` / `gonogo`, `n_theta_per_file

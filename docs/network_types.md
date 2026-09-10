@@ -71,7 +71,10 @@ network = lanfactory.trainers.LoadTorchMLPInfer(
 ```
 
 The network input is just the model parameters; the output (after the logit
-transform applied at inference) is a log choice probability.
+transform applied at inference) is a log choice probability. A CPN
+[derived from a trained LAN](#deriving-auxiliary-networks-from-a-trained-lan)
+uses a different, one-column-wider input layout — see that section before
+mixing the two.
 
 ## OPN: option probabilities under a deadline
 
@@ -134,17 +137,28 @@ labels are probabilities in `[0, 1]` for the `bcelogit` loss.
 | `opn` | `[theta..., deadline]`, deadline last | `P(no response before deadline | theta)` |
 | `gonogo` | `[theta..., deadline]` | `P(nogo or omission | theta)`; nogo = every choice but the largest code, as in ssms' `nogo_p` |
 
-A CPN corpus carries the choice as an *input* (one row per choice code), so no
-choice category is assumed. For `opn` and `gonogo`, deadlines are sampled per
-parameter vector: a `--deadline-quantile-frac` share (default 0.7) from the
-LAN's own reaction-time quantiles under that theta, so the training deadlines
-sit where the omission probability is informative, and the rest uniform on
-ssms' deadline bounds `(0.001, 10)` so the corpus still covers the box.
+A derived CPN corpus carries the choice as an *input* (one row per choice
+code), so no choice category is assumed and the network is `n_params + 1`
+wide (`[1, 5]` for `ddm`). This differs from a simulated ssms CPN corpus,
+whose rows are `[theta...]` alone with a single `P(choice = 1)` label
+(`n_params` wide, `[1, 4]` for `ddm`, the layout of the CPN section above):
+the two CPN artifacts are not interchangeable, and a consumer must know which
+one it is loading. The `opn` and `gonogo` rows match ssms' simulated layout.
+
+For `opn` and `gonogo`, deadlines are sampled per parameter vector: a
+`--deadline-quantile-frac` share (default 0.7) from the LAN's own
+reaction-time quantiles under that theta, so the training deadlines sit where
+the omission probability is informative, and the rest uniform on ssms'
+deadline bounds `(0.001, 10)` so the corpus still covers the box. Labels are
+clipped to `[0, 1]`; the omission term is clipped once, before it enters
+either label, so `gonogo == mass_before(deadline, nogo) + opn` holds row by
+row in the written corpus.
 
 **Deriving and training.**
 
 ```bash
-derive-aux --from-onnx ddm.onnx --model ddm --type cpn --out data/cpn/ddm
+derive-aux --from-onnx ddm.onnx --network-type cpn --model-name ddm \
+  --output-folder data/cpn/ddm
 torchtrain --config-path cpn.yaml --training-data-folder data/cpn/ddm \
   --networks-path-base networks
 ```

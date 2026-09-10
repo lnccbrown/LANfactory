@@ -25,9 +25,12 @@ choice is anything but the largest choice code, or when it is omitted.
 
 Labels are probabilities for a BCE-with-logits consumer and are clipped to
 ``[0, 1]``: the LAN's approximation error can put its total mass a few
-thousandths above one. Clipping is not renormalisation — the per-corpus
-total-mass statistics recorded in every pickle and in the manifest keep the
-deficit (or excess) visible; see the tail policy in :mod:`.integrate`.
+thousandths above one. The omission term ``1 - mass_before(deadline)`` is
+clipped *once*, before it enters either label, so the decomposition
+``gonogo_label == mass_before(deadline, nogo) + opn_label`` holds in the
+written corpus. Clipping is not renormalisation — the per-corpus total-mass
+statistics recorded in every pickle and in the manifest keep the deficit (or
+excess) visible; see the tail policy in :mod:`.integrate`.
 """
 
 from __future__ import annotations
@@ -186,6 +189,28 @@ def _labels(values: NDArray) -> NDArray[np.float32]:
     return np.clip(values, 0.0, 1.0).astype(np.float32).reshape(-1, 1)
 
 
+def _omission(mass: ChoiceMass, deadline: NDArray[np.float64]) -> NDArray[np.float64]:
+    """``P(no response before deadline)`` as a float64 probability.
+
+    ``1 - mass_before(deadline)`` summed over choices, clipped to ``[0, 1]``
+    once so that the same term enters :func:`opn_labels` and
+    :func:`gonogo_labels` (a LAN whose total exceeds one would otherwise give
+    a negative omission mass).
+    """
+    return np.clip(1.0 - mass.mass_before(deadline), 0.0, 1.0)
+
+
+def _nogo_before(
+    mass: ChoiceMass, deadline: NDArray[np.float64]
+) -> NDArray[np.float64]:
+    """Mass of every non-maximal choice before ``deadline`` (ssms' nogo set)."""
+    go_choice = mass.choices.max()
+    return sum(
+        (mass.mass_before(deadline, c) for c in mass.choices if c != go_choice),
+        np.zeros(mass.cdf.shape[0]),
+    )
+
+
 def _deadline_rows(
     theta: NDArray[np.float32], deadlines: ArrayLike
 ) -> tuple[NDArray[np.float32], NDArray[np.float64]]:
@@ -232,7 +257,11 @@ def cpn_labels(
         ],
         axis=1,
     )
-    per_choice = np.stack([mass.mass(c) for c in choice_arr], axis=1)  # theta-major
+    # Look the masses up by the original codes (choice_arr is the float32 the
+    # row carries); stacked along axis 1 so the flattened labels are theta-major.
+    per_choice = np.stack(
+        [mass.mass(float(c)) for c in np.asarray(choices).reshape(-1)], axis=1
+    )
     return data, _labels(per_choice.reshape(-1))
 
 
@@ -263,7 +292,7 @@ def opn_labels(
     theta_arr = _as_theta(theta)
     _check_rows(mass, theta_arr)
     data, d = _deadline_rows(theta_arr, deadlines)
-    return data, _labels(1.0 - mass.mass_before(d))
+    return data, _labels(_omission(mass, d))
 
 
 def gonogo_labels(
@@ -293,12 +322,7 @@ def gonogo_labels(
     theta_arr = _as_theta(theta)
     _check_rows(mass, theta_arr)
     data, d = _deadline_rows(theta_arr, deadlines)
-    go_choice = mass.choices.max()
-    nogo = sum(
-        (mass.mass_before(d, c) for c in mass.choices if c != go_choice),
-        np.zeros(theta_arr.shape[0]),
-    )
-    return data, _labels(nogo + (1.0 - mass.mass_before(d)))
+    return data, _labels(_nogo_before(mass, d) + _omission(mass, d))
 
 
 # --------------------------------------------------------------------------
@@ -315,7 +339,8 @@ def _run_uuid_from_name(path: Path) -> str | None:
     """The 32-hex ``uuid1().hex`` the trainers put in artifact names, if any.
 
     torch names ``{model}_{type}_{run_uuid}_model.onnx``, jax
-    ``{run_uuid}_{type}_{model}_model.onnx``; a bare ``ddm.onnx`` has none.
+    ``{run_uuid}_{type}_{model}__model.onnx`` (double underscore); a bare
+    ``ddm.onnx`` has none.
     """
     for token in path.stem.split("_"):
         if _RUN_UUID.match(token):
@@ -436,7 +461,12 @@ def _plain(config: dict) -> dict:
     """A stdlib-picklable copy of an ssms model config.
 
     Callables (simulator, boundary) are dropped; anything else stdlib pickle
-    rejects is kept as its ``repr``.
+    rejects is kept as its ``repr``. This deliberately differs from the
+    trainers' ``_picklable_copy`` (which ``repr``s callables too): a derived
+    corpus is written once and read many times, and a ``repr`` of a simulator
+    function carries no information a consumer could use, whereas dropping it
+    keeps the config a plain description of the model. Kept separate so
+    ``lanfactory.derive`` does not import torch.
     """
     out: dict = {}
     for key, value in config.items():
