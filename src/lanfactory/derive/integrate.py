@@ -22,11 +22,14 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 from scipy.integrate import cumulative_trapezoid
+
+if TYPE_CHECKING:
+    import onnxruntime as ort
 
 __all__ = [
     "ChoiceMass",
@@ -46,7 +49,20 @@ class Predictor(Protocol):
         """Row width ``D`` the predictor expects."""
         ...
 
-    def __call__(self, batch: NDArray[np.float32]) -> NDArray[np.floating]: ...
+    def __call__(self, batch: NDArray[np.float32]) -> NDArray[np.floating]:
+        """Evaluate the network on a batch of rows.
+
+        Parameters
+        ----------
+        batch
+            ``(N, D)`` float32 rows laid out as the network was trained on.
+
+        Returns
+        -------
+        NDArray[np.floating]
+            ``(N,)`` log-densities.
+        """
+        ...
 
 
 class OnnxPredictor:
@@ -74,9 +90,9 @@ class OnnxPredictor:
         for a LAN).
     """
 
-    def __init__(self, session: object) -> None:
-        self.session = session
-        first_input = session.get_inputs()[0]  # type: ignore[attr-defined]
+    def __init__(self, session: ort.InferenceSession) -> None:
+        self.session: ort.InferenceSession = session
+        first_input = session.get_inputs()[0]
         self.input_name: str = first_input.name
         self.input_width: int = int(first_input.shape[-1])
 
@@ -98,7 +114,7 @@ class OnnxPredictor:
             raise ValueError(
                 f"expected a (N, {self.input_width}) batch, got shape {rows.shape}"
             )
-        (out,) = self.session.run(None, {self.input_name: rows})  # type: ignore[attr-defined]
+        (out,) = self.session.run(None, {self.input_name: rows})
         return np.asarray(out, dtype=np.float32).reshape(rows.shape[0])
 
 
@@ -120,15 +136,35 @@ def load_onnx_predictor(path: str | Path) -> OnnxPredictor:
     -------
     OnnxPredictor
         Callable on ``(N, D)`` float32 batches.
+
+    Raises
+    ------
+    ValueError
+        If the graph's first input is not rank 2. The sbi and bayesflow
+        exporters trace rank-1 ``(D,)`` graphs (see
+        ``lanfactory.onnx.contract``); those have no batch axis to widen, and
+        this loader does not wrap them.
     """
     import onnx
     import onnxruntime as ort
 
     model = onnx.load(str(path))
+    # Defensive for foreign producers that list initializers among the graph
+    # inputs (the ecosystem's exporters do not); intentionally untested.
     initializers = {tensor.name for tensor in model.graph.initializer}
-    for value_info in (*model.graph.input, *model.graph.output):
-        if value_info.name in initializers:
-            continue
+    io_tensors = [
+        value_info
+        for value_info in (*model.graph.input, *model.graph.output)
+        if value_info.name not in initializers
+    ]
+    first_dims = io_tensors[0].type.tensor_type.shape.dim
+    if len(first_dims) != 2:
+        shape = [d.dim_param or d.dim_value for d in first_dims]
+        raise ValueError(
+            f"{path}: expected a (1, D) input, got rank {len(first_dims)} shape "
+            f"{shape}; lanfactory.derive batches (1, D) Gemm graphs only"
+        )
+    for value_info in io_tensors:
         dims = value_info.type.tensor_type.shape.dim
         if len(dims) >= 2:
             # Assigning dim_param clears dim_value (they share a protobuf oneof).
@@ -213,7 +249,18 @@ class ChoiceMass:
         return self.cdf[:, self._choice_index(choice), :]
 
     def mass(self, choice: float) -> NDArray[np.float64]:
-        """Mass of ``choice`` on ``[t_min, max_t]``, shape ``(n_theta,)``."""
+        """Mass of one choice on ``[t_min, max_t]``.
+
+        Parameters
+        ----------
+        choice
+            A choice code from :attr:`choices`.
+
+        Returns
+        -------
+        NDArray[np.float64]
+            ``(n_theta,)``.
+        """
         return self.cdf[:, self._choice_index(choice), -1]
 
     @property
@@ -299,8 +346,10 @@ def choice_mass(
 
     Rows are laid out as ``[theta..., rt, choice]`` — the input layout the
     LANs are trained on — and evaluated in chunks of ``chunk_size`` parameter
-    vectors so memory stays bounded at roughly
-    ``chunk_size * n_choices * n_points * (n_params + 2)`` float32 values.
+    vectors. Chunking bounds the row buffer handed to the network at
+    ``chunk_size * n_choices * n_points * (n_params + 2)`` float32 values;
+    the returned ``cdf`` itself costs ``n_theta * n_choices * n_points``
+    float64 values and is the only full-size array held.
 
     Parameters
     ----------
@@ -347,7 +396,7 @@ def choice_mass(
     t = grid.t
     n_points = t.shape[0]
 
-    density = np.empty((n_theta, n_choices, n_points), dtype=np.float64)
+    cdf = np.empty((n_theta, n_choices, n_points), dtype=np.float64)
     for start in range(0, n_theta, chunk_size):
         chunk = theta_arr[start : start + chunk_size]
         n_chunk = chunk.shape[0]
@@ -355,12 +404,17 @@ def choice_mass(
             (n_chunk, n_choices, n_points, expected_width), dtype=np.float32
         )
         rows[..., :n_params] = chunk[:, None, None, :]
+        # The network sees rt rounded to float32 (~1e-6 s at max_t) while the
+        # trapezoid uses the float64 grid; the mismatch is orders of magnitude
+        # below the rule's own discretisation error.
         rows[..., n_params] = t[None, None, :]
         rows[..., n_params + 1] = choice_arr[None, :, None]
         log_density = np.asarray(predictor(rows.reshape(-1, expected_width)))
-        density[start : start + n_chunk] = np.exp(
+        density = np.exp(
             log_density.reshape(n_chunk, n_choices, n_points).astype(np.float64)
         )
+        cdf[start : start + n_chunk] = cumulative_trapezoid(
+            density, t, axis=-1, initial=0.0
+        )
 
-    cdf = cumulative_trapezoid(density, t, axis=-1, initial=0.0)
     return ChoiceMass(t=t, choices=choice_arr, cdf=cdf)
