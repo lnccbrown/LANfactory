@@ -6,8 +6,7 @@ and a closed-form gamma mixture standing in for a LAN for the numerics.
 
 from __future__ import annotations
 
-import pickle
-import time
+from unittest.mock import patch
 
 import numpy as np
 import onnx
@@ -22,15 +21,11 @@ from lanfactory.derive import (
     choice_mass,
     load_onnx_predictor,
 )
-from lanfactory.onnx import assert_single_trial_contract, transform_to_onnx
-from lanfactory.trainers.torch_mlp import TorchMLP
+from lanfactory.onnx import assert_single_trial_contract
+from tests._onnx_utils import export_tiny_torch_lan
+from tests.onnx.test_contract import make_onnx
 
 INPUT_WIDTH = 6
-NETWORK_CONFIG = {
-    "layer_sizes": [16, 16, 1],
-    "activations": ["tanh", "tanh", "linear"],
-    "train_output_type": "logprob",
-}
 
 
 # --------------------------------------------------------------------------
@@ -38,21 +33,10 @@ NETWORK_CONFIG = {
 # --------------------------------------------------------------------------
 
 
-@pytest.fixture
-def torch_lan_and_onnx(tmp_path):
+@pytest.fixture(scope="module")
+def torch_lan_and_onnx(tmp_path_factory):
     """A seeded TorchMLP and its ONNX export via the real ``transform-onnx`` path."""
-    torch.manual_seed(0)
-    net = TorchMLP(network_config=NETWORK_CONFIG, input_shape=INPUT_WIDTH)
-    net.eval()
-
-    config_file = tmp_path / "network_config.pickle"
-    state_file = tmp_path / "state_dict.pt"
-    onnx_file = tmp_path / "lan.onnx"
-    with open(config_file, "wb") as f:
-        pickle.dump(NETWORK_CONFIG, f)
-    torch.save(net.state_dict(), state_file)
-    transform_to_onnx(str(config_file), str(state_file), INPUT_WIDTH, str(onnx_file))
-    return net, onnx_file
+    return export_tiny_torch_lan(tmp_path_factory.mktemp("derive"), INPUT_WIDTH)
 
 
 def _batch_dim_values(path) -> list[int]:
@@ -81,30 +65,42 @@ def test_batched_predictor_matches_torch_and_leaves_file_untouched(
     assert got.shape == (1000,)
     np.testing.assert_allclose(got, expected, atol=1e-5)
 
+    # Default-dtype (float64) rows are cast, not rejected by onnxruntime.
+    rows64 = rng.standard_normal((64, INPUT_WIDTH))
+    np.testing.assert_array_equal(
+        predictor(rows64), predictor(rows64.astype(np.float32))
+    )
+
     # The batch axis was made symbolic in memory only.
     assert _batch_dim_values(onnx_file) == [1, 1]
     result = assert_single_trial_contract(onnx_file, expected_input_width=INPUT_WIDTH)
     assert result["input_shape"] == [1, INPUT_WIDTH]
 
 
-def test_batched_predictor_handles_a_million_rows(torch_lan_and_onnx):
+def test_predictor_runs_the_batch_in_one_session_call(torch_lan_and_onnx):
     _, onnx_file = torch_lan_and_onnx
     predictor = load_onnx_predictor(onnx_file)
-    rows = np.random.default_rng(1).standard_normal((1_000_000, INPUT_WIDTH))
-    start = time.perf_counter()
-    out = predictor(rows.astype(np.float32))
-    elapsed = time.perf_counter() - start
-    assert out.shape == (1_000_000,)
+    rows = np.random.default_rng(1).standard_normal((100_000, INPUT_WIDTH))
+    rows = rows.astype(np.float32)
+    with patch.object(predictor.session, "run", wraps=predictor.session.run) as run:
+        out = predictor(rows)
+    assert out.shape == (100_000,)
     assert np.isfinite(out).all()
-    # ~0.1 s measured; the bound only catches a per-row fallback, not jitter.
-    assert elapsed < 30.0, f"1M rows took {elapsed:.2f}s"
+    # The whole batch goes through the widened graph at once: no per-row loop.
+    assert run.call_count == 1
 
 
-def test_predictor_rejects_wrong_row_width(torch_lan_and_onnx):
-    _, onnx_file = torch_lan_and_onnx
-    predictor = load_onnx_predictor(onnx_file)
+def test_predictor_rejects_wrong_row_width(tmp_path):
+    predictor = load_onnx_predictor(make_onnx(tmp_path / "m.onnx", (1, INPUT_WIDTH)))
     with pytest.raises(ValueError, match=rf"\(N, {INPUT_WIDTH}\)"):
         predictor(np.zeros((3, INPUT_WIDTH + 1), dtype=np.float32))
+
+
+def test_rank_one_artifact_is_rejected_clearly(tmp_path):
+    # sbi / bayesflow exports trace (D,): no batch axis to widen.
+    path = make_onnx(tmp_path / "rank1.onnx", (INPUT_WIDTH,))
+    with pytest.raises(ValueError, match=r"rank 1"):
+        load_onnx_predictor(path)
 
 
 # --------------------------------------------------------------------------
@@ -190,16 +186,38 @@ def test_cdf_shape_monotone_and_matches_trapezoid(gamma_mass):
             )
 
 
-def test_chunking_does_not_change_the_result():
-    predictor = GammaMixturePredictor()
-    whole = choice_mass(predictor, THETA, CHOICES, chunk_size=512)
-    chunked = choice_mass(predictor, THETA, CHOICES, chunk_size=1)
-    np.testing.assert_array_equal(whole.cdf, chunked.cdf)
+class SpyPredictor(GammaMixturePredictor):
+    """Records every batch it is handed."""
+
+    def __init__(self) -> None:
+        self.calls: list[np.ndarray] = []
+
+    def __call__(self, batch: np.ndarray) -> np.ndarray:
+        self.calls.append(np.array(batch, copy=True))
+        return super().__call__(batch)
 
 
-def test_single_theta_vector_is_promoted():
+def test_chunking_feeds_a_full_chunk_then_the_partial_remainder():
+    spy = SpyPredictor()
+    cm = choice_mass(spy, THETA, CHOICES, chunk_size=2)  # 3 thetas -> [2, 1]
+    per_theta = len(CHOICES) * IntegrationGrid().n_points
+    assert [c.shape[0] for c in spy.calls] == [2 * per_theta, per_theta]
+
+    # Every theta row reached the predictor exactly as given.
+    fed = np.concatenate(spy.calls)
+    np.testing.assert_array_equal(
+        np.unique(fed[:, :2], axis=0), np.unique(THETA.astype(np.float32), axis=0)
+    )
+    # And each slot of the chunked result equals an independent single-theta run.
+    for i in range(len(THETA)):
+        single = choice_mass(GammaMixturePredictor(), THETA[i], CHOICES)
+        np.testing.assert_array_equal(cm.cdf[i], single.cdf[0])
+
+
+def test_single_theta_vector_is_promoted(gamma_mass):
     cm = choice_mass(GammaMixturePredictor(), THETA[0], CHOICES)
     assert cm.cdf.shape == (1, 2, 1000)
+    np.testing.assert_array_equal(cm.cdf[0], gamma_mass.cdf[0])
 
 
 # --------------------------------------------------------------------------

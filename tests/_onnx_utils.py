@@ -1,6 +1,41 @@
 """Shared helpers for the ONNX export tests."""
 
+import pickle
+from pathlib import Path
+
 import onnx
+
+TINY_LAN_CONFIG = {
+    "layer_sizes": [16, 16, 1],
+    "activations": ["tanh", "tanh", "linear"],
+    "train_output_type": "logprob",
+}
+
+
+def export_tiny_torch_lan(tmp_dir: Path, input_width: int, seed: int = 0):
+    """Build a seeded, untrained TorchMLP and export it via ``transform_to_onnx``.
+
+    Returns ``(net, onnx_path)``: the module in eval mode and the ``(1, D)``
+    artifact produced by the real ``transform-onnx`` path (config pickle +
+    state dict -> ONNX), so tests exercise the exporter as shipped.
+    """
+    import torch
+
+    from lanfactory.onnx import transform_to_onnx
+    from lanfactory.trainers.torch_mlp import TorchMLP
+
+    torch.manual_seed(seed)
+    net = TorchMLP(network_config=TINY_LAN_CONFIG, input_shape=input_width)
+    net.eval()
+
+    config_file = tmp_dir / "network_config.pickle"
+    state_file = tmp_dir / "state_dict.pt"
+    onnx_file = tmp_dir / "lan.onnx"
+    with open(config_file, "wb") as f:
+        pickle.dump(TINY_LAN_CONFIG, f)
+    torch.save(net.state_dict(), state_file)
+    transform_to_onnx(str(config_file), str(state_file), input_width, str(onnx_file))
+    return net, onnx_file
 
 
 def max_int64_abs(onnx_model: onnx.ModelProto) -> int:
