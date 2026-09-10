@@ -58,10 +58,14 @@ publishers read them by name):
 
 MLflow params are strings, and a corpus derived from a bare `ddm.onnx` or a
 local file has no run uuid or Hub commit to record. Those two keys are still
-logged, as the empty string `""`, so that a consumer can tell "derived, origin
-unknown" (key present, empty) from "not a derived run" (key absent). The
-total-mass statistics are tags rather than params because they describe the
-first file the trainer read, which a resumed run may change.
+logged, as the empty string `""`, so that every derived run carries the same
+key set; the derived/simulated discriminator is the `data_origin` tag, not
+whether a key exists. An empty value is not a publishable one:
+LAN_pipeline_minimal's publisher treats `""` (like `"None"`) as missing and
+refuses the run, since it will not write a model card without the source
+LAN's Hub revision — derive from a Hub-downloaded LAN to publish the result.
+The total-mass statistics are tags rather than params because they describe
+the first file the trainer read, which a resumed run may change.
 
 ```python
 runs = mlflow.search_runs(filter_string="tags.data_origin = 'derived'")

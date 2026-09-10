@@ -108,11 +108,13 @@ run), `integration_grid`, `integration_max_t`. Downstream tools read these
 by name.
 
 When `torchtrain` or `jaxtrain` trains on a derived corpus with MLflow
-tracking on, the training run carries the same keys as params (the two that
-may be unknown as `""`), the `derive_stats` as tags, and the tag
+tracking on, the training run carries those keys as params —
+`source_lan_run_id` only when known, the run uuid and Hub commit as `""`
+when unknown — the `derive_stats` as tags, and the tag
 `data_origin=derived`; see
 [Derived corpora](../using_mlflow.md#derived-corpora) under *Track training
-runs with MLflow* for the exact set and the `""` convention.
+runs with MLflow* for the exact set and what an empty value means
+downstream.
 
 ::: lanfactory.derive.derive_aux_corpus
 

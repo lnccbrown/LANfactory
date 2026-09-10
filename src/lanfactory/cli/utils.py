@@ -215,8 +215,8 @@ def log_training_run_identity(
 
     Every field a catalog needs to answer "which network is this?" is logged on
     the run itself rather than being recoverable only from experiment-name
-    conventions or by unpickling artifacts. Schema documented in HSSMSpine
-    ``_docs/mlflow-schema.md``.
+    conventions or by unpickling artifacts. The key set is listed in
+    ``docs/using_mlflow.md`` (*What Gets Tracked?* and *Derived corpora*).
 
     Params vs tags split is deliberate, for resume safety: MLflow rejects
     re-logging a param key with a *different* value, and a run resumed via
@@ -249,11 +249,14 @@ def log_training_run_identity(
     per-file total-mass statistics ``derive_total_mass_{mean,min,max}`` as
     tags (they describe the first file the dataset read, which a resume may
     change). MLflow params are strings, so the run uuid and Hub commit, which
-    a derived corpus legitimately lacks (a bare ``ddm.onnx``, a local file),
-    are logged as the empty string ``""``: the key is present, and a
-    downstream publisher can tell "derived, origin unknown" from "not a
-    derived run". Any other corpus is tagged ``data_origin=simulated`` and
-    gets none of the provenance keys.
+    a derived corpus may lack (a bare ``ddm.onnx``, a local file), are logged
+    as the empty string ``""`` so that every derived run carries the same
+    key set; the derived/simulated discriminator is the ``data_origin`` tag,
+    not whether a key exists. An empty value is not a publishable one:
+    LAN_pipeline_minimal's publisher treats ``""`` (like ``"None"``) as
+    missing and refuses the run, since it will not write a model card
+    without the source LAN's Hub revision. Any other corpus is tagged
+    ``data_origin=simulated`` and gets none of the provenance keys.
 
     Best-effort: failures are logged, never raised — training must not die on
     a tracking hiccup. No-op when no MLflow run is active.
@@ -300,14 +303,12 @@ def log_training_run_identity(
         # from; that is provenance of this network too. See the docstring for
         # the key set and the "" convention.
         generator_config = getattr(dataset, "data_generator_config", None)
-        derived = (
+        derive_tags: dict[str, str] = {"data_origin": "simulated"}
+        if (
             isinstance(generator_config, dict)
             and generator_config.get("generator_approach") == "derived"
-        )
-        derive_tags: dict[str, str] = {
-            "data_origin": "derived" if derived else "simulated"
-        }
-        if derived:
+        ):
+            derive_tags["data_origin"] = "derived"
             source = generator_config.get("source", {})
             for key in _DERIVED_PROVENANCE_PARAMS:
                 value = source.get(key)
