@@ -1,15 +1,71 @@
 """Tests for CLI utilities."""
 
-from unittest.mock import patch, mock_open
+from types import SimpleNamespace
+from unittest.mock import mock_open, patch
 
 import pytest
-
 from lanfactory.cli.utils import (
+    LINEAGE_ID_KEY,
+    MLFLOW_SCHEMA_VERSION,
     _get_train_network_config,
     _make_train_network_configs,
+    common_run_tags,
     resolve_mlflow_artifact_location,
     resolve_mlflow_tracking_enabled,
+    resolve_training_lineage_id,
 )
+
+
+class TestResolveTrainingLineageId:
+    def test_cli_value_wins(self):
+        ds = SimpleNamespace(data_generator_config={LINEAGE_ID_KEY: "data"})
+        runs = [{"run_id": "r", LINEAGE_ID_KEY: "runs"}]
+        assert resolve_training_lineage_id(
+            explicit=" cli ", dataset=ds, data_generation_runs=runs
+        ) == ("cli", "cli")
+
+    def test_training_pickles_beat_datagen_runs(self):
+        ds = SimpleNamespace(data_generator_config={LINEAGE_ID_KEY: "data"})
+        runs = [{"run_id": "r", LINEAGE_ID_KEY: "runs"}]
+        assert resolve_training_lineage_id(
+            explicit=None, dataset=ds, data_generation_runs=runs
+        ) == ("data", "training_data")
+
+    def test_datagen_runs_used_when_data_has_none(self):
+        ds = SimpleNamespace(data_generator_config={"model": "ddm"})
+        runs = [
+            {"run_id": "r1", LINEAGE_ID_KEY: "L"},
+            {"run_id": "r2", LINEAGE_ID_KEY: "L"},
+        ]
+        assert resolve_training_lineage_id(
+            explicit=None, dataset=ds, data_generation_runs=runs
+        ) == ("L", "data_generation_runs")
+
+    def test_conflicting_datagen_ids_take_most_recent_and_warn(self, caplog):
+        runs = [
+            {"run_id": "new", LINEAGE_ID_KEY: "B"},
+            {"run_id": "old", LINEAGE_ID_KEY: "A"},
+        ]
+        with caplog.at_level("WARNING"):
+            lid, src = resolve_training_lineage_id(
+                explicit=None, dataset=None, data_generation_runs=runs
+            )
+        assert (lid, src) == ("B", "data_generation_runs")
+        assert "distinct lineage ids" in caplog.text
+
+    def test_legacy_data_mints(self):
+        ds = SimpleNamespace(data_generator_config="None")  # DatasetTorch default
+        lid, src = resolve_training_lineage_id(explicit=None, dataset=ds)
+        assert src == "minted" and len(lid) == 32
+        assert resolve_training_lineage_id(explicit="", dataset=None)[1] == "minted"
+
+
+def test_common_run_tags_shape():
+    tags = common_run_tags("lin-1")
+    assert tags["schema_version"] == MLFLOW_SCHEMA_VERSION == "2"
+    assert tags[LINEAGE_ID_KEY] == "lin-1"
+    assert tags["hostname"]
+    assert tags.get("git_sha", "x")  # absent outside a checkout, never empty
 
 
 class TestResolveMlflowTrackingEnabled:
