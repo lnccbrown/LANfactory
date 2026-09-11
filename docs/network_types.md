@@ -129,7 +129,9 @@ error at `a < 0.5` on the Hub ddm LAN, so it is only the fallback for a model
 without that parameter (`--onset-param ''` selects it explicitly, sized by
 `--grid-points`). The LAN leaks a little mass below `t` (mean 0.0035, p99
 0.052 on the Hub ddm LAN); integrating from `t` only was tested and rejected,
-and the leak is recorded per file as `derive_leak_below_onset_p99`.
+and the leak is recorded per file as `derive_leak_below_onset_p99` — on the
+onset grid only (`None` on a uniform grid, where it would mostly be
+quadrature error).
 
 **Row layouts.** Every row is `n_params + 1` wide, in ssms parameter order;
 labels are probabilities in `[0, 1]` for the `bcelogit` loss.

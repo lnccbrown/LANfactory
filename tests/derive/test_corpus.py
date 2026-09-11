@@ -623,12 +623,24 @@ def _manifest(folder: Path) -> dict:
     return json.loads((folder / MANIFEST_NAME).read_text())
 
 
+def _generator_config(path: Path) -> dict:
+    with open(path, "rb") as f:
+        return pickle.load(f)["generator_config"]
+
+
 def test_grid_defaults_to_the_onset_grid_and_falls_back_with_a_warning(
     tmp_path, caplog
 ):
     kwargs = dict(n_files=2, n_theta_per_file=4, survey_n_theta=SURVEY_N_THETA)
-    derive_aux_corpus(DDM_ONNX, "ddm", "cpn", tmp_path / "default", **kwargs)
-    assert _manifest(tmp_path / "default")["grid"] == grid_description(OnsetGrid(), "t")
+    files = derive_aux_corpus(DDM_ONNX, "ddm", "cpn", tmp_path / "default", **kwargs)
+    manifest = _manifest(tmp_path / "default")
+    assert manifest["grid"] == grid_description(OnsetGrid(), "t")
+    assert isinstance(manifest["derive_stats"]["derive_leak_below_onset_p99"], float)
+    assert isinstance(manifest["lan_survey"]["leak_below_onset"], dict)
+    assert isinstance(
+        _generator_config(files[0])["derive_stats"]["derive_leak_below_onset_p99"],
+        float,
+    )
 
     with caplog.at_level("WARNING", logger="lanfactory.derive.corpus"):
         derive_aux_corpus(
@@ -651,8 +663,10 @@ def test_grid_defaults_to_the_onset_grid_and_falls_back_with_a_warning(
     assert manifest["lan_survey"]["leak_below_onset"] is None
     assert manifest["derive_stats"]["derive_leak_below_onset_p99"] is None
 
-    # An explicit uniform grid is used as is; the onset column is still known.
-    derive_aux_corpus(
+    # An explicit uniform grid is used as is; the onset column is still named
+    # in the grid record, but the leak — a property of the onset grid — is
+    # not measured, in the pickles, the manifest or its survey alike.
+    files = derive_aux_corpus(
         DDM_ONNX,
         "ddm",
         "cpn",
@@ -660,8 +674,13 @@ def test_grid_defaults_to_the_onset_grid_and_falls_back_with_a_warning(
         grid=IntegrationGrid(n_points=300),
         **kwargs,
     )
-    grid = _manifest(tmp_path / "explicit")["grid"]
-    assert grid == grid_description(IntegrationGrid(n_points=300), "t")
+    manifest = _manifest(tmp_path / "explicit")
+    assert manifest["grid"] == grid_description(IntegrationGrid(n_points=300), "t")
+    assert manifest["derive_stats"]["derive_leak_below_onset_p99"] is None
+    assert manifest["lan_survey"]["leak_below_onset"] is None
+    for path in files:
+        stats = _generator_config(path)["derive_stats"]
+        assert stats["derive_leak_below_onset_p99"] is None
 
     with pytest.raises(ValueError, match="OnsetGrid needs onset_param"):
         derive_aux_corpus(

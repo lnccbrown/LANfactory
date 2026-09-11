@@ -691,7 +691,7 @@ def grid_description(
         The integration grid.
     onset_param
         The model's onset parameter when it has one — the :class:`OnsetGrid`
-        is built around it and the leak statistic measured at it, on either
+        is built around it, and the leak statistic is measured at it on that
         grid; ``None`` when the model has none.
 
     Returns
@@ -720,8 +720,10 @@ def _resolve_grid(
     ``None`` picks :class:`OnsetGrid` when ``onset_param`` names a parameter
     of the model and falls back to a uniform :class:`IntegrationGrid` (with
     a warning) otherwise; an explicit :class:`OnsetGrid` requires the onset
-    parameter. The onset column is returned whenever the model has one, so
-    the leak below it can be measured on either grid.
+    parameter. The onset column is returned whenever the model has one (the
+    grid record names it on either grid); the leak below it is only measured
+    on an :class:`OnsetGrid`, since a uniform grid's leak is mostly its own
+    quadrature error.
     """
     onset_idx = (
         list(params).index(onset_param)
@@ -757,7 +759,7 @@ def _derive_stats(
 
     ``past_max_t`` is the per-fallback-theta share of base-model trials at or
     beyond ``max_t`` (``None`` or empty when nothing fell back); ``leak`` the
-    per-theta mass below the onset (``None`` without an onset parameter).
+    per-theta mass below the onset (``None`` without an onset grid).
     """
     past = None if past_max_t is None or past_max_t.size == 0 else past_max_t
     return {
@@ -845,8 +847,8 @@ def derive_aux_corpus(
     onset_param
         Name of the model's non-decision-time parameter. Its column is the
         onset the :class:`OnsetGrid` is refined around and the edge the leak
-        statistic is measured at. ``None``, or a name the model lacks, means
-        no onset grid.
+        statistic is measured at (on that grid only). ``None``, or a name the
+        model lacks, means no onset grid.
     grid
         Integration grid. ``None`` (the default) is an :class:`OnsetGrid`
         when ``onset_param`` names a parameter of ``model`` and a uniform
@@ -1013,7 +1015,9 @@ def derive_aux_corpus(
             else:
                 rows = np.flatnonzero(flagged)
             labels[rows] = _labels(simulated.reshape(-1))
-        leak = None if onset_idx is None else mass.leak_below(theta[:, onset_idx])
+        # The leak is a property of the onset grid; a uniform grid's leak is
+        # mostly quadrature error, and the survey records none there either.
+        leak = None if onset is None else mass.leak_below(onset)
 
         stats = _derive_stats(mass.total, flagged, past_max_t, leak)
         generator_config = {
