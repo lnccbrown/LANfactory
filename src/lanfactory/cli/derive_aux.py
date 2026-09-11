@@ -106,6 +106,12 @@ def main(
         "--no-fallback",
         help="Label every parameter vector from the LAN, whatever its total.",
     ),
+    survey_n_theta: int = typer.Option(
+        20_000,
+        "--survey-n-theta",
+        help="Parameter vectors drawn for the manifest's whole-box mass survey "
+        "of the LAN (lan_survey).",
+    ),
     seed: int = typer.Option(0, "--seed", help="Base random seed."),
     source_run_uuid: str = typer.Option(
         None,
@@ -174,6 +180,7 @@ def main(
             deadline_quantile_frac=deadline_quantile_frac,
             fallback_window=None if no_fallback else fallback_window,
             fallback_n_sim=fallback_n_sim,
+            survey_n_theta=survey_n_theta,
             seed=seed,
             source=source,
         )

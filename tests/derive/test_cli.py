@@ -74,6 +74,8 @@ def test_derive_aux_writes_files_and_manifest(tmp_path, ddm_provenance):
             "1.1",
             "--fallback-n-sim",
             "200",
+            "--survey-n-theta",
+            "64",
             "--seed",
             "7",
             "--source-run-uuid",
@@ -97,6 +99,7 @@ def test_derive_aux_writes_files_and_manifest(tmp_path, ddm_provenance):
     assert manifest["deadline_quantile_frac"] == 0.3
     assert manifest["fallback_window"] == [0.9, 1.1]
     assert manifest["fallback_n_sim"] == 200
+    assert manifest["survey_n_theta"] == manifest["lan_survey"]["n_theta"] == 64
     assert manifest["seed"] == 7
     source = manifest["source"]
     assert source["hf_repo"] == "franklab/HSSM"
@@ -115,6 +118,7 @@ def test_derive_aux_writes_files_and_manifest(tmp_path, ddm_provenance):
         deadline_quantile_frac=0.3,
         fallback_window=(0.9, 1.1),
         fallback_n_sim=200,
+        survey_n_theta=64,
         seed=7,
         source=SourceLAN.from_onnx(
             DDM_ONNX,
@@ -147,6 +151,8 @@ def test_derive_aux_short_aliases_match_the_long_options(tmp_path):
             "2",
             "--n-theta-per-file",
             "8",
+            "--survey-n-theta",
+            "32",
         ],
     )
     assert result.exit_code == 0, _out(result)
@@ -241,6 +247,8 @@ def test_derive_aux_empty_onset_param_selects_the_uniform_grid(tmp_path):
             "2",
             "--n-theta-per-file",
             "8",
+            "--survey-n-theta",
+            "32",
             "--onset-param",
             "",
             "--grid-points",
@@ -271,6 +279,8 @@ def test_derive_aux_warns_and_uses_the_uniform_grid_without_the_onset_param(
             "2",
             "--n-theta-per-file",
             "8",
+            "--survey-n-theta",
+            "32",
             "--onset-param",
             "ndt",
         ],
@@ -298,6 +308,8 @@ def test_derive_aux_no_fallback_disables_the_window(tmp_path):
             "2",
             "--n-theta-per-file",
             "8",
+            "--survey-n-theta",
+            "32",
             "--no-fallback",
         ],
     )

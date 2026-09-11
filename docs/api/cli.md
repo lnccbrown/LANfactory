@@ -147,6 +147,7 @@ short aliases.
 | `--fallback-window LO HI` | `0.98 1.03` | A parameter vector whose total LAN mass lies outside this open interval is labelled by ssms simulation instead of the LAN; the share that fell back is recorded as `derive_fallback_frac` |
 | `--fallback-n-sim INTEGER` | `20000` | Trials simulated per parameter vector that falls back |
 | `--no-fallback` | off | Label every parameter vector from the LAN, whatever its total (`fallback_window = None`) |
+| `--survey-n-theta INTEGER` | `20000` | Parameter vectors drawn for the manifest's whole-box mass survey of the LAN (`lan_survey`) |
 | `--seed INTEGER` | `0` | Base seed; file `i` is generated from `[seed, i]`, and the fallback's simulator seeds are drawn from the same generator |
 | `--source-run-uuid TEXT` | parsed from the filename | Training run uuid recorded in the provenance |
 | `--source-hf-repo TEXT` | unset | Hub repository the LAN was downloaded from |
