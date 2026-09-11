@@ -22,6 +22,7 @@ import pytest
 import lanfactory
 from lanfactory.cli.utils import _DERIVED_PROVENANCE_PARAMS, log_training_run_identity
 from lanfactory.derive import IntegrationGrid, SourceLAN
+from lanfactory.derive.corpus import _derive_stats
 from tests.utils import HISTORY_WRITE_SKIP_REASON, history_write_is_broken
 
 mlflow = pytest.importorskip("mlflow")
@@ -57,13 +58,14 @@ MODEL_CONFIG = {
 }
 
 
-# What derive_aux_corpus writes into every pickle's generator_config. The
-# "source" block is taken from the producer, SourceLAN.provenance, rather
-# than transcribed, so a key renamed there fails these tests instead of being
-# silently logged under the stale name: a bare ddm.onnx (no run uuid, no Hub
-# commit, no MLflow run id) on a uniform grid (1000 points to 20 s). The
-# "derive_stats" block has the producer's six keys; a None statistic (nothing
-# fell back here) is what the logger must turn into "".
+# What derive_aux_corpus writes into every pickle's generator_config. Both
+# blocks are taken from their producers, SourceLAN.provenance and
+# _derive_stats, rather than transcribed, so a key renamed there fails these
+# tests instead of being silently logged under the stale name. The source is
+# a bare ddm.onnx (no run uuid, no Hub commit, no MLflow run id) on a uniform
+# grid (1000 points to 20 s); the statistics come from three totals
+# (mean 0.984, none flagged, so nothing fell back and the past-max_t share is
+# None — the statistic the logger must turn into "") and a constant leak.
 DERIVED_GENERATOR_CONFIG = {
     "generator_approach": "derived",
     "model": "ddm",
@@ -71,14 +73,12 @@ DERIVED_GENERATOR_CONFIG = {
     "source": SourceLAN(path=Path("ddm.onnx"), sha256="09f685c1" * 8).provenance(
         "opn", IntegrationGrid()
     ),
-    "derive_stats": {
-        "derive_total_mass_mean": 0.998,
-        "derive_total_mass_min": 0.95,
-        "derive_total_mass_max": 1.002,
-        "derive_fallback_frac": 0.0,
-        "derive_sim_past_max_t_max": None,
-        "derive_leak_below_onset_p99": 0.052,
-    },
+    "derive_stats": _derive_stats(
+        total=np.array([0.95, 1.0, 1.002]),
+        flagged=np.zeros(3, dtype=bool),
+        past_max_t=None,
+        leak=np.full(3, 0.052),
+    ),
 }
 # The params a derived run always carries: the producer's keys minus the one
 # logged only when known.
@@ -263,7 +263,7 @@ class TestLogTrainingRunIdentity:
 
         assert t["data_origin"] == "derived"
         assert DERIVED_TAG_KEYS <= set(t)
-        assert t["derive_total_mass_mean"] == "0.998"
+        assert t["derive_total_mass_mean"] == "0.984"
         assert t["derive_total_mass_min"] == "0.95"
         assert t["derive_total_mass_max"] == "1.002"
         assert t["derive_fallback_frac"] == "0.0"
