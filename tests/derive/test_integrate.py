@@ -412,6 +412,34 @@ def test_onset_grid_knee_moves_up_when_t_is_below_the_knee_width():
     assert row[grid.n_pre] == pytest.approx(0.4 - grid.knee)
 
 
+def test_onset_grid_pre_segment_never_degenerates():
+    # A threshold rule ("t - knee > t_min, else the midpoint") gives the pre
+    # segment a width of t - knee - t_min just above t_min + knee, which goes
+    # to zero continuously: 32 points crammed into ~1e-14 s, distinct in
+    # float64 but duplicates in the float32 rows the network sees. The max
+    # rule keeps the pre segment at least margin / 2 wide everywhere.
+    grid = OnsetGrid()
+    onsets = np.concatenate(
+        [
+            [grid.t_min + grid.knee + 1e-9, grid.t_min + grid.knee + 1e-14],
+            np.linspace(0.0, 2.0, 2001),
+        ]
+    )
+    rows = grid.for_theta(onsets)
+    pre_width = rows[:, grid.n_pre] - rows[:, 0]
+    assert np.all(pre_width >= 0.5 * grid.margin)
+    assert pre_width[0] == pytest.approx(0.5 * grid.knee, abs=1e-6)
+    # Every row stays strictly increasing once rounded to float32.
+    assert np.all(np.diff(rows.astype(np.float32), axis=1) > 0)
+    # The two rules meet at t = t_min + 2 knee: the knee start is continuous.
+    switch = grid.t_min + 2 * grid.knee
+    (row,) = grid.for_theta([switch])
+    assert row[grid.n_pre] == pytest.approx(switch - grid.knee)
+    assert row[grid.n_pre] == pytest.approx(0.5 * (grid.t_min + switch))
+    knee_start = rows[2:, grid.n_pre]
+    assert np.all(np.abs(np.diff(knee_start)) < 2 * (2.0 / 2000))
+
+
 def test_onset_grid_validation():
     with pytest.raises(ValueError, match="n_pre"):
         OnsetGrid(n_pre=0)

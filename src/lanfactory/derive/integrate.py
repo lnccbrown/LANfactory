@@ -267,8 +267,10 @@ class OnsetGrid:
         onset over a few milliseconds below ``t``, and this segment resolves
         the blur.
     knee
-        Width of the knee segment, in seconds. When ``t − knee`` falls below
-        ``t_min`` the knee starts halfway between ``t_min`` and ``t`` instead.
+        Width of the knee segment, in seconds. The knee starts at
+        ``max(t − knee, (t_min + t) / 2)``: ``knee`` wide unless that would
+        leave the pre segment shorter than the knee, in which case the two
+        split ``[t_min, t]`` evenly.
     n_onset
         Points on ``[t, t + onset_window]`` (endpoint excluded).
     onset_window
@@ -348,7 +350,13 @@ class OnsetGrid:
             raise ValueError(f"onset must be (n_theta,), got shape {t.shape}")
         t = np.clip(t, *self.onset_bounds)
         t_min = np.full_like(t, self.t_min)
-        knee = np.where(t - self.knee > self.t_min, t - self.knee, 0.5 * (t_min + t))
+        # The knee is ``knee`` wide or half of ``[t_min, t]``, whichever is
+        # shorter, so the pre segment is never thinner than ``margin / 2``
+        # and its width varies continuously in ``t`` (a threshold rule at
+        # ``t_min + knee`` would cram ``n_pre`` points into a vanishing
+        # interval just above it: distinct in float64, duplicates in the
+        # float32 rows the network sees).
+        knee = np.maximum(t - self.knee, 0.5 * (t_min + t))
         window_end = t + self.onset_window
         return np.concatenate(
             [
