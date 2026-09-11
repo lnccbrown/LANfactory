@@ -61,16 +61,19 @@ Every row is `n_params + 1` wide, in ssms parameter order:
 
 | type | training row | label |
 | --- | --- | --- |
-| `cpn` | `[theta..., choice]` — one row per choice code in `model_config["choices"]` | `mass(choice)` |
-| `opn` | `[theta..., deadline]` (deadline last) | `1 - mass_before(deadline)`, summed over choices |
-| `gonogo` | `[theta..., deadline]` | `mass_before(deadline, nogo) + (1 - mass_before(deadline))`, `nogo` = every choice but the largest code (ssms' `nogo_p`) |
+| `cpn` | `[theta..., choice]` — one row per choice code in `model_config["choices"]` | `mass(choice) / total` |
+| `opn` | `[theta..., deadline]` (deadline last) | `1 − F(deadline) / total`, `F(d)` = `mass_before(d)` summed over choices |
+| `gonogo` | `[theta..., deadline]` | `nogo_before(deadline) / total + (1 − F(deadline) / total)`, `nogo` = every choice but the largest code (ssms' `nogo_p`) |
 
-Labels are clipped to `[0, 1]` (the LAN's total mass can sit a few
-thousandths above one); they are never renormalised. The omission term
-`1 - mass_before(deadline)` is clipped once, before it enters the `opn` and
-`gonogo` labels, so `gonogo == mass_before(deadline, nogo) + opn` holds in
-the written corpus. Each pickle's `generator_config["derive_stats"]` and the
-manifest record the total-mass mean / min / max so the deficit stays visible.
+Labels are renormalised by the network's own total (`ChoiceMass.total`, the
+mass on `[t_min, max_t]` summed over choices); the total is recorded, never
+hidden — each pickle's `generator_config["derive_stats"]` and the manifest
+carry its mean / min / max. The LAN's error against simulation is mostly
+scale, so the division removes most of it (Hub ddm LAN: cpn mean error 0.035
+→ 0.004, max 0.17 → 0.033); what remains sits where the total is off, which
+is what the simulation fallback of `derive_aux_corpus` covers. The float32
+clip to `[0, 1]` is kept as a safety net, and the omission term is formed
+once so `gonogo == nogo_before / total + opn` holds row by row.
 A derived `cpn` corpus is one column wider than ssms' simulated CPN corpus
 (`[theta...]` with a single `P(choice = 1)` label); see the
 [network types](../network_types.md#deriving-auxiliary-networks-from-a-trained-lan)

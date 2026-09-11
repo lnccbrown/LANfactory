@@ -149,10 +149,11 @@ For `opn` and `gonogo`, deadlines are sampled per parameter vector: a
 `--deadline-quantile-frac` share (default 0.7) from the LAN's own
 reaction-time quantiles under that theta, so the training deadlines sit where
 the omission probability is informative, and the rest uniform on ssms'
-deadline bounds `(0.001, 10)` so the corpus still covers the box. Labels are
-clipped to `[0, 1]`; the omission term is clipped once, before it enters
-either label, so `gonogo == mass_before(deadline, nogo) + opn` holds row by
-row in the written corpus.
+deadline bounds `(0.001, 10)` so the corpus still covers the box. Every label
+is the LAN's mass as a fraction of the LAN's own total (see *Renormalisation*
+below); the float32 clip to `[0, 1]` is a safety net, and the omission term is
+formed once, before it enters either label, so `gonogo == nogo_before /
+total + opn` holds row by row in the written corpus.
 
 **Deriving and training.**
 

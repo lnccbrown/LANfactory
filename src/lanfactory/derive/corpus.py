@@ -13,24 +13,33 @@ Every corpus has ``n_params + 1`` input columns, in ssms parameter order:
 =========  =====================================  ==============================
 type       training row                           label
 =========  =====================================  ==============================
-cpn        ``[theta..., choice]`` — one row per   ``mass(choice)``
+cpn        ``[theta..., choice]`` — one row per   ``mass(choice) / total``
            choice code in ``model_config["choices"]``
-opn        ``[theta..., deadline]``               ``1 - mass_before(deadline)``
-gonogo     ``[theta..., deadline]``               ``mass_before(deadline, nogo)``
-                                                  ``+ (1 - mass_before(deadline))``
+opn        ``[theta..., deadline]``               ``1 - F(deadline) / total``
+gonogo     ``[theta..., deadline]``               ``nogo_before(deadline) / total``
+                                                  ``+ (1 - F(deadline) / total)``
 =========  =====================================  ==============================
 
-The gonogo label follows ssms' own ``nogo_p``: a trial is *nogo* when its
-choice is anything but the largest choice code, or when it is omitted.
+with ``total`` the LAN's mass on ``[t_min, max_t]`` summed over choices,
+``F(d) = mass_before(d)`` summed over choices and ``nogo_before(d)`` the
+mass before ``d`` of every choice but the largest code (ssms' own ``nogo_p``:
+a trial is *nogo* when its choice is anything but the largest choice code,
+or when it is omitted).
 
-Labels are probabilities for a BCE-with-logits consumer and are clipped to
-``[0, 1]``: the LAN's approximation error can put its total mass a few
-thousandths above one. The omission term ``1 - mass_before(deadline)`` is
-clipped *once*, before it enters either label, so the decomposition
-``gonogo_label == mass_before(deadline, nogo) + opn_label`` holds in the
-written corpus. Clipping is not renormalisation — the per-corpus total-mass
-statistics recorded in every pickle and in the manifest keep the deficit (or
-excess) visible; see the tail policy in :mod:`.integrate`.
+Labels are renormalised by the network's own total
+---------------------------------------------------
+The LAN's total mass is not one: it carries the network's scale error (on the
+Hub ddm LAN, median ``|total − 1|`` 0.0037 but up to 0.22 in the corners of
+the box; see :func:`.integrate.survey`). Against simulation that error is
+mostly *scale* — dividing by the total takes the cpn error from mean 0.035 /
+max 0.17 to 0.004 / 0.033 and the opn error from 0.026 / 0.22 to 0.012 /
+0.18 — so every label is the LAN's mass as a fraction of its own total, and
+the total is recorded in every pickle (``generator_config["derive_stats"]``)
+and in the manifest, never hidden. The ratios lie in ``[0, 1]`` up to
+rounding; the float32 clip in :func:`_labels` is kept as a safety net, and
+the omission term is formed once so that the decomposition
+``gonogo_label == nogo_before(deadline) / total + opn_label`` holds row by
+row in the written corpus. A parameter vector with zero total is rejected.
 """
 
 from __future__ import annotations
@@ -199,15 +208,26 @@ def _labels(values: NDArray) -> NDArray[np.float32]:
     return np.clip(values, 0.0, 1.0).astype(np.float32).reshape(-1, 1)
 
 
+def _total(mass: ChoiceMass) -> NDArray[np.float64]:
+    """The per-theta total the labels are renormalised by; must be positive."""
+    total = mass.total
+    if np.any(total <= 0.0):
+        bad = np.flatnonzero(total <= 0.0)
+        raise ValueError(
+            f"total mass must be > 0 to renormalise labels; parameter vectors "
+            f"{bad.tolist()} have total {total[bad].tolist()}"
+        )
+    return total
+
+
 def _omission(mass: ChoiceMass, deadline: NDArray[np.float64]) -> NDArray[np.float64]:
     """``P(no response before deadline)`` as a float64 probability.
 
-    ``1 - mass_before(deadline)`` summed over choices, clipped to ``[0, 1]``
-    once so that the same term enters :func:`opn_labels` and
-    :func:`gonogo_labels` (a LAN whose total exceeds one would otherwise give
-    a negative omission mass).
+    ``1 - F(deadline) / total`` with ``F`` the mass before the deadline
+    summed over choices, clipped to ``[0, 1]`` once so that the same term
+    enters :func:`opn_labels` and :func:`gonogo_labels`.
     """
-    return np.clip(1.0 - mass.mass_before(deadline), 0.0, 1.0)
+    return np.clip(1.0 - mass.mass_before(deadline) / _total(mass), 0.0, 1.0)
 
 
 def _nogo_before(
@@ -237,9 +257,10 @@ def _deadline_rows(
 def cpn_labels(
     mass: ChoiceMass, theta: ArrayLike, choices: Sequence[float] | NDArray
 ) -> tuple[NDArray[np.float32], NDArray[np.float32]]:
-    """CPN rows ``[theta..., choice]`` for every choice, labelled ``mass(choice)``.
+    """CPN rows ``[theta..., choice]`` for every choice, labelled ``mass(choice) / total``.
 
     Rows are theta-major: all choices of ``theta[0]``, then of ``theta[1]``, …
+    The labels of one theta sum to one.
 
     Parameters
     ----------
@@ -272,17 +293,17 @@ def cpn_labels(
     per_choice = np.stack(
         [mass.mass(float(c)) for c in np.asarray(choices).reshape(-1)], axis=1
     )
-    return data, _labels(per_choice.reshape(-1))
+    return data, _labels((per_choice / _total(mass)[:, None]).reshape(-1))
 
 
 def opn_labels(
     mass: ChoiceMass, theta: ArrayLike, deadlines: ArrayLike
 ) -> tuple[NDArray[np.float32], NDArray[np.float32]]:
-    """OPN rows ``[theta..., deadline]`` labelled ``1 - mass_before(deadline)``.
+    """OPN rows ``[theta..., deadline]`` labelled ``1 - F(deadline) / total``.
 
-    The label is the probability of *not* responding before the deadline,
-    summed over choices — the omission probability ssms marks with
-    ``rt == -999``.
+    The label is the probability of *not* responding before the deadline —
+    the omission probability ssms marks with ``rt == -999`` — as a fraction
+    of the LAN's own total mass.
 
     Parameters
     ----------
@@ -312,7 +333,9 @@ def gonogo_labels(
 
     ssms counts a trial as *nogo* when its choice is not the largest choice
     code **or** it is omitted, so the label is the mass of every non-maximal
-    choice before the deadline plus the omission probability.
+    choice before the deadline plus the omission probability, both as a
+    fraction of the LAN's own total: ``gonogo == nogo_before / total + opn``
+    row by row.
 
     Parameters
     ----------
@@ -332,7 +355,7 @@ def gonogo_labels(
     theta_arr = _as_theta(theta)
     _check_rows(mass, theta_arr)
     data, d = _deadline_rows(theta_arr, deadlines)
-    return data, _labels(_nogo_before(mass, d) + _omission(mass, d))
+    return data, _labels(_nogo_before(mass, d) / _total(mass) + _omission(mass, d))
 
 
 # --------------------------------------------------------------------------
