@@ -29,11 +29,13 @@ from lanfactory.derive import (
     NETWORK_TYPES,
     ChoiceMass,
     IntegrationGrid,
+    OnsetGrid,
     SourceLAN,
     choice_mass,
     cpn_labels,
     derive_aux_corpus,
     gonogo_labels,
+    grid_description,
     load_onnx_predictor,
     opn_labels,
     sample_deadlines,
@@ -457,7 +459,9 @@ def test_pickle_carries_the_contract_keys(derived):
     assert stats["derive_total_mass_min"] <= stats["derive_total_mass_mean"]
     assert stats["derive_total_mass_mean"] <= stats["derive_total_mass_max"]
     derive = generator_config["derive"]
-    assert derive["integration_grid"] == 1000
+    assert derive["grid"] == "onset"
+    assert derive["grid_config"] == grid_description(OnsetGrid(), "t")
+    assert derive["integration_grid"] == OnsetGrid().n_points == 1160
     assert derive["integration_max_t"] == 20.0
     assert derive["t_min"] == 1e-4
     assert derive["deadline_quantile_frac"] == 0.7
@@ -502,7 +506,8 @@ def test_manifest_lists_the_files(derived):
     assert manifest["source"]["path"] == str(DDM_ONNX)
     assert manifest["source"]["sha256"] == manifest["source"]["source_lan_sha256"]
     assert manifest["source"]["run_uuid"] is None
-    assert manifest["grid"] == {"n_points": 1000, "max_t": 20.0, "t_min": 1e-4}
+    assert manifest["grid"] == grid_description(OnsetGrid(), "t")
+    assert manifest["grid"]["kind"] == "onset" and manifest["grid"]["n_points"] == 1160
     assert manifest["deadline_quantile_frac"] == 0.7
     expected_bounds = None if network_type == "cpn" else DEADLINE_BOUNDS
     assert manifest["deadline_bounds"] == expected_bounds
@@ -513,6 +518,59 @@ def test_manifest_lists_the_files(derived):
     for entry in manifest["files"]:
         assert STATS_KEYS <= set(entry)
         assert entry["n_rows"] == n_rows
+
+
+def _manifest(folder: Path) -> dict:
+    return json.loads((folder / MANIFEST_NAME).read_text())
+
+
+def test_grid_defaults_to_the_onset_grid_and_falls_back_with_a_warning(
+    tmp_path, caplog
+):
+    kwargs = dict(n_files=2, n_theta_per_file=4)
+    derive_aux_corpus(DDM_ONNX, "ddm", "cpn", tmp_path / "default", **kwargs)
+    assert _manifest(tmp_path / "default")["grid"] == grid_description(OnsetGrid(), "t")
+
+    with caplog.at_level("WARNING", logger="lanfactory.derive.corpus"):
+        derive_aux_corpus(
+            DDM_ONNX, "ddm", "cpn", tmp_path / "none", onset_param=None, **kwargs
+        )
+    assert not caplog.records  # asked for no onset grid: nothing to warn about
+    assert _manifest(tmp_path / "none")["grid"] == grid_description(
+        IntegrationGrid(), None
+    )
+
+    with caplog.at_level("WARNING", logger="lanfactory.derive.corpus"):
+        derive_aux_corpus(
+            DDM_ONNX, "ddm", "cpn", tmp_path / "ndt", onset_param="ndt", **kwargs
+        )
+    assert any("no parameter 'ndt'" in r.getMessage() for r in caplog.records)
+    grid = _manifest(tmp_path / "ndt")["grid"]
+    assert grid["kind"] == "uniform" and grid["onset_param"] is None
+
+    # An explicit uniform grid is used as is; the onset column is still known.
+    derive_aux_corpus(
+        DDM_ONNX,
+        "ddm",
+        "cpn",
+        tmp_path / "explicit",
+        grid=IntegrationGrid(n_points=300),
+        **kwargs,
+    )
+    grid = _manifest(tmp_path / "explicit")["grid"]
+    assert grid == grid_description(IntegrationGrid(n_points=300), "t")
+
+    with pytest.raises(ValueError, match="OnsetGrid needs onset_param"):
+        derive_aux_corpus(
+            DDM_ONNX,
+            "ddm",
+            "cpn",
+            tmp_path / "bad",
+            onset_param=None,
+            grid=OnsetGrid(),
+            **kwargs,
+        )
+    assert not (tmp_path / "bad").exists()
 
 
 def _arrays(path: Path) -> tuple[np.ndarray, np.ndarray]:

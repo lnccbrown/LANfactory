@@ -16,11 +16,13 @@ short aliases.
 from pathlib import Path
 
 import typer
+from ssms.config import ModelConfigBuilder
 
 from lanfactory.derive import (
     MANIFEST_NAME,
     NETWORK_TYPES,
     IntegrationGrid,
+    OnsetGrid,
     SourceLAN,
     derive_aux_corpus,
 )
@@ -67,8 +69,17 @@ def main(
         help="Parameter vectors per file (rows per file for opn/gonogo; "
         "times the number of choices for cpn).",
     ),
+    onset_param: str = typer.Option(
+        "t",
+        "--onset-param",
+        help="Non-decision-time parameter the integration grid is refined around. "
+        "Pass an empty string to integrate on a uniform grid instead.",
+    ),
     grid_points: int = typer.Option(
-        1000, "--grid-points", help="Reaction-time grid points per choice."
+        1000,
+        "--grid-points",
+        help="Points of the uniform grid; used only when no onset grid applies "
+        "(--onset-param '' or a model without that parameter).",
     ),
     max_t: float = typer.Option(
         20.0, "--max-t", help="Upper edge of the integration grid in seconds."
@@ -110,7 +121,21 @@ def main(
             f"--network-type must be one of {list(NETWORK_TYPES)}, got: {network_type}"
         )
     try:
-        grid = IntegrationGrid(n_points=grid_points, max_t=max_t)
+        params = list(ModelConfigBuilder.from_model(model_name)["params"])
+    except Exception as e:  # noqa: BLE001 - ssms raises several types here
+        raise typer.BadParameter(f"--model-name {model_name!r}: {e}") from e
+    onset = onset_param or None
+    try:
+        if onset is not None and onset in params:
+            grid: IntegrationGrid | OnsetGrid = OnsetGrid(max_t=max_t)
+        else:
+            if onset is not None:
+                typer.echo(
+                    f"Warning: model {model_name!r} has no parameter {onset!r}; "
+                    f"integrating on a uniform {grid_points}-point grid.",
+                    err=True,
+                )
+            grid = IntegrationGrid(n_points=grid_points, max_t=max_t)
     except ValueError as e:
         raise typer.BadParameter(str(e)) from e
 
@@ -128,6 +153,7 @@ def main(
             output_folder,
             n_files=n_files,
             n_theta_per_file=n_theta_per_file,
+            onset_param=onset,
             grid=grid,
             deadline_quantile_frac=deadline_quantile_frac,
             seed=seed,

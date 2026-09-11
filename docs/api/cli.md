@@ -140,7 +140,8 @@ short aliases.
 | `--output-folder PATH`, `--out PATH` | required | Destination folder; created if absent |
 | `--n-files INTEGER` | `100` | Number of pickles to write; at least 2 |
 | `--n-theta-per-file INTEGER` | `4096` | Parameter vectors per file; rows per file for `opn`/`gonogo`, times the number of choices for `cpn` |
-| `--grid-points INTEGER` | `1000` | Reaction-time grid points per choice |
+| `--onset-param TEXT` | `t` | Non-decision-time parameter the per-parameter-vector onset grid is refined around; an empty string integrates on a uniform grid instead |
+| `--grid-points INTEGER` | `1000` | Points of the uniform grid; used only when no onset grid applies (`--onset-param ''` or a model without that parameter) |
 | `--max-t FLOAT` | `20.0` | Upper edge of the integration grid in seconds; the density is never evaluated past it |
 | `--deadline-quantile-frac FLOAT` | `0.7` | Share of `opn`/`gonogo` deadlines drawn from the LAN's own RT quantiles; the rest are uniform on the deadline bounds |
 | `--seed INTEGER` | `0` | Base seed; file `i` is generated from `[seed, i]` |

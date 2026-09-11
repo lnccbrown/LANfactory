@@ -103,6 +103,8 @@ by name.
 
 ::: lanfactory.derive.SourceLAN
 
+::: lanfactory.derive.grid_description
+
 ::: lanfactory.derive.NETWORK_TYPES
 
 ::: lanfactory.derive.AUX_CATEGORY
