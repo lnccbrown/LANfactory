@@ -425,10 +425,15 @@ class ChoiceMass:
         self, d: NDArray[np.float64]
     ) -> tuple[NDArray[np.intp], NDArray[np.intp], NDArray[np.intp]]:
         """Row indices and the grid interval ``[lo, hi]`` holding each ``d``."""
-        t_rows = self._t_rows()
-        n_theta, n_points = t_rows.shape
-        # Per row: ``searchsorted(t_row, d, side="right") - 1``.
-        lo = np.clip((t_rows <= d[:, None]).sum(axis=1) - 1, 0, n_points - 2)
+        n_theta, _, n_points = self.cdf.shape
+        if self.t.ndim == 1:
+            lo = np.searchsorted(self.t, d, side="right") - 1
+        else:
+            # Per row ``searchsorted(t_row, d, side="right") - 1``; the
+            # ``(n_theta, n_points)`` comparison is the price of a grid per
+            # row, so the shared grid keeps the O(log n) path above.
+            lo = (self.t <= d[:, None]).sum(axis=1) - 1
+        lo = np.clip(lo, 0, n_points - 2)
         return np.arange(n_theta), lo, lo + 1
 
     def mass(self, choice: float) -> NDArray[np.float64]:
