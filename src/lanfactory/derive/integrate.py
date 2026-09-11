@@ -759,6 +759,14 @@ def survey(
         (on an 8×8 grid of the two parameters most correlated with the
         deviation, the cell with the largest ``|mean_dev|``; ``None`` with
         fewer than two parameters).
+
+    Raises
+    ------
+    ValueError
+        If ``params`` is empty or names a parameter without bounds, if
+        ``onset_param`` is not in ``params``, if ``grid`` and ``onset_param``
+        do not go together, if a bound has ``hi < lo``, or if ``n_theta``,
+        ``chunk_size`` or ``shrink`` is out of range.
     """
     params = list(params)
     n_params = len(params)
@@ -771,6 +779,8 @@ def survey(
         raise ValueError(f"onset_param {onset_param!r} is not in params {params}")
     if n_theta < 1:
         raise ValueError(f"n_theta must be >= 1, got {n_theta}")
+    if chunk_size < 1:
+        raise ValueError(f"chunk_size must be >= 1, got {chunk_size}")
     if not 0.0 <= shrink < 0.5:
         raise ValueError(f"shrink must lie in [0, 0.5), got {shrink}")
     if grid is None:
