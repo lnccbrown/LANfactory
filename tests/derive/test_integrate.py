@@ -113,8 +113,9 @@ def test_rank_one_artifact_is_rejected_clearly(tmp_path):
 
 CHOICES = np.array([-1, 1])
 WEIGHTS = {-1: 0.3, 1: 0.7}
-# shape >= 2 keeps the density C^1 at zero so the trapezoid rule converges
-# at its nominal O(h^2); the (4, 2) row puts ~1% of its mass past max_t.
+# shape >= 2 keeps the density continuous (C^0) at zero so the trapezoid rule
+# keeps its O(h^2) rate (the derivative still jumps there for shape = 2); the
+# (4, 2) row puts ~1% of its mass past max_t.
 THETA = np.array([[2.0, 0.5], [3.0, 1.0], [4.0, 2.0]])
 
 
@@ -461,8 +462,11 @@ def test_onset_grid_validation():
 # 7. Per-theta grid: a peaked density with a sharp onset
 # --------------------------------------------------------------------------
 
-# shape = 2 keeps the density C^1 at the onset (as in section 2); scale 0.03
-# puts the whole peak inside two steps of the uniform 1000-point grid.
+# shape = 2 keeps the density continuous (C^0) at the onset (as in section 2)
+# so the trapezoid rule keeps its O(h^2) rate; the derivative still jumps from
+# 0 to 1/scale^2 there, which is why the uniform grid's error depends on where
+# the onset falls between two of its points. Scale 0.03 puts the whole peak
+# inside two steps of the uniform 1000-point grid.
 PEAK_SHAPE, PEAK_SCALE = 2.0, 0.03
 ONSETS = np.array([[0.0], [0.4], [2.0]])
 
@@ -483,9 +487,14 @@ class PeakedPredictor:
         return log_w + log_density
 
 
-def expected_peak_mass(choice: int, t_min: float = 1e-4, max_t: float = 20.0):
-    """``w[choice] * (G(max_t - t) - G(max(t_min - t, 0)))`` per onset row."""
-    t = ONSETS[:, 0]
+def expected_peak_mass(
+    choice: int,
+    onsets: np.ndarray = ONSETS[:, 0],
+    t_min: float = 1e-4,
+    max_t: float = 20.0,
+):
+    """``w[choice] * (G(max_t - t) - G(max(t_min - t, 0)))`` per onset."""
+    t = np.asarray(onsets, dtype=np.float64)
     g = gamma.cdf(max_t - t, a=PEAK_SHAPE, scale=PEAK_SCALE) - gamma.cdf(
         np.maximum(t_min - t, 0.0), a=PEAK_SHAPE, scale=PEAK_SCALE
     )
@@ -501,15 +510,28 @@ def peak_mass() -> ChoiceMass:
 
 def test_uniform_grid_is_not_fit_for_a_peaked_density():
     # Pins the grid policy: 1000 uniform points (20 ms apart) straddle a
-    # peak that is a few tens of ms wide, and the total comes out wrong by
-    # more than the corpus's own 0.02 flag threshold.
-    uniform = choice_mass(PeakedPredictor(), ONSETS, CHOICES, grid=IntegrationGrid())
-    err = np.abs(uniform.total - sum(expected_peak_mass(c) for c in CHOICES))
-    (row_0_4,) = np.flatnonzero(ONSETS[:, 0] == 0.4)
-    assert err[row_0_4] > 0.02
-    # How wrong depends on where the onset falls between two grid points (an
-    # artefact in its own right), but never within the refined grid's 1e-3.
-    assert np.all(err > 0.01)
+    # peak that is a few tens of ms wide. How wrong the total is depends on
+    # where the onset falls between two grid points — measured 1e-4 to 0.036
+    # across one step at t = 0.4 — so sweep the onset over one step and pin
+    # the worst phase against the corpus's own 0.02 flag threshold. The
+    # refined grid stays within 1e-3 at every phase.
+    uniform = IntegrationGrid()
+    h = uniform.t[1] - uniform.t[0]
+    onsets = 0.4 + h * np.arange(8) / 8
+    theta = onsets[:, None]
+    expected = sum(expected_peak_mass(c, onsets) for c in CHOICES)
+    err_uniform = np.abs(
+        choice_mass(PeakedPredictor(), theta, CHOICES, grid=uniform).total - expected
+    )
+    err_refined = np.abs(
+        choice_mass(
+            PeakedPredictor(), theta, CHOICES, grid=OnsetGrid(), onset=onsets
+        ).total
+        - expected
+    )
+    assert err_uniform.max() > 0.02
+    assert err_uniform.min() < 0.01, "the error is phase-dependent, not uniform"
+    assert err_refined.max() < 1e-3
 
 
 def test_onset_grid_resolves_the_peak_to_1e3(peak_mass):
@@ -705,7 +727,8 @@ def test_survey_worst_cell_sits_above_a_equals_two(scaled_survey):
 def test_survey_leak_and_shrunk_box(scaled_survey):
     leak = scaled_survey["leak_below_onset"]
     # Exactly zero except for onsets below the grid clip (t < 1.1e-3), where
-    # a sliver of the true density sits below the clipped onset: ~1e-13.
+    # a sliver of the true density sits below the clipped onset: at most
+    # ~1e-9 (one pre-segment interval of the trapezoid, spacing ~1.6e-5 s).
     assert leak["p99"] == 0.0 and leak["mean"] < 1e-9 and leak["max"] < 1e-9
     box = scaled_survey["shrunk_box"]
     assert set(box) == set(scaled_survey["total"]) | {"frac_of_theta"}
