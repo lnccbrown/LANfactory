@@ -471,6 +471,28 @@ def peak_mass() -> ChoiceMass:
     )
 
 
+def test_uniform_grid_is_not_fit_for_a_peaked_density():
+    # Pins the grid policy: 1000 uniform points (20 ms apart) straddle a
+    # peak that is a few tens of ms wide, and the total comes out wrong by
+    # more than the corpus's own 0.02 flag threshold.
+    uniform = choice_mass(PeakedPredictor(), ONSETS, CHOICES, grid=IntegrationGrid())
+    err = np.abs(uniform.total - sum(expected_peak_mass(c) for c in CHOICES))
+    (row_0_4,) = np.flatnonzero(ONSETS[:, 0] == 0.4)
+    assert err[row_0_4] > 0.02
+    # How wrong depends on where the onset falls between two grid points (an
+    # artefact in its own right), but never within the refined grid's 1e-3.
+    assert np.all(err > 0.01)
+
+
+def test_onset_grid_resolves_the_peak_to_1e3(peak_mass):
+    for c in CHOICES:
+        err = np.abs(peak_mass.mass(c) - expected_peak_mass(c))
+        assert err.max() < 1e-3, f"choice {c}: max error {err.max():.2e}"
+    assert np.all(
+        np.abs(peak_mass.total - sum(expected_peak_mass(c) for c in CHOICES)) < 1e-3
+    )
+
+
 def test_onset_grid_result_carries_a_grid_per_theta(peak_mass):
     grid = OnsetGrid()
     assert peak_mass.t.shape == (len(ONSETS), grid.n_points)
