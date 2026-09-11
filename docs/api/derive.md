@@ -84,6 +84,18 @@ per file: `n_theta_per_file` rows for `opn` / `gonogo`, `n_theta_per_file
 × n_choices` for `cpn`. With the default 4096 thetas that is 4096 and 8192
 rows for a two-choice model; `512` divides both.
 
+**Fallback.** A theta whose total lies outside `fallback_window` (default the
+open interval `(0.98, 1.03)`) is labelled by `simulate_labels` on ssms rather
+than by the LAN; `fallback_window=None` disables it. Each pickle's
+`generator_config["derive_stats"]` and the manifest's `derive_stats` carry the
+flat keys `derive_total_mass_mean`, `derive_total_mass_min`,
+`derive_total_mass_max`, `derive_fallback_frac`, `derive_sim_past_max_t_max`
+(`None` when nothing fell back) and `derive_leak_below_onset_p99` (`None`
+without an onset parameter); the manifest also carries the source LAN's
+whole-box `survey` under `lan_survey`. The
+[network types](../network_types.md#renormalisation-the-window-and-the-fallback)
+page gives the measurements behind the policy.
+
 **Provenance.** `generator_config["source"]` is the flat dict returned by
 `SourceLAN.provenance`, with exactly the keys `derivation_method`
 (`"derived-from-lan"`), `aux_category` (`choice` / `omission` / `nogo`),

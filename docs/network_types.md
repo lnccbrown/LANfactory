@@ -118,15 +118,18 @@ your own `torchtrain` / `jaxtrain` export. The LAN's file hash, training run
 uuid (parsed from the trainer's filename when present) and Hub revision are
 recorded in every pickle and in `derive_manifest.json`.
 
-**Tail policy.** The density is integrated with the trapezoid rule on a
-uniform grid over `[t_min, max_t]` with `max_t = 20` s, ssms' default and the
-LANs' training support; nothing is extrapolated past it and the masses are
-never renormalised. ssms does not censor a base model at `max_t` (an
-un-terminated trial is returned at `rt ≈ max_t + t` with its sign-implied
-choice), so a simulated CPN label sums to one over choices while the derived
-masses fall short by the density the LAN places past 20 s. The total mass is
-recorded per file (`generator_config["derive_stats"]`) and per corpus (the
-manifest) so that deficit stays visible.
+**Grid.** The density is integrated with the trapezoid rule over
+`[t_min, max_t]` with `max_t = 20` s, ssms' default and the LANs' training
+support; nothing is extrapolated past it. The grid is refined per parameter
+vector around the non-decision time `--onset-param` (default `t`): 32 points
+below `t − 0.05`, 128 on the knee `[t − 0.05, t]`, 600 on `[t, t + 1]` and
+400 on the tail, ~1160 points that match a 16 000-point uniform grid to
+5 × 10⁻⁵. A uniform 1000-point grid was measured to carry 15–25 % quadrature
+error at `a < 0.5` on the Hub ddm LAN, so it is only the fallback for a model
+without that parameter (`--onset-param ''` selects it explicitly, sized by
+`--grid-points`). The LAN leaks a little mass below `t` (mean 0.0035, p99
+0.052 on the Hub ddm LAN); integrating from `t` only was tested and rejected,
+and the leak is recorded per file as `derive_leak_below_onset_p99`.
 
 **Row layouts.** Every row is `n_params + 1` wide, in ssms parameter order;
 labels are probabilities in `[0, 1]` for the `bcelogit` loss.
@@ -171,6 +174,55 @@ size that divides the rows per file: with the default `--n-theta-per-file
 three. The Python entry point is `lanfactory.derive.derive_aux_corpus`; see the
 [API reference](api/derive.md#derived-corpora) for the pickle contract and the
 provenance keys.
+
+### Renormalisation, the window and the fallback
+
+A LAN's integrated mass is not one. Over 20 000 uniform draws from the ddm box
+the Hub ddm LAN's total has median `|total − 1|` 0.0037 and p99 0.080, with
+min 0.877 / max 1.219 and 1.9 % of the box beyond 0.05; two regions carry the
+error — `a > 2.2 & |v| < 0.5` over-estimates the tail (+0.07 mean, +0.22 max)
+and `v > 2.5, z > 0.8, a > 2.2` halves the early peak (−0.06). Against
+simulation that error is mostly *scale*: labelling a CPN with the raw
+`mass(c)` gives a mean error of 0.035 (max 0.17) while `mass(c) / total`
+gives 0.004 (max 0.033); for an OPN `1 − F(d)` gives 0.026 / 0.22 and
+`1 − F(d) / F(max_t)` 0.012 / 0.18. So **labels are renormalised by the
+network's own total; the total is recorded, never hidden** — per file in
+`generator_config["derive_stats"]` (`derive_total_mass_{mean,min,max}`), per
+corpus in the manifest, and the source LAN's whole-box `survey` rides in the
+manifest under `lan_survey`.
+
+What remains after renormalising sits where the total is off. A parameter
+vector whose total lies outside `--fallback-window` (default the open
+interval `0.98 1.03`, which flags 3.7 % of the ddm box) is therefore labelled
+by **ssms simulation** instead of the LAN (`--fallback-n-sim` trials, default
+20 000): the CPN label is the choice frequency conditional on responding
+within `max_t` — what the renormalised LAN label estimates — and the OPN /
+go-no-go labels come from the `{model}_deadline` simulator with the row's
+deadline. With the fallback on, the unflagged residual against simulation is
+≤ 0.023 (CPN) / ≤ 0.033 (OPN). `--no-fallback` labels everything from the
+LAN. Every file and the manifest record the share that fell back
+(`derive_fallback_frac`) and the simulation's own blind spot,
+`derive_sim_past_max_t_max` — the largest share of base-model trials at or
+beyond `max_t` among the fallback thetas (ssms returns those with a choice,
+which no label conditioned on `[0, max_t]` can carry; `None` when nothing fell
+back). Note that ssms at `Δt = 10⁻³` is itself biased at `a < 0.5` (about
+0.02 in `P(choice = 1)`), so a simulated label is a reference, not ground
+truth.
+
+**Cost.** Measured on the Hub ddm LAN with `n_files = 2`, `n_theta_per_file
+= 4096` and the defaults (laptop, single-threaded ssms):
+
+| type | fallback fraction | seconds per file | share of file time in simulation | 100 files (extrapolated) |
+| --- | --- | --- | --- | --- |
+| `cpn` | 4.0 % | 39 | 97 % | ≈ 65 min |
+| `opn` | 3.9 % | 62 | 98 % | ≈ 105 min |
+
+The one-off survey of the LAN (20 000 θ) adds about 5 s per corpus.
+Integrating a file takes about a second; the rest is the fallback, whose
+thetas are the slow ones to simulate (large `a`, small `|v|`: long reaction
+times). `opn` / `gonogo` simulate each fallback theta twice — the base model
+for `derive_sim_past_max_t_max` and the deadline model for the label — but
+the deadline run stops at the deadline and is cheap.
 
 ## Where the variants came from
 
