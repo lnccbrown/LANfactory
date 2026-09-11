@@ -17,6 +17,8 @@ per-choice masses.
 
 ::: lanfactory.derive.IntegrationGrid
 
+::: lanfactory.derive.OnsetGrid
+
 ::: lanfactory.derive.choice_mass
 
 ::: lanfactory.derive.ChoiceMass

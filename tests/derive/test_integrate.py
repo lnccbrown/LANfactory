@@ -18,6 +18,7 @@ from scipy.stats import gamma
 from lanfactory.derive import (
     ChoiceMass,
     IntegrationGrid,
+    OnsetGrid,
     choice_mass,
     load_onnx_predictor,
 )
@@ -356,3 +357,215 @@ def test_grid_validation():
 def test_chunk_size_validation():
     with pytest.raises(ValueError, match="chunk_size"):
         choice_mass(GammaMixturePredictor(), THETA, CHOICES, chunk_size=0)
+
+
+# --------------------------------------------------------------------------
+# 6. OnsetGrid
+# --------------------------------------------------------------------------
+
+
+def test_onset_grid_rows_are_sorted_unique_rectangular_and_contain_t():
+    grid = OnsetGrid()
+    onsets = np.array([0.0, 0.03, 0.4, 1.0, 2.0])
+    rows = grid.for_theta(onsets)
+
+    assert grid.n_points == 32 + 128 + 600 + 400 == 1160
+    assert rows.shape == (len(onsets), grid.n_points)
+    assert np.all(np.diff(rows, axis=1) > 0.0), "rows must be strictly increasing"
+    np.testing.assert_array_equal(rows[:, 0], grid.t_min)
+    np.testing.assert_array_equal(rows[:, -1], grid.max_t)
+
+    # Every onset inside the clip interval appears exactly, as a grid point.
+    for row, t in zip(rows[1:], onsets[1:], strict=True):
+        assert np.any(row == t), f"onset {t} missing from its row"
+        assert np.sum(row < t) == 32 + 128, "pre and knee points sit below t"
+    # t = 0 (the bottom of the ddm box) is clipped up by the margin, not to
+    # t_min itself, so the pre/knee segments keep positive length.
+    lo, _ = grid.onset_bounds
+    assert lo == pytest.approx(grid.t_min + 1e-3)
+    assert np.any(rows[0] == lo) and not np.any(rows[0] == 0.0)
+    assert np.sum(rows[0] < lo) == 32 + 128
+
+
+def test_onset_grid_clips_the_onset_at_the_top():
+    # With the default max_t = 20 an onset of 2 s needs no clipping; shrink
+    # max_t so the same onset hits the upper clip and the tail keeps room.
+    grid = OnsetGrid(max_t=2.5)
+    _, hi = grid.onset_bounds
+    assert hi == pytest.approx(2.5 - 1.0 - 1e-3)
+    (row,) = grid.for_theta([2.0])
+    assert np.all(np.diff(row) > 0.0)
+    assert np.any(row == hi) and not np.any(row == 2.0)
+    assert row[-1] == 2.5 and row[0] == grid.t_min
+    assert np.sum(row >= hi + grid.onset_window) == grid.n_tail
+
+
+def test_onset_grid_knee_moves_up_when_t_is_below_the_knee_width():
+    grid = OnsetGrid()
+    (row,) = grid.for_theta([0.03])  # t - knee < t_min
+    knee_start = row[grid.n_pre]
+    assert knee_start == pytest.approx(0.5 * (grid.t_min + 0.03))
+    (row,) = grid.for_theta([0.4])
+    assert row[grid.n_pre] == pytest.approx(0.4 - grid.knee)
+
+
+def test_onset_grid_validation():
+    with pytest.raises(ValueError, match="n_pre"):
+        OnsetGrid(n_pre=0)
+    with pytest.raises(ValueError, match="n_tail"):
+        OnsetGrid(n_tail=1)
+    with pytest.raises(ValueError, match="knee"):
+        OnsetGrid(knee=0.0)
+    with pytest.raises(ValueError, match="onset_window"):
+        OnsetGrid(onset_window=-1.0)
+    with pytest.raises(ValueError, match="t_min"):
+        OnsetGrid(t_min=0.0)
+    with pytest.raises(ValueError, match="max_t"):
+        OnsetGrid(max_t=1.0, onset_window=1.0)
+    with pytest.raises(ValueError, match=r"\(n_theta,\)"):
+        OnsetGrid().for_theta(np.zeros((2, 2)))
+
+
+# --------------------------------------------------------------------------
+# 7. Per-theta grid: a peaked density with a sharp onset
+# --------------------------------------------------------------------------
+
+# shape = 2 keeps the density C^1 at the onset (as in section 2); scale 0.03
+# puts the whole peak inside two steps of the uniform 1000-point grid.
+PEAK_SHAPE, PEAK_SCALE = 2.0, 0.03
+ONSETS = np.array([[0.0], [0.4], [2.0]])
+
+
+class PeakedPredictor:
+    """Rows ``[t, rt, choice]`` -> log( w[choice] * Gamma(rt - t) ), 0 below t."""
+
+    input_width = 3
+
+    def __call__(self, batch: np.ndarray) -> np.ndarray:
+        batch = np.asarray(batch, dtype=np.float64)
+        t, rt, choice = batch.T
+        log_w = np.where(choice == 1, np.log(WEIGHTS[1]), np.log(WEIGHTS[-1]))
+        x = rt - t
+        log_density = np.full(x.shape, -np.inf)
+        above = x > 0.0
+        log_density[above] = gamma.logpdf(x[above], a=PEAK_SHAPE, scale=PEAK_SCALE)
+        return log_w + log_density
+
+
+def expected_peak_mass(choice: int, t_min: float = 1e-4, max_t: float = 20.0):
+    """``w[choice] * (G(max_t - t) - G(max(t_min - t, 0)))`` per onset row."""
+    t = ONSETS[:, 0]
+    g = gamma.cdf(max_t - t, a=PEAK_SHAPE, scale=PEAK_SCALE) - gamma.cdf(
+        np.maximum(t_min - t, 0.0), a=PEAK_SHAPE, scale=PEAK_SCALE
+    )
+    return WEIGHTS[choice] * g
+
+
+@pytest.fixture(scope="module")
+def peak_mass() -> ChoiceMass:
+    return choice_mass(
+        PeakedPredictor(), ONSETS, CHOICES, grid=OnsetGrid(), onset=ONSETS[:, 0]
+    )
+
+
+def test_onset_grid_result_carries_a_grid_per_theta(peak_mass):
+    grid = OnsetGrid()
+    assert peak_mass.t.shape == (len(ONSETS), grid.n_points)
+    assert peak_mass.cdf.shape == (len(ONSETS), len(CHOICES), grid.n_points)
+    np.testing.assert_array_equal(peak_mass.t, grid.for_theta(ONSETS[:, 0]))
+    assert np.all(peak_mass.cdf[..., 0] == 0.0)
+    assert np.all(np.diff(peak_mass.cdf, axis=-1) >= 0.0)
+
+
+class RecordingPredictor:
+    """Wraps any predictor and records every batch it is handed."""
+
+    def __init__(self, inner) -> None:
+        self.inner = inner
+        self.input_width = inner.input_width
+        self.calls: list[np.ndarray] = []
+
+    def __call__(self, batch: np.ndarray) -> np.ndarray:
+        self.calls.append(np.array(batch, copy=True))
+        return self.inner(batch)
+
+
+def test_onset_grid_chunks_agree_with_single_theta_runs(peak_mass):
+    spy = RecordingPredictor(PeakedPredictor())
+    chunked = choice_mass(
+        spy, ONSETS, CHOICES, grid=OnsetGrid(), chunk_size=2, onset=ONSETS[:, 0]
+    )
+    per_theta = len(CHOICES) * OnsetGrid().n_points
+    assert [c.shape[0] for c in spy.calls] == [2 * per_theta, per_theta]
+    np.testing.assert_array_equal(chunked.cdf, peak_mass.cdf)
+    np.testing.assert_array_equal(chunked.t, peak_mass.t)
+    for i in range(len(ONSETS)):
+        single = choice_mass(
+            PeakedPredictor(), ONSETS[i], CHOICES, grid=OnsetGrid(), onset=ONSETS[i]
+        )
+        np.testing.assert_array_equal(peak_mass.cdf[i], single.cdf[0])
+
+
+def test_leak_below_is_mass_before_summed_over_choices(peak_mass):
+    onset = ONSETS[:, 0]
+    np.testing.assert_array_equal(
+        peak_mass.leak_below(onset), peak_mass.mass_before(onset)
+    )
+    # The synthetic density is exactly zero at and below the onset.
+    np.testing.assert_array_equal(peak_mass.leak_below(onset), 0.0)
+    # A deadline past the onset does see mass: the definition is not a no-op.
+    assert np.all(peak_mass.leak_below(onset + 0.05) > 0.1)
+
+
+def test_choice_mass_rejects_mismatched_grid_and_onset():
+    with pytest.raises(ValueError, match="OnsetGrid needs onset"):
+        choice_mass(PeakedPredictor(), ONSETS, CHOICES, grid=OnsetGrid())
+    with pytest.raises(ValueError, match="takes no onset"):
+        choice_mass(PeakedPredictor(), ONSETS, CHOICES, onset=ONSETS[:, 0])
+    with pytest.raises(ValueError, match=r"onset must be \(n_theta,\)"):
+        choice_mass(
+            PeakedPredictor(), ONSETS, CHOICES, grid=OnsetGrid(), onset=ONSETS[:2, 0]
+        )
+
+
+# --------------------------------------------------------------------------
+# 8. mass_before / quantile on a per-theta (2-D) grid
+# --------------------------------------------------------------------------
+
+
+def test_mass_before_on_2d_grid_hits_grid_points_and_clamps(peak_mass):
+    t, cdf = peak_mass.t, peak_mass.cdf
+    k = 32 + 128 + 40  # 40 points into the onset segment: the peak region
+    np.testing.assert_allclose(peak_mass.mass_before(t[:, k], -1), cdf[:, 0, k])
+    np.testing.assert_allclose(peak_mass.mass_before(t[:, k]), cdf[:, :, k].sum(axis=1))
+    midpoint = 0.5 * (t[:, k] + t[:, k + 1])
+    np.testing.assert_allclose(
+        peak_mass.mass_before(midpoint, 1), 0.5 * (cdf[:, 1, k] + cdf[:, 1, k + 1])
+    )
+    # Per-row deadlines use each row's own grid, not a shared one.
+    deadlines = ONSETS[:, 0] + np.array([0.01, 0.05, 0.2])
+    got = peak_mass.mass_before(deadlines, 1)
+    for i, d in enumerate(deadlines):
+        assert got[i] == pytest.approx(peak_mass.mass_before(d, 1)[i])
+    assert got[0] < got[1] < got[2]
+    # Clamping at both ends.
+    for c in CHOICES:
+        np.testing.assert_array_equal(peak_mass.mass_before(1e6, c), peak_mass.mass(c))
+        np.testing.assert_array_equal(peak_mass.mass_before(-1.0, c), 0.0)
+        np.testing.assert_array_equal(peak_mass.mass_before(0.0, c), 0.0)
+
+
+@pytest.mark.parametrize("choice", [-1, 1, None])
+def test_quantile_on_2d_grid_round_trips_and_matches_scipy(peak_mass, choice):
+    reference = peak_mass.total if choice is None else peak_mass.mass(choice)
+    t = peak_mass.t
+    for u in (0.05, 0.5, 0.95):
+        q = peak_mass.quantile(u, choice)
+        assert q.shape == (len(ONSETS),)
+        assert np.all((q > t[:, 0]) & (q < t[:, -1]))
+        np.testing.assert_allclose(
+            peak_mass.mass_before(q, choice), u * reference, rtol=1e-9
+        )
+        # Each row's quantile sits on that row's own onset.
+        expected = ONSETS[:, 0] + gamma.ppf(u, a=PEAK_SHAPE, scale=PEAK_SCALE)
+        np.testing.assert_allclose(q, expected, atol=2e-3)

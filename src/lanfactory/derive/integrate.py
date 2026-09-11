@@ -6,18 +6,32 @@ probability and the probability of responding before a deadline — the
 quantities auxiliary networks (CPNs, OPNs) are trained on, obtained here from
 the LAN instead of from a fresh simulation.
 
+Grid policy
+-----------
+The density is integrated with the trapezoid rule over the full support
+``[t_min, max_t]``: ``max_t = 20`` s is ssms' default ``max_t``, the upper
+edge of the LANs' training support, and nothing is extrapolated past it.
+Two grids are offered. :class:`IntegrationGrid` is uniform and adequate for
+smooth densities; a LAN's density is not smooth — it rises from zero over a
+few milliseconds at the non-decision time ``t`` — and on the Hub ddm LAN a
+uniform 1000-point grid carries 15–25 % quadrature error at ``a < 0.5``
+(totals down to 0.66 that are pure grid artefacts). :class:`OnsetGrid` is
+refined per parameter vector around ``t`` (32 points on ``[t_min, t−0.05]``,
+128 on ``[t−0.05, t]``, 600 on ``[t, t+1]``, 400 on ``[t+1, max_t]``) and
+matches a 16 000-point uniform grid to ``5e-5`` at ~1160 points. Integrating
+from ``t`` only was tested and rejected (mean error 0.0083 vs 0.0042 against
+simulation): the LAN leaks mass below ``t`` (mean 0.0035, p99 0.052 on the
+same LAN) and that leak is part of what it predicts.
+
 Tail policy
 -----------
-The density is integrated only over ``[t_min, max_t]`` with the trapezoid rule
-on a uniform grid. ``max_t = 20`` s is ssms' default ``max_t``, the upper edge
-of the LANs' training support; nothing is extrapolated past it. The per-choice
-masses are **not** renormalised to sum to one, so they fall short by whatever
-density the LAN puts past ``max_t``. Note that ssms does not censor a base
-(non-deadline) model there: an un-terminated trial comes back at
-``rt ≈ max_t + t`` with its sign-implied choice, so ssms' own ``choice_p``
-sums to one while these masses do not. Callers record
-:attr:`ChoiceMass.total` alongside the per-choice masses so that deficit
-stays visible.
+The per-choice masses are **not** renormalised to sum to one; they carry
+whatever density the LAN puts past ``max_t`` and the network's own scale
+error. Note that ssms does not censor a base (non-deadline) model there: an
+un-terminated trial comes back at ``rt ≈ max_t + t`` with its sign-implied
+choice, so ssms' own ``choice_p`` sums to one while these masses need not.
+Renormalisation is the corpus's job; :attr:`ChoiceMass.total` is always
+recorded alongside the per-choice masses so the deficit stays visible.
 """
 
 from __future__ import annotations
@@ -25,7 +39,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, ClassVar, Protocol
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
@@ -38,6 +52,7 @@ __all__ = [
     "ChoiceMass",
     "IntegrationGrid",
     "OnnxPredictor",
+    "OnsetGrid",
     "Predictor",
     "choice_mass",
     "load_onnx_predictor",
@@ -211,6 +226,141 @@ class IntegrationGrid:
         return np.linspace(self.t_min, self.max_t, self.n_points)
 
 
+def _segment(
+    start: NDArray[np.float64],
+    stop: NDArray[np.float64],
+    n: int,
+    *,
+    endpoint: bool,
+) -> NDArray[np.float64]:
+    """Row-wise ``linspace(start[i], stop[i], n)``; ``(n_rows, n)``."""
+    u = np.linspace(0.0, 1.0, n, endpoint=endpoint)
+    rows = start[:, None] + (stop - start)[:, None] * u[None, :]
+    if endpoint:
+        rows[:, -1] = stop  # exact, not ``start + (stop - start)``
+    return rows
+
+
+@dataclass(frozen=True)
+class OnsetGrid:
+    """Reaction-time grid refined, per parameter vector, around the onset.
+
+    A LAN's density is essentially zero below the non-decision time ``t``
+    and rises steeply just above it; a uniform grid either wastes points on
+    the flat regions or under-resolves the onset. This grid concatenates
+    four ``linspace`` segments per ``t`` — ``[t_min, t − knee]``,
+    ``[t − knee, t]``, ``[t, t + onset_window]`` and
+    ``[t + onset_window, max_t]`` — so the whole support is still integrated
+    (the LAN leaks mass below ``t``, and that leak is part of what it
+    predicts) while the points concentrate where the density moves. Every
+    row has the same number of points, is strictly increasing, and contains
+    ``t_min``, ``t`` and ``max_t`` exactly.
+
+    Parameters
+    ----------
+    n_pre
+        Points on ``[t_min, t − knee]`` (endpoint excluded).
+    n_knee
+        Points on ``[t − knee, t]`` (endpoint excluded): the LAN blurs the
+        onset over a few milliseconds below ``t``, and this segment resolves
+        the blur.
+    knee
+        Width of the knee segment, in seconds. When ``t − knee`` falls below
+        ``t_min`` the knee starts halfway between ``t_min`` and ``t`` instead.
+    n_onset
+        Points on ``[t, t + onset_window]`` (endpoint excluded).
+    onset_window
+        Width of the onset segment, in seconds.
+    n_tail
+        Points on ``[t + onset_window, max_t]``, endpoint included.
+    max_t
+        Upper edge of the grid; see :class:`IntegrationGrid`.
+    t_min
+        Lower edge, kept strictly positive; see :class:`IntegrationGrid`.
+
+    Notes
+    -----
+    ``t`` is clipped to ``[t_min + 1e-3, max_t − onset_window − 1e-3]`` so
+    that every segment has positive length; the density is still evaluated
+    over the full ``[t_min, max_t]`` for such rows.
+    """
+
+    n_pre: int = 32
+    n_knee: int = 128
+    knee: float = 0.05
+    n_onset: int = 600
+    onset_window: float = 1.0
+    n_tail: int = 400
+    max_t: float = 20.0
+    t_min: float = 1e-4
+
+    #: Margin keeping the outer segments non-degenerate at the box edges.
+    margin: ClassVar[float] = 1e-3
+
+    def __post_init__(self) -> None:
+        for name in ("n_pre", "n_knee", "n_onset"):
+            if getattr(self, name) < 1:
+                raise ValueError(f"{name} must be >= 1, got {getattr(self, name)}")
+        if self.n_tail < 2:
+            raise ValueError(f"n_tail must be >= 2, got {self.n_tail}")
+        if self.knee <= 0.0 or self.onset_window <= 0.0:
+            raise ValueError(
+                f"knee and onset_window must be > 0, got knee={self.knee}, "
+                f"onset_window={self.onset_window}"
+            )
+        if self.t_min <= 0.0 or self.onset_bounds[0] >= self.onset_bounds[1]:
+            raise ValueError(
+                f"need 0 < t_min and t_min + {self.margin} < max_t - onset_window "
+                f"- {self.margin}, got t_min={self.t_min}, max_t={self.max_t}, "
+                f"onset_window={self.onset_window}"
+            )
+
+    @property
+    def n_points(self) -> int:
+        """Points per row: ``n_pre + n_knee + n_onset + n_tail``."""
+        return self.n_pre + self.n_knee + self.n_onset + self.n_tail
+
+    @property
+    def onset_bounds(self) -> tuple[float, float]:
+        """The interval onsets are clipped to before the row is built."""
+        return (
+            self.t_min + self.margin,
+            self.max_t - self.onset_window - self.margin,
+        )
+
+    def for_theta(self, onset: ArrayLike) -> NDArray[np.float64]:
+        """Build one grid row per onset time.
+
+        Parameters
+        ----------
+        onset
+            ``(n_theta,)`` onset times in seconds, e.g. ``theta[:, t_idx]``.
+
+        Returns
+        -------
+        NDArray[np.float64]
+            ``(n_theta, n_points)`` strictly increasing rows.
+        """
+        t = np.asarray(onset, dtype=np.float64)
+        if t.ndim != 1:
+            raise ValueError(f"onset must be (n_theta,), got shape {t.shape}")
+        t = np.clip(t, *self.onset_bounds)
+        t_min = np.full_like(t, self.t_min)
+        knee = np.where(t - self.knee > self.t_min, t - self.knee, 0.5 * (t_min + t))
+        window_end = t + self.onset_window
+        return np.concatenate(
+            [
+                _segment(t_min, knee, self.n_pre, endpoint=False),
+                _segment(knee, t, self.n_knee, endpoint=False),
+                _segment(t, window_end, self.n_onset, endpoint=False),
+                _segment(
+                    window_end, np.full_like(t, self.max_t), self.n_tail, endpoint=True
+                ),
+            ],
+            axis=1,
+        )
+
+
 @dataclass
 class ChoiceMass:
     """Cumulative per-choice mass of a LAN's density on a reaction-time grid.
@@ -218,7 +368,10 @@ class ChoiceMass:
     Attributes
     ----------
     t : NDArray[np.float64]
-        ``(n_points,)`` grid the density was integrated on.
+        The grid the density was integrated on: ``(n_points,)`` when shared
+        by every parameter vector (:class:`IntegrationGrid`), or
+        ``(n_theta, n_points)`` when refined per parameter vector
+        (:class:`OnsetGrid`).
     choices : NDArray
         ``(n_choices,)`` choice codes, in the order of the ``cdf`` axis.
     cdf : NDArray[np.float64]
@@ -227,7 +380,7 @@ class ChoiceMass:
 
     Notes
     -----
-    Masses are not renormalised. ``total`` falls short of one by the density
+    Masses are not renormalised. ``total`` differs from one by the density
     the LAN puts past ``max_t`` plus any approximation error in the network
     itself (ssms returns such trials at ``rt ≈ max_t + t`` rather than as
     omissions, so its ``choice_p`` does not share this deficit); record it
@@ -252,6 +405,21 @@ class ChoiceMass:
         if choice is None:
             return self.cdf.sum(axis=1)
         return self.cdf[:, self._choice_index(choice), :]
+
+    def _t_rows(self) -> NDArray[np.float64]:
+        """The grid as ``(n_theta, n_points)``, a broadcast view when shared."""
+        n_theta, _, n_points = self.cdf.shape
+        return np.broadcast_to(self.t, (n_theta, n_points))
+
+    def _bracket(
+        self, d: NDArray[np.float64]
+    ) -> tuple[NDArray[np.intp], NDArray[np.intp], NDArray[np.intp]]:
+        """Row indices and the grid interval ``[lo, hi]`` holding each ``d``."""
+        t_rows = self._t_rows()
+        n_theta, n_points = t_rows.shape
+        # Per row: ``searchsorted(t_row, d, side="right") - 1``.
+        lo = np.clip((t_rows <= d[:, None]).sum(axis=1) - 1, 0, n_points - 2)
+        return np.arange(n_theta), lo, lo + 1
 
     def mass(self, choice: float) -> NDArray[np.float64]:
         """Mass of one choice on ``[t_min, max_t]``.
@@ -293,14 +461,33 @@ class ChoiceMass:
             ``(n_theta,)``.
         """
         curve = self._curve(choice)
-        n_theta, n_points = curve.shape
-        d = np.broadcast_to(np.asarray(deadline, dtype=np.float64), (n_theta,))
-        d = np.clip(d, self.t[0], self.t[-1])
-        lo = np.clip(np.searchsorted(self.t, d, side="right") - 1, 0, n_points - 2)
-        hi = lo + 1
-        w = (d - self.t[lo]) / (self.t[hi] - self.t[lo])
-        rows = np.arange(n_theta)
+        t_rows = self._t_rows()
+        d = np.broadcast_to(np.asarray(deadline, dtype=np.float64), (curve.shape[0],))
+        d = np.clip(d, t_rows[:, 0], t_rows[:, -1])
+        rows, lo, hi = self._bracket(d)
+        t_lo, t_hi = t_rows[rows, lo], t_rows[rows, hi]
+        w = (d - t_lo) / (t_hi - t_lo)
         return curve[rows, lo] * (1.0 - w) + curve[rows, hi] * w
+
+    def leak_below(self, onset: ArrayLike) -> NDArray[np.float64]:
+        """Mass on ``[t_min, onset]`` summed over choices, per parameter vector.
+
+        Under the simulated model no response precedes the non-decision
+        time; a LAN nevertheless puts some density there, and the corpus and
+        :func:`survey` report that leak through this one definition, which
+        is :meth:`mass_before` with ``choice=None``.
+
+        Parameters
+        ----------
+        onset
+            Scalar or ``(n_theta,)`` onset times in seconds.
+
+        Returns
+        -------
+        NDArray[np.float64]
+            ``(n_theta,)``.
+        """
+        return self.mass_before(onset)
 
     def quantile(
         self, u: ArrayLike, choice: float | None = None
@@ -337,15 +524,19 @@ class ChoiceMass:
         w = np.where(
             rise > 0.0, (target - curve[rows, lo]) / np.where(rise > 0, rise, 1), 0.0
         )
-        return self.t[lo] + w * (self.t[hi] - self.t[lo])
+        t_rows = self._t_rows()
+        t_lo, t_hi = t_rows[rows, lo], t_rows[rows, hi]
+        return t_lo + w * (t_hi - t_lo)
 
 
 def choice_mass(
     predictor: Predictor,
     theta: ArrayLike,
     choices: Sequence[float] | NDArray,
-    grid: IntegrationGrid = IntegrationGrid(),
+    grid: IntegrationGrid | OnsetGrid = IntegrationGrid(),
     chunk_size: int = 512,
+    *,
+    onset: ArrayLike | None = None,
 ) -> ChoiceMass:
     """Integrate a LAN's density over reaction time for every choice.
 
@@ -367,20 +558,29 @@ def choice_mass(
     choices
         The choice codes the LAN was trained on, e.g. ``[-1, 1]``.
     grid
-        Reaction-time grid; see :class:`IntegrationGrid` for the tail policy.
+        Reaction-time grid. A uniform :class:`IntegrationGrid` is shared by
+        every parameter vector; an :class:`OnsetGrid` is built per parameter
+        vector from ``onset`` and is the grid of choice for a LAN (see the
+        module notes on grid policy).
     chunk_size
         Number of parameter vectors evaluated per network call.
+    onset
+        ``(n_theta,)`` onset (non-decision) times, e.g. ``theta[:, t_idx]``.
+        Required with an :class:`OnsetGrid`, rejected otherwise.
 
     Returns
     -------
     ChoiceMass
-        Cumulative mass with ``cdf`` of shape ``(n_theta, n_choices, n_points)``.
+        Cumulative mass with ``cdf`` of shape ``(n_theta, n_choices, n_points)``
+        and ``t`` of shape ``(n_points,)`` (uniform grid) or
+        ``(n_theta, n_points)`` (onset grid).
 
     Raises
     ------
     ValueError
         If ``predictor.input_width != n_params + 2`` — the usual symptom of
-        pairing a parameter set with the wrong LAN.
+        pairing a parameter set with the wrong LAN — or if ``onset`` and
+        ``grid`` do not go together.
     """
     theta_arr = np.atleast_2d(np.asarray(theta, dtype=np.float32))
     if theta_arr.ndim != 2:
@@ -398,8 +598,25 @@ def choice_mass(
 
     choice_arr = np.asarray(choices)
     n_choices = choice_arr.shape[0]
-    t = grid.t
-    n_points = t.shape[0]
+
+    per_theta = isinstance(grid, OnsetGrid)
+    if per_theta != (onset is not None):
+        raise ValueError(
+            "an OnsetGrid needs onset=theta[:, t_idx] and a uniform "
+            "IntegrationGrid takes no onset; got "
+            f"grid={type(grid).__name__} with onset={'given' if onset is not None else 'None'}"
+        )
+    if per_theta:
+        onset_arr = np.asarray(onset, dtype=np.float64)
+        if onset_arr.shape != (n_theta,):
+            raise ValueError(
+                f"onset must be (n_theta,) = ({n_theta},), got shape {onset_arr.shape}"
+            )
+        n_points = grid.n_points
+        t = np.empty((n_theta, n_points), dtype=np.float64)
+    else:
+        t = grid.t
+        n_points = t.shape[0]
 
     cdf = np.empty((n_theta, n_choices, n_points), dtype=np.float64)
     for start in range(0, n_theta, chunk_size):
@@ -412,14 +629,20 @@ def choice_mass(
         # The network sees rt rounded to float32 (~1e-6 s at max_t) while the
         # trapezoid uses the float64 grid; the mismatch is orders of magnitude
         # below the rule's own discretisation error.
-        rows[..., n_params] = t[None, None, :]
+        if per_theta:
+            t_chunk = grid.for_theta(onset_arr[start : start + n_chunk])
+            t[start : start + n_chunk] = t_chunk
+            x = t_chunk[:, None, :]
+        else:
+            x = t
+        rows[..., n_params] = x
         rows[..., n_params + 1] = choice_arr[None, :, None]
         log_density = np.asarray(predictor(rows.reshape(-1, expected_width)))
         density = np.exp(
             log_density.reshape(n_chunk, n_choices, n_points).astype(np.float64)
         )
         cdf[start : start + n_chunk] = cumulative_trapezoid(
-            density, t, axis=-1, initial=0.0
+            density, x, axis=-1, initial=0.0
         )
 
     return ChoiceMass(t=t, choices=choice_arr, cdf=cdf)
