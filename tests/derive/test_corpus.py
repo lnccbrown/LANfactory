@@ -974,6 +974,7 @@ def test_no_fallback_never_simulates(tmp_path, monkeypatch):
         n_files=2,
         n_theta_per_file=256,
         fallback_window=None,
+        survey_n_theta=SURVEY_N_THETA,
     )
     for path in files:
         with open(path, "rb") as f:
