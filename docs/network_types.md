@@ -212,12 +212,17 @@ back). Note that ssms at `Δt = 10⁻³` is itself biased at `a < 0.5` (about
 truth.
 
 **Cost.** Measured on the Hub ddm LAN with `n_files = 2`, `n_theta_per_file
-= 4096` and the defaults (laptop, single-threaded ssms):
+= 4096`, `seed = 0` and the defaults (laptop, single-threaded ssms). Which
+thetas fall back depends only on the sampled thetas and the grid, so the
+fraction is the same for every network type — 3.86 % of the 8192 thetas
+(3.71 % in file 0, 4.00 % in file 1) — and reproduces across processes (the
+parameters are drawn in the model's order, not ssms' hash-dependent one).
+The types differ only in what the fallback costs to simulate:
 
-| type | fallback fraction | seconds per file | share of file time in simulation | 100 files (extrapolated) |
-| --- | --- | --- | --- | --- |
-| `cpn` | 4.0 % | 39 | 97 % | ≈ 65 min |
-| `opn` | 3.9 % | 62 | 98 % | ≈ 105 min |
+| type | seconds per file | share of file time in simulation | 100 files (extrapolated) |
+| --- | --- | --- | --- |
+| `cpn` | 39 | 97 % | ≈ 65 min |
+| `opn` | 61 | 98 % | ≈ 102 min |
 
 The one-off survey of the LAN (20 000 θ) adds about 5 s per corpus.
 Integrating a file takes about a second; the rest is the fallback, whose
