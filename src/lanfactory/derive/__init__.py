@@ -8,6 +8,7 @@ from .integrate import (
     Predictor,
     choice_mass,
     load_onnx_predictor,
+    survey,
 )
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "Predictor",
     "choice_mass",
     "load_onnx_predictor",
+    "survey",
 ]

@@ -36,6 +36,7 @@ recorded alongside the per-choice masses so the deficit stays visible.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -56,6 +57,7 @@ __all__ = [
     "Predictor",
     "choice_mass",
     "load_onnx_predictor",
+    "survey",
 ]
 
 
@@ -646,3 +648,216 @@ def choice_mass(
         )
 
     return ChoiceMass(t=t, choices=choice_arr, cdf=cdf)
+
+
+def _dev_stats(dev: NDArray[np.float64]) -> dict[str, float | None]:
+    """Summary of ``total - 1`` over a set of parameter vectors."""
+    if dev.size == 0:
+        keys = (
+            "mean", "p50_abs_dev", "p90_abs_dev", "p99_abs_dev", "min", "max",
+            "frac_gt_0.02", "frac_gt_0.05", "frac_gt_0.10",
+        )  # fmt: skip
+        return dict.fromkeys(keys)
+    abs_dev = np.abs(dev)
+    p50, p90, p99 = np.percentile(abs_dev, [50, 90, 99])
+    return {
+        "mean": float(1.0 + dev.mean()),
+        "p50_abs_dev": float(p50),
+        "p90_abs_dev": float(p90),
+        "p99_abs_dev": float(p99),
+        "min": float(1.0 + dev.min()),
+        "max": float(1.0 + dev.max()),
+        "frac_gt_0.02": float(np.mean(abs_dev > 0.02)),
+        "frac_gt_0.05": float(np.mean(abs_dev > 0.05)),
+        "frac_gt_0.10": float(np.mean(abs_dev > 0.10)),
+    }
+
+
+def _bin_index(x: NDArray[np.float64], lo: float, hi: float, n_bins: int):
+    """Equal-width bin index of ``x`` on ``[lo, hi]``, the top edge inclusive."""
+    scaled = (x - lo) / (hi - lo) if hi > lo else np.zeros_like(x)
+    return np.clip(np.floor(scaled * n_bins).astype(np.intp), 0, n_bins - 1)
+
+
+def survey(
+    predictor: Predictor,
+    param_bounds: dict[str, tuple[float, float]],
+    params: Sequence[str],
+    choices: Sequence[float] | NDArray,
+    *,
+    n_theta: int = 20_000,
+    seed: int = 0,
+    onset_param: str | None = "t",
+    grid: IntegrationGrid | OnsetGrid | None = None,
+    chunk_size: int = 512,
+    shrink: float = 0.1,
+) -> dict:
+    """Whole-box statistics of a LAN's integrated mass.
+
+    Draws ``n_theta`` parameter vectors uniformly inside ``param_bounds``,
+    integrates the density for each with :func:`choice_mass` (streaming;
+    the cdf is not retained) and summarises how far the total mass strays
+    from one and where in the box it does so. The output is plain numbers
+    (``json.dumps``-able) — the record a corpus keeps next to the artifact
+    it was derived from.
+
+    Parameters
+    ----------
+    predictor
+        The LAN, e.g. from :func:`load_onnx_predictor`.
+    param_bounds
+        ``{name: (lo, hi)}`` for every name in ``params``; the box is
+        sampled uniformly (the training box of the LAN, typically).
+    params
+        Parameter names in the order the LAN's rows expect them.
+    choices
+        The choice codes the LAN was trained on.
+    n_theta
+        Number of parameter vectors drawn.
+    seed
+        Seed of the ``numpy.random.default_rng`` draw.
+    onset_param
+        Name of the non-decision-time parameter; its column is the onset
+        the :class:`OnsetGrid` is built around and the edge
+        ``leak_below_onset`` is measured at. ``None`` integrates on a
+        uniform :class:`IntegrationGrid` and reports no leak.
+    grid
+        Explicit grid; defaults to ``OnsetGrid()`` when ``onset_param`` is
+        given and ``IntegrationGrid()`` otherwise.
+    chunk_size
+        Parameter vectors per network call.
+    shrink
+        Fraction of each parameter's range trimmed at both ends for the
+        ``shrunk_box`` statistics (``0.1`` keeps the middle 80 % per axis).
+
+    Returns
+    -------
+    dict
+        ``n_theta``, ``grid`` (its repr), ``seconds`` (wall time),
+        ``total`` (mean/min/max of the total and quantiles and exceedance
+        fractions of ``|total - 1|``), ``shrunk_box`` (the same over the
+        interior of the box plus ``frac_of_theta``), ``leak_below_onset``
+        (``mean``/``p99``/``max`` of :meth:`ChoiceMass.leak_below`, or
+        ``None``), ``by_param`` (``{name: [10 bins of lo/hi/mean_dev/
+        max_abs_dev/n]}``; empty bins carry ``None``) and ``worst_cell``
+        (on an 8×8 grid of the two parameters most correlated with the
+        deviation, the cell with the largest ``|mean_dev|``; ``None`` with
+        fewer than two parameters).
+    """
+    params = list(params)
+    n_params = len(params)
+    if n_params == 0:
+        raise ValueError("params must name at least one parameter")
+    missing = [name for name in params if name not in param_bounds]
+    if missing:
+        raise ValueError(f"param_bounds lacks bounds for {missing}")
+    if onset_param is not None and onset_param not in params:
+        raise ValueError(f"onset_param {onset_param!r} is not in params {params}")
+    if n_theta < 1:
+        raise ValueError(f"n_theta must be >= 1, got {n_theta}")
+    if not 0.0 <= shrink < 0.5:
+        raise ValueError(f"shrink must lie in [0, 0.5), got {shrink}")
+    if grid is None:
+        grid = OnsetGrid() if onset_param is not None else IntegrationGrid()
+    if isinstance(grid, OnsetGrid) != (onset_param is not None):
+        raise ValueError(
+            f"grid {type(grid).__name__} does not go with onset_param={onset_param!r}: "
+            "an OnsetGrid needs an onset parameter and a uniform grid takes none"
+        )
+
+    lo = np.array([param_bounds[name][0] for name in params], dtype=np.float64)
+    hi = np.array([param_bounds[name][1] for name in params], dtype=np.float64)
+    if np.any(hi < lo):
+        raise ValueError("every bound must satisfy lo <= hi")
+    rng = np.random.default_rng(seed)
+    theta = rng.uniform(lo, hi, size=(n_theta, n_params))
+    onset_idx = params.index(onset_param) if onset_param is not None else None
+
+    total = np.empty(n_theta, dtype=np.float64)
+    leak = np.empty(n_theta, dtype=np.float64) if onset_idx is not None else None
+    started = time.perf_counter()
+    for start in range(0, n_theta, chunk_size):
+        chunk = theta[start : start + chunk_size]
+        stop = start + chunk.shape[0]
+        onset = chunk[:, onset_idx] if onset_idx is not None else None
+        mass = choice_mass(
+            predictor, chunk, choices, grid=grid, chunk_size=chunk_size, onset=onset
+        )
+        total[start:stop] = mass.total
+        if leak is not None:
+            leak[start:stop] = mass.leak_below(onset)
+    seconds = time.perf_counter() - started
+
+    dev = total - 1.0
+    span = hi - lo
+    inside = np.all(
+        (theta >= lo + shrink * span) & (theta <= hi - shrink * span), axis=1
+    )
+    shrunk_box = _dev_stats(dev[inside])
+    shrunk_box["frac_of_theta"] = float(inside.mean())
+
+    by_param: dict[str, list[dict[str, float | int | None]]] = {}
+    for j, name in enumerate(params):
+        edges = np.linspace(lo[j], hi[j], 11)
+        index = _bin_index(theta[:, j], lo[j], hi[j], 10)
+        bins = []
+        for b in range(10):
+            in_bin = dev[index == b]
+            bins.append(
+                {
+                    "lo": float(edges[b]),
+                    "hi": float(edges[b + 1]),
+                    "mean_dev": float(in_bin.mean()) if in_bin.size else None,
+                    "max_abs_dev": float(np.abs(in_bin).max()) if in_bin.size else None,
+                    "n": int(in_bin.size),
+                }
+            )
+        by_param[name] = bins
+
+    worst_cell = None
+    if n_params >= 2 and n_theta >= 2:
+        with np.errstate(divide="ignore", invalid="ignore"):
+            corr = np.array(
+                [np.corrcoef(theta[:, j], dev)[0, 1] for j in range(n_params)]
+            )
+        corr = np.nan_to_num(corr)
+        jx, jy = np.argsort(-np.abs(corr))[:2]
+        ix = _bin_index(theta[:, jx], lo[jx], hi[jx], 8)
+        iy = _bin_index(theta[:, jy], lo[jy], hi[jy], 8)
+        flat = ix * 8 + iy
+        counts = np.bincount(flat, minlength=64)
+        sums = np.bincount(flat, weights=dev, minlength=64)
+        means = np.where(counts > 0, sums / np.maximum(counts, 1), 0.0)
+        cell = int(np.argmax(np.abs(means)))
+        cx, cy = divmod(cell, 8)
+        x_edges = np.linspace(lo[jx], hi[jx], 9)
+        y_edges = np.linspace(lo[jy], hi[jy], 9)
+        worst_cell = {
+            "param_x": params[jx],
+            "param_y": params[jy],
+            "x_lo": float(x_edges[cx]),
+            "x_hi": float(x_edges[cx + 1]),
+            "y_lo": float(y_edges[cy]),
+            "y_hi": float(y_edges[cy + 1]),
+            "mean_dev": float(means[cell]),
+            "n": int(counts[cell]),
+        }
+
+    return {
+        "n_theta": int(n_theta),
+        "grid": repr(grid),
+        "seconds": float(seconds),
+        "total": _dev_stats(dev),
+        "shrunk_box": shrunk_box,
+        "leak_below_onset": (
+            None
+            if leak is None
+            else {
+                "mean": float(leak.mean()),
+                "p99": float(np.percentile(leak, 99)),
+                "max": float(leak.max()),
+            }
+        ),
+        "by_param": by_param,
+        "worst_cell": worst_cell,
+    }

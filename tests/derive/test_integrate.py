@@ -6,6 +6,8 @@ and a closed-form gamma mixture standing in for a LAN for the numerics.
 
 from __future__ import annotations
 
+import json
+import time
 from unittest.mock import patch
 
 import numpy as np
@@ -21,6 +23,7 @@ from lanfactory.derive import (
     OnsetGrid,
     choice_mass,
     load_onnx_predictor,
+    survey,
 )
 from lanfactory.onnx import assert_single_trial_contract
 from tests._onnx_utils import export_tiny_torch_lan
@@ -569,3 +572,147 @@ def test_quantile_on_2d_grid_round_trips_and_matches_scipy(peak_mass, choice):
         # Each row's quantile sits on that row's own onset.
         expected = ONSETS[:, 0] + gamma.ppf(u, a=PEAK_SHAPE, scale=PEAK_SCALE)
         np.testing.assert_allclose(q, expected, atol=2e-3)
+
+
+# --------------------------------------------------------------------------
+# 9. survey
+# --------------------------------------------------------------------------
+
+SURVEY_BOUNDS = {"a": (0.3, 2.5), "t": (0.0, 2.0)}
+SURVEY_PARAMS = ["a", "t"]
+PLANTED_SHARE = (2.5 - 2.0) / (2.5 - 0.3)
+
+
+class ScaledPredictor:
+    """Rows ``[a, t, rt, choice]``: a smooth shifted gamma, times 1.2 when a > 2.
+
+    Zero at and below ``t``; shape 2 / scale 0.2 is resolved to ~1e-4 by both
+    grids, so any deviation from one is the planted scale, not quadrature.
+    """
+
+    input_width = 4
+
+    def __call__(self, batch: np.ndarray) -> np.ndarray:
+        batch = np.asarray(batch, dtype=np.float64)
+        a, t, rt, choice = batch.T
+        log_w = np.where(choice == 1, np.log(WEIGHTS[1]), np.log(WEIGHTS[-1]))
+        x = rt - t
+        log_density = np.full(x.shape, -np.inf)
+        above = x > 0.0
+        log_density[above] = gamma.logpdf(x[above], a=2.0, scale=0.2)
+        return log_w + log_density + np.where(a > 2.0, np.log(1.2), 0.0)
+
+
+@pytest.fixture(scope="module")
+def scaled_survey() -> dict:
+    return survey(
+        ScaledPredictor(), SURVEY_BOUNDS, SURVEY_PARAMS, CHOICES, n_theta=4000, seed=3
+    )
+
+
+def test_survey_reports_the_planted_share_of_bad_totals(scaled_survey):
+    r = scaled_survey
+    assert r["n_theta"] == 4000
+    assert r["grid"] == repr(OnsetGrid())
+    total = r["total"]
+    assert total["frac_gt_0.10"] == pytest.approx(PLANTED_SHARE, abs=0.03)
+    assert total["frac_gt_0.05"] == total["frac_gt_0.10"] == total["frac_gt_0.02"]
+    assert total["max"] == pytest.approx(1.2, abs=1e-3)
+    assert total["min"] == pytest.approx(1.0, abs=1e-3)
+    assert total["p50_abs_dev"] < 1e-3
+    assert total["p99_abs_dev"] == pytest.approx(0.2, abs=1e-3)
+    assert total["mean"] == pytest.approx(1.0 + 0.2 * PLANTED_SHARE, abs=0.01)
+
+
+def test_survey_by_param_localises_the_defect(scaled_survey):
+    bins = scaled_survey["by_param"]["a"]
+    assert len(bins) == 10 and len(scaled_survey["by_param"]["t"]) == 10
+    assert bins[0]["lo"] == 0.3 and bins[-1]["hi"] == 2.5
+    assert sum(b["n"] for b in bins) == 4000
+    for b in bins:
+        if b["lo"] >= 2.0:
+            assert b["mean_dev"] == pytest.approx(0.2, abs=1e-3)
+            assert b["max_abs_dev"] == pytest.approx(0.2, abs=1e-3)
+        elif b["hi"] <= 2.0:
+            assert abs(b["mean_dev"]) < 1e-3
+            assert b["max_abs_dev"] < 1e-3
+    # No t-bin is special: the planted defect is in a only.
+    assert all(
+        abs(b["mean_dev"] - 0.2 * PLANTED_SHARE) < 0.05
+        for b in scaled_survey["by_param"]["t"]
+    )
+
+
+def test_survey_worst_cell_sits_above_a_equals_two(scaled_survey):
+    cell = scaled_survey["worst_cell"]
+    assert {cell["param_x"], cell["param_y"]} == {"a", "t"}
+    axis = "x" if cell["param_x"] == "a" else "y"
+    assert cell[f"{axis}_lo"] >= 2.0
+    assert cell["mean_dev"] == pytest.approx(0.2, abs=1e-3)
+    assert cell["n"] > 0
+
+
+def test_survey_leak_and_shrunk_box(scaled_survey):
+    leak = scaled_survey["leak_below_onset"]
+    # Exactly zero except for onsets below the grid clip (t < 1.1e-3), where
+    # a sliver of the true density sits below the clipped onset: ~1e-13.
+    assert leak["p99"] == 0.0 and leak["mean"] < 1e-9 and leak["max"] < 1e-9
+    box = scaled_survey["shrunk_box"]
+    assert set(box) == set(scaled_survey["total"]) | {"frac_of_theta"}
+    assert box["frac_of_theta"] == pytest.approx(0.8**2, abs=0.03)
+    # Shrinking the box by 10% per side keeps a in [0.52, 2.28]: fewer bad theta.
+    assert box["frac_gt_0.10"] == pytest.approx((2.28 - 2.0) / (2.28 - 0.52), abs=0.03)
+
+
+def test_survey_is_json_serialisable_and_fast(scaled_survey):
+    json.dumps(scaled_survey)
+    started = time.perf_counter()
+    r = survey(ScaledPredictor(), SURVEY_BOUNDS, SURVEY_PARAMS, CHOICES, n_theta=2000)
+    elapsed = time.perf_counter() - started
+    assert r["seconds"] < 30.0 and elapsed < 30.0
+    assert r["seconds"] <= elapsed
+
+
+def test_survey_without_an_onset_uses_the_uniform_grid():
+    r = survey(
+        ScaledPredictor(),
+        SURVEY_BOUNDS,
+        SURVEY_PARAMS,
+        CHOICES,
+        n_theta=300,
+        onset_param=None,
+    )
+    assert r["grid"] == repr(IntegrationGrid())
+    assert r["leak_below_onset"] is None
+    assert r["total"]["frac_gt_0.10"] == pytest.approx(PLANTED_SHARE, abs=0.08)
+
+
+def test_survey_is_deterministic_in_the_seed():
+    kwargs = dict(n_theta=200, seed=11)
+    a = survey(ScaledPredictor(), SURVEY_BOUNDS, SURVEY_PARAMS, CHOICES, **kwargs)
+    b = survey(ScaledPredictor(), SURVEY_BOUNDS, SURVEY_PARAMS, CHOICES, **kwargs)
+    a.pop("seconds"), b.pop("seconds")
+    assert a == b
+
+
+def test_survey_validation():
+    pred = ScaledPredictor()
+    with pytest.raises(ValueError, match="onset_param 'tau'"):
+        survey(pred, SURVEY_BOUNDS, SURVEY_PARAMS, CHOICES, onset_param="tau")
+    with pytest.raises(ValueError, match="lacks bounds"):
+        survey(pred, {"a": (0.3, 2.5)}, SURVEY_PARAMS, CHOICES)
+    with pytest.raises(ValueError, match="does not go with"):
+        survey(pred, SURVEY_BOUNDS, SURVEY_PARAMS, CHOICES, grid=IntegrationGrid())
+    with pytest.raises(ValueError, match="does not go with"):
+        survey(
+            pred,
+            SURVEY_BOUNDS,
+            SURVEY_PARAMS,
+            CHOICES,
+            onset_param=None,
+            grid=OnsetGrid(),
+        )
+    with pytest.raises(ValueError, match="n_theta"):
+        survey(pred, SURVEY_BOUNDS, SURVEY_PARAMS, CHOICES, n_theta=0)
+    with pytest.raises(ValueError, match="shrink"):
+        survey(pred, SURVEY_BOUNDS, SURVEY_PARAMS, CHOICES, shrink=0.5)

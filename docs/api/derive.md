@@ -22,3 +22,5 @@ per-choice masses.
 ::: lanfactory.derive.choice_mass
 
 ::: lanfactory.derive.ChoiceMass
+
+::: lanfactory.derive.survey
