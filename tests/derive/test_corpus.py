@@ -10,10 +10,12 @@ trainers read. Seeded and fast.
 from __future__ import annotations
 
 import json
+import os
 import pickle
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -708,6 +710,44 @@ def test_corpus_is_reproducible_per_file(tmp_path):
             np.testing.assert_array_equal(got, expected)
     c = derive_aux_corpus(DDM_ONNX, "ddm", "opn", tmp_path / "c", seed=1, **kwargs)
     assert not np.array_equal(_arrays(a[0])[0], _arrays(c[0])[0])
+
+
+_HASH_CORPUS = """
+import hashlib, sys
+import numpy as np
+from ssms.config import ModelConfigBuilder
+from lanfactory.derive import derive_aux_corpus, sample_theta
+
+theta = sample_theta(ModelConfigBuilder.from_model("ddm"), 64, np.random.default_rng([0, 0]))
+files = derive_aux_corpus(
+    sys.argv[1], "ddm", "opn", sys.argv[2], n_files=2, n_theta_per_file=8,
+    fallback_n_sim={n_sim}, survey_n_theta={n_survey},
+)
+digest = hashlib.sha256(theta.tobytes())
+for path in files:
+    digest.update(path.read_bytes())
+print(digest.hexdigest())
+"""
+
+
+def test_corpus_is_reproducible_across_processes(tmp_path):
+    # ssms' sampler orders its draws by a topological sort over sets, so
+    # left to itself the same seed gives different thetas under different
+    # PYTHONHASHSEED values; sample_theta pins the order to the model's.
+    script = _HASH_CORPUS.format(n_sim=FALLBACK_N_SIM, n_survey=SURVEY_N_THETA)
+    digests = set()
+    for hash_seed in ("0", "1"):
+        out = tmp_path / hash_seed
+        result = subprocess.run(
+            [sys.executable, "-c", script, str(DDM_ONNX), str(out)],
+            env={**os.environ, "PYTHONHASHSEED": hash_seed},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        digests.add(result.stdout.strip().splitlines()[-1])
+    assert len(digests) == 1, digests
 
 
 def test_corpus_rejects_bad_arguments(tmp_path):
