@@ -93,8 +93,8 @@ def main(
     fallback_window: tuple[float, float] = typer.Option(
         (0.98, 1.03),
         "--fallback-window",
-        help="LO HI: a parameter vector whose total LAN mass is outside this open "
-        "interval is labelled by ssms simulation instead of the LAN.",
+        help="LO HI: a parameter vector whose total LAN mass is outside [LO, HI] "
+        "is labelled by ssms simulation instead of the LAN.",
     ),
     fallback_n_sim: int = typer.Option(
         20_000,

@@ -862,8 +862,8 @@ def derive_aux_corpus(
     deadline_quantile_frac
         Passed to :func:`sample_deadlines` (opn / gonogo only).
     fallback_window
-        ``(lo, hi)``: a theta whose total mass is not in the open interval
-        is labelled by simulation. The default flags 3.7 % of the ddm box
+        ``(lo, hi)``: a theta whose total mass lies outside ``[lo, hi]`` (the
+        endpoints are trusted) is labelled by simulation. The default flags 3.7 % of the ddm box
         on the Hub LAN and bounds the unflagged error against simulation at
         0.023 (cpn) / 0.033 (opn). ``None`` disables the fallback.
     fallback_n_sim

@@ -84,8 +84,9 @@ per file: `n_theta_per_file` rows for `opn` / `gonogo`, `n_theta_per_file
 × n_choices` for `cpn`. With the default 4096 thetas that is 4096 and 8192
 rows for a two-choice model; `512` divides both.
 
-**Fallback.** A theta whose total lies outside `fallback_window` (default the
-open interval `(0.98, 1.03)`) is labelled by `simulate_labels` on ssms rather
+**Fallback.** A theta whose total lies outside `fallback_window` (default
+`(0.98, 1.03)`; a total equal to either endpoint is trusted) is labelled by
+`simulate_labels` on ssms rather
 than by the LAN; `fallback_window=None` disables it. Each pickle's
 `generator_config["derive_stats"]` and the manifest's `derive_stats` carry the
 flat keys `derive_total_mass_mean`, `derive_total_mass_min`,

@@ -144,7 +144,7 @@ short aliases.
 | `--grid-points INTEGER` | `1000` | Points of the uniform grid; used only when no onset grid applies (`--onset-param ''` or a model without that parameter) |
 | `--max-t FLOAT` | `20.0` | Upper edge of the integration grid in seconds; the density is never evaluated past it |
 | `--deadline-quantile-frac FLOAT` | `0.7` | Share of `opn`/`gonogo` deadlines drawn from the LAN's own RT quantiles; the rest are uniform on the deadline bounds |
-| `--fallback-window LO HI` | `0.98 1.03` | A parameter vector whose total LAN mass lies outside this open interval is labelled by ssms simulation instead of the LAN; the share that fell back is recorded as `derive_fallback_frac` |
+| `--fallback-window LO HI` | `0.98 1.03` | A parameter vector whose total LAN mass lies outside `[LO, HI]` (endpoints trusted) is labelled by ssms simulation instead of the LAN; the share that fell back is recorded as `derive_fallback_frac` |
 | `--fallback-n-sim INTEGER` | `20000` | Trials simulated per parameter vector that falls back |
 | `--no-fallback` | off | Label every parameter vector from the LAN, whatever its total (`fallback_window = None`) |
 | `--survey-n-theta INTEGER` | `20000` | Parameter vectors drawn for the manifest's whole-box mass survey of the LAN (`lan_survey`) |
