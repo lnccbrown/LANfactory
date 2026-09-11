@@ -245,14 +245,20 @@ def log_training_run_identity(
     exactly those names — ``derivation_method``, ``aux_category``,
     ``source_lan_run_uuid``, ``source_lan_sha256``, ``source_lan_hf_commit``,
     ``integration_grid``, ``integration_max_t`` always, ``source_lan_run_id``
-    when it is not ``None`` — plus the tag ``data_origin=derived`` and the
-    per-file total-mass statistics ``derive_total_mass_{mean,min,max}`` as
-    tags (they describe the first file the dataset read, which a resume may
-    change). MLflow params are strings, so the run uuid and Hub commit, which
-    a derived corpus may lack (a bare ``ddm.onnx``, a local file), are logged
-    as the empty string ``""`` so that every derived run carries the same
-    key set; the derived/simulated discriminator is the ``data_origin`` tag,
-    not whether a key exists. An empty value is not a publishable one:
+    when it is not ``None`` — plus the tag ``data_origin=derived`` and every
+    key of ``generator_config["derive_stats"]`` as a tag: the per-file
+    total-mass statistics ``derive_total_mass_{mean,min,max}``, the share of
+    parameter vectors labelled by simulation ``derive_fallback_frac``, the
+    simulation's blind spot ``derive_sim_past_max_t_max`` and the mass below
+    the onset ``derive_leak_below_onset_p99`` (they describe the first file
+    the dataset read, which a resume may change). MLflow params and tags are
+    strings, so a value the corpus lacks is logged as the empty string
+    ``""``: the run uuid and Hub commit of a LAN that has none (a bare
+    ``ddm.onnx``, a local file), and a ``None`` statistic (no theta fell
+    back, no onset grid) — never as ``"None"``. Every derived run thus
+    carries the same key set; the derived/simulated discriminator is the
+    ``data_origin`` tag, not whether a key exists. An empty value is not a
+    publishable one:
     LAN_pipeline_minimal's publisher treats ``""`` (like ``"None"``) as
     missing and refuses the run, since it will not write a model card
     without the source LAN's Hub revision. Any other corpus is tagged
@@ -316,7 +322,7 @@ def log_training_run_identity(
             if source.get("source_lan_run_id") is not None:
                 params["source_lan_run_id"] = source["source_lan_run_id"]
             for key, value in generator_config.get("derive_stats", {}).items():
-                derive_tags[key] = str(value)
+                derive_tags[key] = "" if value is None else str(value)
 
         mlflow.log_params(params)
 

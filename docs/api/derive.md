@@ -110,8 +110,8 @@ by name.
 When `torchtrain` or `jaxtrain` trains on a derived corpus with MLflow
 tracking on, the training run carries those keys as params —
 `source_lan_run_id` only when known, the run uuid and Hub commit as `""`
-when unknown — the `derive_stats` as tags, and the tag
-`data_origin=derived`; see
+when unknown — the `derive_stats` as tags (a `None` statistic as `""`),
+and the tag `data_origin=derived`; see
 [Derived corpora](../using_mlflow.md#derived-corpora) under *Track training
 runs with MLflow* for the exact set and what an empty value means
 downstream.

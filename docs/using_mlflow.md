@@ -54,7 +54,7 @@ publishers read them by name):
 | kind | keys |
 | --- | --- |
 | params | `derivation_method` (`derived-from-lan`), `aux_category` (`choice` / `omission` / `nogo`), `source_lan_run_uuid`, `source_lan_sha256`, `source_lan_hf_commit`, `integration_grid`, `integration_max_t`; `source_lan_run_id` only when known |
-| tags | `data_origin=derived`, `derive_total_mass_mean`, `derive_total_mass_min`, `derive_total_mass_max` |
+| tags | `data_origin=derived`, `derive_total_mass_mean`, `derive_total_mass_min`, `derive_total_mass_max`, `derive_fallback_frac`, `derive_sim_past_max_t_max`, `derive_leak_below_onset_p99` |
 
 MLflow params are strings, and a corpus derived from a bare `ddm.onnx` or a
 local file has no run uuid or Hub commit to record. Those two keys are still
@@ -64,8 +64,15 @@ whether a key exists. An empty value is not a publishable one:
 LAN_pipeline_minimal's publisher treats `""` (like `"None"`) as missing and
 refuses the run, since it will not write a model card without the source
 LAN's Hub revision — derive from a Hub-downloaded LAN to publish the result.
-The total-mass statistics are tags rather than params because they describe
-the first file the trainer read, which a resumed run may change.
+The `derive_*` statistics are the corpus's `derive_stats` — the LAN's total
+mass over the file, the share of parameter vectors that fell back to
+simulation, the largest share of simulated trials past `max_t` among those,
+and the 99th percentile of the mass below the non-decision time (see the
+[fallback](api/derive.md#derived-corpora)). They are tags rather than
+params because they describe the first file the trainer read, which a
+resumed run may change. A statistic the corpus records as `None` (no theta
+fell back, so there is no blind spot to report; no onset grid, so no leak)
+is logged as `""` too, never as `"None"`.
 
 ```python
 runs = mlflow.search_runs(filter_string="tags.data_origin = 'derived'")

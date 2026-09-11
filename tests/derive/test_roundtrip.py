@@ -191,12 +191,22 @@ def test_derive_train_export_round_trip(tmp_path, network_type):
 
     # The mass statistics are per file and describe the first file the
     # dataset read, which file shuffling makes either one: the tags must be
-    # exactly one corpus file's derive_stats, stringified.
+    # exactly one corpus file's derive_stats, stringified — a None statistic
+    # (nothing fell back in that file) as "".
     per_file_stats = []
     for file in files:
         with open(file, "rb") as f:
             stats = pickle.load(f)["generator_config"]["derive_stats"]
-        per_file_stats.append({key: str(value) for key, value in stats.items()})
+        per_file_stats.append(
+            {key: "" if value is None else str(value) for key, value in stats.items()}
+        )
     logged_stats = {key: tags[key] for key in per_file_stats[0]}
     assert logged_stats in per_file_stats, (logged_stats, per_file_stats)
     assert 0.9 < float(tags["derive_total_mass_mean"]) < 1.1
+    # The fallback and the leak are what the corpus policy is about: by name.
+    assert 0.0 <= float(tags["derive_fallback_frac"]) <= 1.0
+    assert 0.0 <= float(tags["derive_leak_below_onset_p99"]) < 0.2
+    if tags["derive_fallback_frac"] == "0.0":
+        assert tags["derive_sim_past_max_t_max"] == ""
+    else:
+        assert 0.0 <= float(tags["derive_sim_past_max_t_max"]) <= 1.0

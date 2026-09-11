@@ -61,7 +61,9 @@ MODEL_CONFIG = {
 # "source" block is taken from the producer, SourceLAN.provenance, rather
 # than transcribed, so a key renamed there fails these tests instead of being
 # silently logged under the stale name: a bare ddm.onnx (no run uuid, no Hub
-# commit, no MLflow run id) on the default grid (1000 points to 20 s).
+# commit, no MLflow run id) on a uniform grid (1000 points to 20 s). The
+# "derive_stats" block has the producer's six keys; a None statistic (nothing
+# fell back here) is what the logger must turn into "".
 DERIVED_GENERATOR_CONFIG = {
     "generator_approach": "derived",
     "model": "ddm",
@@ -73,6 +75,9 @@ DERIVED_GENERATOR_CONFIG = {
         "derive_total_mass_mean": 0.998,
         "derive_total_mass_min": 0.95,
         "derive_total_mass_max": 1.002,
+        "derive_fallback_frac": 0.0,
+        "derive_sim_past_max_t_max": None,
+        "derive_leak_below_onset_p99": 0.052,
     },
 }
 # The params a derived run always carries: the producer's keys minus the one
@@ -261,6 +266,24 @@ class TestLogTrainingRunIdentity:
         assert t["derive_total_mass_mean"] == "0.998"
         assert t["derive_total_mass_min"] == "0.95"
         assert t["derive_total_mass_max"] == "1.002"
+        assert t["derive_fallback_frac"] == "0.0"
+        assert t["derive_leak_below_onset_p99"] == "0.052"
+        # A None statistic is logged as "", like a missing param — not "None".
+        assert t["derive_sim_past_max_t_max"] == ""
+
+    def test_derived_corpus_logs_the_fallback_blind_spot_when_known(
+        self, tmp_tracking, tmp_path
+    ):
+        config = json.loads(json.dumps(DERIVED_GENERATOR_CONFIG))
+        config["derive_stats"]["derive_fallback_frac"] = 0.037
+        config["derive_stats"]["derive_sim_past_max_t_max"] = 0.01
+        dataset = SimpleNamespace(
+            input_dim=5, data_model_config=MODEL_CONFIG, data_generator_config=config
+        )
+        run = self._log_and_fetch(tmp_tracking, tmp_path, dataset=dataset)
+        t = run.data.tags
+        assert t["derive_fallback_frac"] == "0.037"
+        assert t["derive_sim_past_max_t_max"] == "0.01"
 
     def test_derived_corpus_logs_source_run_id_when_known(self, tmp_tracking, tmp_path):
         config = json.loads(json.dumps(DERIVED_GENERATOR_CONFIG))
