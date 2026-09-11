@@ -90,6 +90,22 @@ def main(
         help="Share of opn/gonogo deadlines drawn from the LAN's own RT quantiles; "
         "the rest are uniform on the deadline bounds.",
     ),
+    fallback_window: tuple[float, float] = typer.Option(
+        (0.98, 1.03),
+        "--fallback-window",
+        help="LO HI: a parameter vector whose total LAN mass is outside this open "
+        "interval is labelled by ssms simulation instead of the LAN.",
+    ),
+    fallback_n_sim: int = typer.Option(
+        20_000,
+        "--fallback-n-sim",
+        help="Trials simulated per parameter vector that falls back.",
+    ),
+    no_fallback: bool = typer.Option(
+        False,
+        "--no-fallback",
+        help="Label every parameter vector from the LAN, whatever its total.",
+    ),
     seed: int = typer.Option(0, "--seed", help="Base random seed."),
     source_run_uuid: str = typer.Option(
         None,
@@ -156,6 +172,8 @@ def main(
             onset_param=onset,
             grid=grid,
             deadline_quantile_frac=deadline_quantile_frac,
+            fallback_window=None if no_fallback else fallback_window,
+            fallback_n_sim=fallback_n_sim,
             seed=seed,
             source=source,
         )

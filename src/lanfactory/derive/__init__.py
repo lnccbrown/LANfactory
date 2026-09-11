@@ -13,6 +13,7 @@ from .corpus import (
     opn_labels,
     sample_deadlines,
     sample_theta,
+    simulate_labels,
 )
 from .integrate import (
     ChoiceMass,
@@ -45,5 +46,6 @@ __all__ = [
     "opn_labels",
     "sample_deadlines",
     "sample_theta",
+    "simulate_labels",
     "survey",
 ]

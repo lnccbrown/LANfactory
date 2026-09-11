@@ -69,6 +69,11 @@ def test_derive_aux_writes_files_and_manifest(tmp_path, ddm_provenance):
             "15",
             "--deadline-quantile-frac",
             "0.3",
+            "--fallback-window",
+            "0.9",
+            "1.1",
+            "--fallback-n-sim",
+            "200",
             "--seed",
             "7",
             "--source-run-uuid",
@@ -90,6 +95,8 @@ def test_derive_aux_writes_files_and_manifest(tmp_path, ddm_provenance):
     assert manifest["grid"] == grid_description(OnsetGrid(max_t=15.0), "t")
     assert manifest["grid"]["kind"] == "onset" and manifest["grid"]["max_t"] == 15.0
     assert manifest["deadline_quantile_frac"] == 0.3
+    assert manifest["fallback_window"] == [0.9, 1.1]
+    assert manifest["fallback_n_sim"] == 200
     assert manifest["seed"] == 7
     source = manifest["source"]
     assert source["hf_repo"] == "franklab/HSSM"
@@ -106,6 +113,8 @@ def test_derive_aux_writes_files_and_manifest(tmp_path, ddm_provenance):
         n_theta_per_file=16,
         grid=OnsetGrid(max_t=15.0),
         deadline_quantile_frac=0.3,
+        fallback_window=(0.9, 1.1),
+        fallback_n_sim=200,
         seed=7,
         source=SourceLAN.from_onnx(
             DDM_ONNX,
@@ -271,3 +280,50 @@ def test_derive_aux_warns_and_uses_the_uniform_grid_without_the_onset_param(
     manifest = json.loads((tmp_path / "missing" / MANIFEST_NAME).read_text())
     assert manifest["grid"]["kind"] == "uniform"
     assert manifest["grid"]["onset_param"] is None
+
+
+def test_derive_aux_no_fallback_disables_the_window(tmp_path):
+    result = runner.invoke(
+        app,
+        [
+            "--from-onnx",
+            str(DDM_ONNX),
+            "--network-type",
+            "cpn",
+            "--model-name",
+            "ddm",
+            "--output-folder",
+            str(tmp_path / "raw"),
+            "--n-files",
+            "2",
+            "--n-theta-per-file",
+            "8",
+            "--no-fallback",
+        ],
+    )
+    assert result.exit_code == 0, _out(result)
+    manifest = json.loads((tmp_path / "raw" / MANIFEST_NAME).read_text())
+    assert manifest["fallback_window"] is None
+    assert manifest["derive_stats"]["derive_fallback_frac"] == 0.0
+
+
+def test_derive_aux_rejects_a_bad_fallback_window(tmp_path):
+    result = runner.invoke(
+        app,
+        [
+            "--from-onnx",
+            str(DDM_ONNX),
+            "--network-type",
+            "cpn",
+            "--model-name",
+            "ddm",
+            "--output-folder",
+            str(tmp_path),
+            "--fallback-window",
+            "1.1",
+            "0.9",
+        ],
+    )
+    assert result.exit_code == 2
+    assert "fallback_window must satisfy" in _out(result)
+    assert not list(tmp_path.glob("*.pickle"))

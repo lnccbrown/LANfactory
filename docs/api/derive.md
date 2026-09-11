@@ -104,6 +104,8 @@ by name.
 
 ::: lanfactory.derive.gonogo_labels
 
+::: lanfactory.derive.simulate_labels
+
 ::: lanfactory.derive.SourceLAN
 
 ::: lanfactory.derive.grid_description

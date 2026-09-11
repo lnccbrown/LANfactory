@@ -40,7 +40,9 @@ from lanfactory.derive import (
     opn_labels,
     sample_deadlines,
     sample_theta,
+    simulate_labels,
 )
+from lanfactory.derive import corpus as corpus_module
 from lanfactory.derive.corpus import _nogo_before, _omission
 from lanfactory.trainers.torch_mlp import DatasetTorch
 from tests._onnx_utils import export_tiny_torch_lan
@@ -84,7 +86,12 @@ STATS_KEYS = {
     "derive_total_mass_mean",
     "derive_total_mass_min",
     "derive_total_mass_max",
+    "derive_fallback_frac",
+    "derive_sim_past_max_t_max",
+    "derive_leak_below_onset_p99",
 }
+# Simulation sizes for the corpus tests: small enough to keep them fast.
+FALLBACK_N_SIM = 500
 
 
 @pytest.fixture(scope="module")
@@ -443,7 +450,13 @@ def derived(request, tmp_path_factory) -> tuple[str, Path, list[Path]]:
     network_type = request.param
     out = tmp_path_factory.mktemp("derived") / network_type
     files = derive_aux_corpus(
-        DDM_ONNX, "ddm", network_type, out, n_files=2, n_theta_per_file=N_THETA
+        DDM_ONNX,
+        "ddm",
+        network_type,
+        out,
+        n_files=2,
+        n_theta_per_file=N_THETA,
+        fallback_n_sim=FALLBACK_N_SIM,
     )
     return network_type, out, files
 
@@ -496,7 +509,15 @@ def test_pickle_carries_the_contract_keys(derived):
     assert 0.9 < stats["derive_total_mass_mean"] < 1.1
     assert stats["derive_total_mass_min"] <= stats["derive_total_mass_mean"]
     assert stats["derive_total_mass_mean"] <= stats["derive_total_mass_max"]
+    assert 0.0 <= stats["derive_fallback_frac"] <= 1.0
+    if stats["derive_fallback_frac"] > 0.0:
+        assert 0.0 <= stats["derive_sim_past_max_t_max"] <= 1.0
+    else:
+        assert stats["derive_sim_past_max_t_max"] is None
+    assert 0.0 <= stats["derive_leak_below_onset_p99"] < 0.2
     derive = generator_config["derive"]
+    assert derive["fallback_window"] == (0.98, 1.03)
+    assert derive["fallback_n_sim"] == FALLBACK_N_SIM
     assert derive["grid"] == "onset"
     assert derive["grid_config"] == grid_description(OnsetGrid(), "t")
     assert derive["integration_grid"] == OnsetGrid().n_points == 1160
@@ -540,6 +561,22 @@ def test_manifest_lists_the_files(derived):
     assert manifest["choices"] == CHOICES
     assert set(manifest["derive_stats"]) == STATS_KEYS
     assert 0.9 < manifest["derive_stats"]["derive_total_mass_mean"] < 1.1
+    assert manifest["fallback_window"] == [0.98, 1.03]  # JSON has no tuples
+    assert manifest["fallback_n_sim"] == FALLBACK_N_SIM
+    # Corpus-level stats aggregate the files: the fraction is the mean over
+    # thetas (equal-sized files), the past-max_t share the max over files.
+    per_file = manifest["files"]
+    assert manifest["derive_stats"]["derive_fallback_frac"] == pytest.approx(
+        np.mean([entry["derive_fallback_frac"] for entry in per_file])
+    )
+    pasts = [
+        entry["derive_sim_past_max_t_max"]
+        for entry in per_file
+        if entry["derive_sim_past_max_t_max"] is not None
+    ]
+    assert manifest["derive_stats"]["derive_sim_past_max_t_max"] == (
+        max(pasts) if pasts else None
+    )
     assert PROVENANCE_KEYS <= set(manifest["source"])
     assert manifest["source"]["path"] == str(DDM_ONNX)
     assert manifest["source"]["sha256"] == manifest["source"]["source_lan_sha256"]
@@ -618,7 +655,7 @@ def _arrays(path: Path) -> tuple[np.ndarray, np.ndarray]:
 
 
 def test_corpus_is_reproducible_per_file(tmp_path):
-    kwargs = dict(n_files=2, n_theta_per_file=8)
+    kwargs = dict(n_files=2, n_theta_per_file=8, fallback_n_sim=FALLBACK_N_SIM)
     a = derive_aux_corpus(DDM_ONNX, "ddm", "opn", tmp_path / "a", **kwargs)
     # Same arguments: byte-identical files.
     again = derive_aux_corpus(DDM_ONNX, "ddm", "opn", tmp_path / "again", **kwargs)
@@ -626,7 +663,13 @@ def test_corpus_is_reproducible_per_file(tmp_path):
         assert x.read_bytes() == y.read_bytes()
     # File i depends on (seed, i) only: adding files leaves earlier ones alone.
     b = derive_aux_corpus(
-        DDM_ONNX, "ddm", "opn", tmp_path / "b", n_files=3, n_theta_per_file=8
+        DDM_ONNX,
+        "ddm",
+        "opn",
+        tmp_path / "b",
+        n_files=3,
+        n_theta_per_file=8,
+        fallback_n_sim=FALLBACK_N_SIM,
     )
     for x, y in zip(a, b[:2], strict=True):
         for got, expected in zip(_arrays(x), _arrays(y), strict=True):
@@ -650,7 +693,228 @@ def test_corpus_rejects_bad_arguments(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# 7. The trainer's own CLI accepts the corpus (dry run: no training)
+# 7. Simulation fallback
+# --------------------------------------------------------------------------
+
+
+def test_simulate_labels_matches_the_raw_ssms_formulas():
+    """The fallback labels are ssms' own frequencies, seeded from ``rng``."""
+    theta = THETA[:2]
+    n_sim = 2000
+
+    def seeds(seed: int) -> tuple[int, int]:
+        rng = np.random.default_rng(seed)
+        return tuple(int(s) for s in rng.integers(np.iinfo(np.int32).max, size=2))
+
+    cpn, past = simulate_labels(
+        "ddm", theta, "cpn", None, n_sim, np.random.default_rng(5)
+    )
+    assert cpn.shape == (2, 2) and past.shape == (2,)
+    np.testing.assert_allclose(cpn.sum(axis=1), 1.0, atol=1e-12)
+    seed_base, seed_deadline = seeds(5)
+    out = simulator(
+        theta=theta, model="ddm", n_samples=n_sim, max_t=MAX_T, random_state=seed_base
+    )
+    rts = out["rts"].reshape(n_sim, 2)
+    chosen = out["choices"].reshape(n_sim, 2)
+    responded = rts < MAX_T
+    for j, c in enumerate(CHOICES):
+        expected = ((chosen == c) & responded).sum(axis=0) / responded.sum(axis=0)
+        np.testing.assert_array_equal(cpn[:, j], expected)
+    np.testing.assert_array_equal(past, 1.0 - responded.mean(axis=0))
+
+    d = DEADLINES[:2]
+    opn, past_opn = simulate_labels(
+        "ddm", theta, "opn", d, n_sim, np.random.default_rng(5)
+    )
+    gonogo, _ = simulate_labels(
+        "ddm", theta, "gonogo", d, n_sim, np.random.default_rng(5)
+    )
+    assert opn.shape == gonogo.shape == (2, 1)
+    np.testing.assert_array_equal(past_opn, past)  # same base draw, same seed
+    out = simulator(
+        theta=np.column_stack([theta, d.astype(np.float32)]),
+        model="ddm_deadline",
+        n_samples=n_sim,
+        max_t=MAX_T,
+        random_state=seed_deadline,
+    )
+    omitted = out["rts"].reshape(n_sim, 2) == -999.0
+    chosen = out["choices"].reshape(n_sim, 2)
+    np.testing.assert_array_equal(opn[:, 0], omitted.mean(axis=0))
+    np.testing.assert_array_equal(
+        gonogo[:, 0], ((chosen != max(CHOICES)) | omitted).mean(axis=0)
+    )
+    assert np.all(gonogo >= opn) and np.all((0.2 < opn) & (opn < 0.7))
+
+    # A scalar deadline broadcasts; the same rng state reproduces the labels.
+    again, _ = simulate_labels("ddm", theta, "opn", d, n_sim, np.random.default_rng(5))
+    np.testing.assert_array_equal(again, opn)
+    scalar, _ = simulate_labels(
+        "ddm", theta, "opn", 1.5, n_sim, np.random.default_rng(5)
+    )
+    assert scalar.shape == (2, 1)
+
+    with pytest.raises(ValueError, match="need deadlines"):
+        simulate_labels("ddm", theta, "opn", None, n_sim, np.random.default_rng(0))
+    with pytest.raises(ValueError, match="network_type"):
+        simulate_labels("ddm", theta, "lan", None, n_sim, np.random.default_rng(0))
+    with pytest.raises(ValueError, match="n_sim"):
+        simulate_labels("ddm", theta, "cpn", None, 0, np.random.default_rng(0))
+    with pytest.raises(ValueError, match="at least one"):
+        simulate_labels("ddm", theta[:0], "cpn", None, n_sim, np.random.default_rng(0))
+
+
+class _ScaledPredictor:
+    """Multiplies the LAN's density by ``factor`` for one parameter vector."""
+
+    def __init__(self, inner, planted: np.ndarray, factor: float) -> None:
+        self.inner = inner
+        self.planted = planted.astype(np.float32)
+        self.log_factor = np.log(factor)
+
+    @property
+    def input_width(self) -> int:
+        return self.inner.input_width
+
+    def __call__(self, batch: np.ndarray) -> np.ndarray:
+        n = self.planted.shape[0]
+        hit = np.all(batch[:, :n] == self.planted, axis=1)
+        return np.asarray(self.inner(batch)) + self.log_factor * hit
+
+
+def _planted_theta(file_index: int, n_theta: int, row: int) -> np.ndarray:
+    """The theta ``derive_aux_corpus`` samples at ``row`` of ``file_index``."""
+    config = ModelConfigBuilder.from_model("ddm")
+    return sample_theta(config, n_theta, np.random.default_rng([0, file_index]))[row]
+
+
+@pytest.mark.parametrize("network_type", NETWORK_TYPES)
+def test_thetas_outside_the_window_are_labelled_by_simulation(
+    tmp_path, monkeypatch, network_type
+):
+    """Exactly the flagged rows go to ``simulate_labels``; the rest stay LAN.
+
+    The density of one sampled theta is scaled by 1.3 (total ≈ 1.3, outside
+    the window) through a wrapped predictor; ``simulate_labels`` is replaced
+    by a sentinel that records what it was asked for and returns 0.5. Any
+    theta the real LAN already flags is expected to fall back too, so the
+    expected set is recomputed from the same scaled predictor.
+    """
+    n_theta, planted_row = 32, 3
+    planted = _planted_theta(0, n_theta, planted_row)
+    real = load_onnx_predictor(DDM_ONNX)
+    scaled = _ScaledPredictor(real, planted, 1.3)
+    monkeypatch.setattr(corpus_module, "load_onnx_predictor", lambda path: scaled)
+
+    calls: list[dict] = []
+
+    def sentinel(model, theta, kind, deadlines, n_sim, rng, *, max_t):
+        calls.append(
+            dict(model=model, theta=np.array(theta), kind=kind, d=deadlines, n=n_sim)
+        )
+        n_labels = len(CHOICES) if kind == "cpn" else 1
+        return np.full((theta.shape[0], n_labels), 0.5), np.full(theta.shape[0], 0.01)
+
+    monkeypatch.setattr(corpus_module, "simulate_labels", sentinel)
+
+    out = tmp_path / network_type
+    files = derive_aux_corpus(
+        DDM_ONNX,
+        "ddm",
+        network_type,
+        out,
+        n_files=2,
+        n_theta_per_file=n_theta,
+        fallback_n_sim=123,
+    )
+
+    config = ModelConfigBuilder.from_model("ddm")
+    expected_calls = 0
+    for i, path in enumerate(files):
+        theta = sample_theta(config, n_theta, np.random.default_rng([0, i]))
+        mass = choice_mass(scaled, theta, CHOICES, grid=OnsetGrid(), onset=theta[:, 3])
+        flagged = (mass.total < 0.98) | (mass.total > 1.03)
+        if i == 0:
+            assert flagged[planted_row] and mass.total[planted_row] > 1.2
+        with open(path, "rb") as f:
+            content = pickle.load(f)
+        labels = content[f"{network_type}_labels"][:, 0]
+        stats = content["generator_config"]["derive_stats"]
+        assert stats["derive_fallback_frac"] == pytest.approx(flagged.mean())
+        if not flagged.any():
+            assert stats["derive_sim_past_max_t_max"] is None
+            continue
+        assert stats["derive_sim_past_max_t_max"] == pytest.approx(0.01)
+        call = calls[expected_calls]
+        expected_calls += 1
+        assert call["model"] == "ddm" and call["kind"] == network_type
+        assert call["n"] == 123
+        np.testing.assert_array_equal(call["theta"], theta[flagged])
+        data = content[f"{network_type}_data"]
+        if network_type == "cpn":
+            rows = np.repeat(flagged, len(CHOICES))
+            assert call["d"] is None
+        else:
+            rows = flagged
+            np.testing.assert_array_equal(call["d"], data[flagged, -1])
+        assert np.all(labels[rows] == 0.5)
+        assert not np.any(labels[~rows] == 0.5)
+        if network_type == "cpn":  # the unflagged rows keep the LAN's shares
+            per_theta = labels.reshape(n_theta, len(CHOICES))[~flagged]
+            np.testing.assert_allclose(per_theta.sum(axis=1), 1.0, atol=1e-6)
+    assert len(calls) == expected_calls >= 1
+    manifest = _manifest(out)
+    assert manifest["derive_stats"]["derive_sim_past_max_t_max"] == pytest.approx(0.01)
+    assert manifest["derive_stats"]["derive_fallback_frac"] > 0.0
+
+
+def test_no_fallback_never_simulates(tmp_path, monkeypatch):
+    def refuse(*args, **kwargs):
+        raise AssertionError("simulate_labels must not be called")
+
+    monkeypatch.setattr(corpus_module, "simulate_labels", refuse)
+    files = derive_aux_corpus(
+        DDM_ONNX,
+        "ddm",
+        "cpn",
+        tmp_path,
+        n_files=2,
+        n_theta_per_file=256,
+        fallback_window=None,
+    )
+    for path in files:
+        with open(path, "rb") as f:
+            generator_config = pickle.load(f)["generator_config"]
+        assert generator_config["derive"]["fallback_window"] is None
+        assert generator_config["derive_stats"]["derive_fallback_frac"] == 0.0
+        assert generator_config["derive_stats"]["derive_sim_past_max_t_max"] is None
+    manifest = _manifest(tmp_path)
+    assert manifest["fallback_window"] is None
+    assert manifest["derive_stats"]["derive_fallback_frac"] == 0.0
+    assert manifest["derive_stats"]["derive_sim_past_max_t_max"] is None
+    # 256 thetas from the box: some totals are outside the default window,
+    # so the fallback would have been exercised had it been on.
+    assert manifest["derive_stats"]["derive_total_mass_max"] > 1.03
+
+
+def test_fallback_arguments_are_validated(tmp_path):
+    kwargs = dict(n_files=2, n_theta_per_file=4)
+    with pytest.raises(ValueError, match="fallback_window"):
+        derive_aux_corpus(
+            DDM_ONNX, "ddm", "cpn", tmp_path, fallback_window=(1.03, 0.98), **kwargs
+        )
+    with pytest.raises(ValueError, match="fallback_window"):
+        derive_aux_corpus(
+            DDM_ONNX, "ddm", "cpn", tmp_path, fallback_window=(0.0, 1.03), **kwargs
+        )
+    with pytest.raises(ValueError, match="fallback_n_sim"):
+        derive_aux_corpus(DDM_ONNX, "ddm", "cpn", tmp_path, fallback_n_sim=0, **kwargs)
+    assert not list(tmp_path.glob("*.pickle"))
+
+
+# --------------------------------------------------------------------------
+# 8. The trainer's own CLI accepts the corpus (dry run: no training)
 # --------------------------------------------------------------------------
 
 
@@ -662,7 +926,15 @@ def test_torchtrain_dry_run_accepts_a_derived_corpus(tmp_path):
     check and first batch accept a derived folder.
     """
     corpus = tmp_path / "corpus"
-    derive_aux_corpus(DDM_ONNX, "ddm", "cpn", corpus, n_files=2, n_theta_per_file=64)
+    derive_aux_corpus(
+        DDM_ONNX,
+        "ddm",
+        "cpn",
+        corpus,
+        n_files=2,
+        n_theta_per_file=64,
+        fallback_n_sim=FALLBACK_N_SIM,
+    )
     config = {
         "NETWORK_TYPE": "cpn",
         "CPU_BATCH_SIZE": 64,  # divides 64 thetas x 2 choices = 128 rows

@@ -55,6 +55,7 @@ from pathlib import Path
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
+from ssms.basic_simulators.simulator import simulator
 from ssms.config import ModelConfigBuilder
 from ssms.dataset_generators.parameter_samplers import UniformParameterSampler
 
@@ -83,6 +84,7 @@ __all__ = [
     "opn_labels",
     "sample_deadlines",
     "sample_theta",
+    "simulate_labels",
 ]
 
 NETWORK_TYPES: tuple[str, ...] = ("cpn", "opn", "gonogo")
@@ -359,6 +361,133 @@ def gonogo_labels(
 
 
 # --------------------------------------------------------------------------
+# Simulation fallback
+# --------------------------------------------------------------------------
+
+
+def simulate_labels(
+    model: str,
+    theta: ArrayLike,
+    network_type: str,
+    deadlines: ArrayLike | None,
+    n_sim: int,
+    rng: np.random.Generator,
+    *,
+    max_t: float = 20.0,
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """Labels from ssms for parameter vectors the LAN cannot be trusted on.
+
+    The corpus falls back to this for every theta whose total mass lies
+    outside the fallback window. The labels estimate the same quantities the
+    renormalised LAN labels do:
+
+    * ``cpn``: ``mean(choices == c & rts < max_t) / mean(rts < max_t)`` per
+      choice — the choice frequency conditional on responding within
+      ``max_t``, which is what ``mass(c) / total`` estimates (ssms does not
+      censor a base model at ``max_t``; an un-terminated trial comes back at
+      ``rt ≈ max_t + t`` with a choice).
+    * ``opn``: ``mean(rts == -999)`` under the ``{model}_deadline`` simulator
+      with the row's deadline appended to theta — the omission probability.
+    * ``gonogo``: ``mean(choices != max(choices) | rts == -999)`` under the
+      same simulator — ssms' ``nogo_p``.
+
+    Parameters
+    ----------
+    model
+        ssms base model name, e.g. ``"ddm"``; ``opn`` / ``gonogo`` simulate
+        ``f"{model}_deadline"``.
+    theta
+        ``(n_theta, n_params)`` parameter vectors of the base model.
+    network_type
+        One of :data:`NETWORK_TYPES`.
+    deadlines
+        Scalar or ``(n_theta,)`` deadlines in seconds; required for ``opn``
+        and ``gonogo``, ignored for ``cpn``.
+    n_sim
+        Trials simulated per parameter vector.
+    rng
+        Generator the simulator seeds are drawn from (one for the base
+        model, one for the deadline model), so a corpus file stays a
+        function of its own seed.
+    max_t
+        The base model's ``max_t``; the cpn labels condition on ``rts <
+        max_t`` and ``past_max_t`` counts the trials at or beyond it.
+
+    Returns
+    -------
+    tuple[NDArray[np.float64], NDArray[np.float64]]
+        ``labels`` of shape ``(n_theta, n_choices)`` for ``cpn`` (choice
+        order of the model config, so ``labels.reshape(-1)`` is theta-major
+        like :func:`cpn_labels`) and ``(n_theta, 1)`` otherwise, and
+        ``past_max_t`` of shape ``(n_theta,)``: the share of base-model
+        trials with ``rt >= max_t``, the part of the truth no LAN trained
+        on ``[0, max_t]`` can see.
+
+    Raises
+    ------
+    ValueError
+        For an unknown ``network_type``, ``n_sim < 1``, empty ``theta``,
+        missing deadlines for ``opn`` / ``gonogo``, or a parameter vector
+        under which no trial responds before ``max_t``.
+    """
+    _check_network_type(network_type)
+    theta_arr = _as_theta(theta)
+    n_theta = theta_arr.shape[0]
+    if n_theta == 0:
+        raise ValueError("theta must hold at least one parameter vector")
+    if n_sim < 1:
+        raise ValueError(f"n_sim must be >= 1, got {n_sim}")
+    choices = np.asarray(ModelConfigBuilder.from_model(model)["choices"])
+    seed_base, seed_deadline = (
+        int(s) for s in rng.integers(np.iinfo(np.int32).max, size=2)
+    )
+
+    base = simulator(
+        theta=theta_arr,
+        model=model,
+        n_samples=n_sim,
+        max_t=max_t,
+        random_state=seed_base,
+    )
+    rts = np.asarray(base["rts"]).reshape(n_sim, n_theta)
+    responded = rts < max_t
+    past_max_t = 1.0 - responded.mean(axis=0)
+
+    if network_type == "cpn":
+        chosen = np.asarray(base["choices"]).reshape(n_sim, n_theta)
+        n_responded = responded.sum(axis=0)
+        if np.any(n_responded == 0):
+            bad = np.flatnonzero(n_responded == 0).tolist()
+            raise ValueError(
+                f"no simulated trial responds before max_t={max_t} for parameter "
+                f"vectors {bad}; the conditional choice probability is undefined"
+            )
+        labels = np.stack(
+            [((chosen == c) & responded).sum(axis=0) / n_responded for c in choices],
+            axis=1,
+        )
+        return labels, past_max_t
+
+    if deadlines is None:
+        raise ValueError(f"{network_type} labels need deadlines")
+    d = np.broadcast_to(np.asarray(deadlines, dtype=np.float32), (n_theta,))
+    with_deadline = simulator(
+        theta=np.concatenate([theta_arr, d[:, None]], axis=1),
+        model=f"{model}_deadline",
+        n_samples=n_sim,
+        max_t=max_t,
+        random_state=seed_deadline,
+    )
+    omitted = np.asarray(with_deadline["rts"]).reshape(n_sim, n_theta) == -999.0
+    if network_type == "opn":
+        labels = omitted.mean(axis=0)
+    else:
+        chosen = np.asarray(with_deadline["choices"]).reshape(n_sim, n_theta)
+        labels = ((chosen != choices.max()) | omitted).mean(axis=0)
+    return labels[:, None], past_max_t
+
+
+# --------------------------------------------------------------------------
 # Provenance
 # --------------------------------------------------------------------------
 
@@ -582,12 +711,39 @@ def _resolve_grid(
     return grid, onset_idx
 
 
-def _mass_stats(total: NDArray[np.float64]) -> dict[str, float]:
+def _derive_stats(
+    total: NDArray[np.float64],
+    flagged: NDArray[np.bool_],
+    past_max_t: NDArray[np.float64] | None,
+    leak: NDArray[np.float64] | None,
+) -> dict[str, float | None]:
+    """The flat ``derive_stats`` record, for one file or a whole corpus.
+
+    ``past_max_t`` is the per-fallback-theta share of base-model trials at or
+    beyond ``max_t`` (``None`` or empty when nothing fell back); ``leak`` the
+    per-theta mass below the onset (``None`` without an onset parameter).
+    """
+    past = None if past_max_t is None or past_max_t.size == 0 else past_max_t
     return {
         "derive_total_mass_mean": float(total.mean()),
         "derive_total_mass_min": float(total.min()),
         "derive_total_mass_max": float(total.max()),
+        "derive_fallback_frac": float(flagged.mean()),
+        "derive_sim_past_max_t_max": None if past is None else float(past.max()),
+        "derive_leak_below_onset_p99": (
+            None if leak is None else float(np.percentile(leak, 99))
+        ),
     }
+
+
+def _flag_totals(
+    total: NDArray[np.float64], window: tuple[float, float] | None
+) -> NDArray[np.bool_]:
+    """Which parameter vectors fall back to simulation."""
+    if window is None:
+        return np.zeros(total.shape[0], dtype=bool)
+    lo, hi = window
+    return (total < lo) | (total > hi)
 
 
 def derive_aux_corpus(
@@ -601,6 +757,8 @@ def derive_aux_corpus(
     onset_param: str | None = "t",
     grid: IntegrationGrid | OnsetGrid | None = None,
     deadline_quantile_frac: float = 0.7,
+    fallback_window: tuple[float, float] | None = (0.98, 1.03),
+    fallback_n_sim: int = 20_000,
     seed: int = 0,
     source: SourceLAN | None = None,
 ) -> list[Path]:
@@ -614,8 +772,17 @@ def derive_aux_corpus(
     read — so the result trains with the trainers unchanged. A
     :data:`MANIFEST_NAME` sidecar lists the files and the provenance.
 
+    Labels are the LAN's masses renormalised by its own total (see the module
+    notes). A parameter vector whose total lies outside ``fallback_window`` is
+    one the LAN gets wrong beyond a scale error, so its labels come from
+    :func:`simulate_labels` on ssms instead; the share that fell back and the
+    simulation's own blind spot (trials past ``max_t``) are recorded beside
+    the total-mass statistics in every pickle's
+    ``generator_config["derive_stats"]`` and in the manifest.
+
     File ``i`` is generated from ``np.random.default_rng([seed, i])``, so a
-    file's content depends on ``seed`` and its index only.
+    file's content depends on ``seed`` and its index only — the simulator
+    seeds of the fallback are drawn from the same generator.
 
     Parameters
     ----------
@@ -651,6 +818,13 @@ def derive_aux_corpus(
         the manifest (``grid``).
     deadline_quantile_frac
         Passed to :func:`sample_deadlines` (opn / gonogo only).
+    fallback_window
+        ``(lo, hi)``: a theta whose total mass is not in the open interval
+        is labelled by simulation. The default flags 3.7 % of the ddm box
+        on the Hub LAN and bounds the unflagged error against simulation at
+        0.023 (cpn) / 0.033 (opn). ``None`` disables the fallback.
+    fallback_n_sim
+        Trials simulated per fallback theta.
     seed
         Base seed.
     source
@@ -666,9 +840,10 @@ def derive_aux_corpus(
     ------
     ValueError
         For an unknown ``network_type``, ``n_files < 2``,
-        ``n_theta_per_file < 1``, an :class:`OnsetGrid` without an onset
-        parameter, or a LAN whose input width is not ``n_params + 2`` for
-        ``model``.
+        ``n_theta_per_file < 1``, a ``fallback_window`` that is not
+        ``0 < lo < hi``, ``fallback_n_sim < 1``, an :class:`OnsetGrid`
+        without an onset parameter, a LAN whose input width is not
+        ``n_params + 2`` for ``model``, or a theta with zero total mass.
     """
     _check_network_type(network_type)
     if n_files < 2:
@@ -678,6 +853,15 @@ def derive_aux_corpus(
         )
     if n_theta_per_file < 1:
         raise ValueError(f"n_theta_per_file must be >= 1, got {n_theta_per_file}")
+    if fallback_window is not None:
+        lo, hi = (float(x) for x in fallback_window)
+        if not 0.0 < lo < hi:
+            raise ValueError(
+                f"fallback_window must satisfy 0 < lo < hi, got {fallback_window}"
+            )
+        fallback_window = (lo, hi)
+    if fallback_n_sim < 1:
+        raise ValueError(f"fallback_n_sim must be >= 1, got {fallback_n_sim}")
 
     onnx_path = Path(onnx_path)
     out_folder = Path(out_folder)
@@ -720,6 +904,8 @@ def derive_aux_corpus(
         "t_min": grid.t_min,
         "deadline_quantile_frac": deadline_quantile_frac,
         "deadline_bounds": deadline_bounds,
+        "fallback_window": fallback_window,
+        "fallback_n_sim": fallback_n_sim,
         "seed": seed,
     }
 
@@ -727,11 +913,15 @@ def derive_aux_corpus(
     files: list[Path] = []
     file_records: list[dict] = []
     totals: list[NDArray[np.float64]] = []
+    flags: list[NDArray[np.bool_]] = []
+    pasts: list[NDArray[np.float64]] = []
+    leaks: list[NDArray[np.float64]] = []
     for i in range(n_files):
         rng = np.random.default_rng([seed, i])
         theta = sample_theta(base_config, n_theta_per_file, rng)
         onset = theta[:, onset_idx] if isinstance(grid, OnsetGrid) else None
         mass = choice_mass(predictor, theta, choices, grid=grid, onset=onset)
+        deadlines: NDArray[np.float64] | None = None
         if network_type == "cpn":
             data, labels = cpn_labels(mass, theta, choices)
         else:
@@ -742,7 +932,29 @@ def derive_aux_corpus(
             build = opn_labels if network_type == "opn" else gonogo_labels
             data, labels = build(mass, theta, deadlines)
 
-        stats = _mass_stats(mass.total)
+        flagged = _flag_totals(mass.total, fallback_window)
+        past_max_t = None
+        if flagged.any():
+            simulated, past_max_t = simulate_labels(
+                model,
+                theta[flagged],
+                network_type,
+                None if deadlines is None else data[flagged, -1],
+                fallback_n_sim,
+                rng,
+                max_t=grid.max_t,
+            )
+            if network_type == "cpn":
+                n_choices = len(choices)
+                rows = (
+                    np.flatnonzero(flagged)[:, None] * n_choices + np.arange(n_choices)
+                ).reshape(-1)
+            else:
+                rows = np.flatnonzero(flagged)
+            labels[rows] = _labels(simulated.reshape(-1))
+        leak = None if onset_idx is None else mass.leak_below(theta[:, onset_idx])
+
+        stats = _derive_stats(mass.total, flagged, past_max_t, leak)
         generator_config = {
             "generator_approach": "derived",
             "model": model,
@@ -769,6 +981,11 @@ def derive_aux_corpus(
         files.append(path)
         file_records.append({"file": path.name, "n_rows": int(data.shape[0]), **stats})
         totals.append(mass.total)
+        flags.append(flagged)
+        if past_max_t is not None:
+            pasts.append(past_max_t)
+        if leak is not None:
+            leaks.append(leak)
 
     manifest = {
         "lanfactory_version": __version__,
@@ -784,6 +1001,8 @@ def derive_aux_corpus(
         "grid": grid_record,
         "deadline_quantile_frac": deadline_quantile_frac,
         "deadline_bounds": deadline_bounds,
+        "fallback_window": fallback_window,
+        "fallback_n_sim": fallback_n_sim,
         "source": {
             **{
                 k: (str(v) if isinstance(v, Path) else v)
@@ -791,7 +1010,12 @@ def derive_aux_corpus(
             },
             **provenance,
         },
-        "derive_stats": _mass_stats(np.concatenate(totals)),
+        "derive_stats": _derive_stats(
+            np.concatenate(totals),
+            np.concatenate(flags),
+            np.concatenate(pasts) if pasts else None,
+            np.concatenate(leaks) if leaks else None,
+        ),
         "files": file_records,
     }
     with open(out_folder / MANIFEST_NAME, "w", encoding="utf-8") as f:
