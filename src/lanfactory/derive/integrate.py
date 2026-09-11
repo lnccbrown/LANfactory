@@ -560,7 +560,8 @@ def choice_mass(
     vectors. Chunking bounds the row buffer handed to the network at
     ``chunk_size * n_choices * n_points * (n_params + 2)`` float32 values;
     the returned ``cdf`` itself costs ``n_theta * n_choices * n_points``
-    float64 values and is the only full-size array held.
+    float64 values and, with an :class:`OnsetGrid`, the ``(n_theta,
+    n_points)`` grid ``t`` is kept beside it — the only full-size arrays held.
 
     Parameters
     ----------
@@ -647,7 +648,9 @@ def choice_mass(
         if per_theta:
             t_chunk = grid.for_theta(onset_arr[start : start + n_chunk])
             t[start : start + n_chunk] = t_chunk
-            x = t_chunk[:, None, :]
+            # ``cumulative_trapezoid`` documents ``x`` as 1-D or the same
+            # shape as ``y``; the broadcast view costs nothing.
+            x = np.broadcast_to(t_chunk[:, None, :], (n_chunk, n_choices, n_points))
         else:
             x = t
         rows[..., n_params] = x
