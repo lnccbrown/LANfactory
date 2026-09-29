@@ -289,6 +289,8 @@ class ModelTrainerJaxMLP:
                 "end_value": 0.0,
                 "exponent": 1.0,  # note, exponent currently not used (optax bug)
             }
+        else:  # use the caller-supplied schedule
+            self.lr_dict = train_config["lr_dict"]
 
         self.train_config = train_config
         self.model = model
