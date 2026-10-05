@@ -3,6 +3,19 @@
 import pickle
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
+
+
+def _create_training_history(n_epochs: int) -> pd.DataFrame:
+    """Create an empty training history with stable column dtypes."""
+    return pd.DataFrame(
+        {
+            "epoch": np.zeros(n_epochs, dtype=int),
+            "val_loss": np.zeros(n_epochs),
+        }
+    )
+
 
 def save_configs(
     model_id: str | None = None,
@@ -38,4 +51,3 @@ def save_configs(
         train_config, open(Path(save_folder) / f"{model_id}_train_config.pickle", "wb")
     )
     print("Saved train config")
-    return

@@ -3,20 +3,22 @@ are used to train Jax based LANs and CPNs.
 """
 
 import pickle
+from collections.abc import Callable, Sequence
 from functools import partial
 from pathlib import Path
 from time import time
-from typing import Any, Callable, Sequence
+from typing import Any
 
 import flax
 import jax
 import numpy as np
 import optax
-import pandas as pd
 from flax import linen as nn
 from flax.training import train_state
 from frozendict import frozendict
 from jax import numpy as jnp
+
+from lanfactory.utils.util_funs import _create_training_history
 
 try:
     import mlflow
@@ -134,7 +136,7 @@ class JaxMLP(nn.Module):
         if (not self.train) and (self.train_output_type == "logprob"):
             x = x  # just for pedagogy
         elif (not self.train) and (self.train_output_type == "logits"):
-            x = -jnp.log((1 + jnp.exp(-x)))
+            x = -jnp.log(1 + jnp.exp(-x))
         elif not self.train:  # pragma: no cover
             x = x  # just for pedagogy
 
@@ -272,7 +274,7 @@ class ModelTrainerJaxMLP:
                 The ModelTrainerJaxMLP object.
 
         """
-        if "loss_dict" not in train_config.keys():
+        if "loss_dict" not in train_config:
             self.loss_dict: dict[str, dict] = {
                 "huber": {"fun": optax.huber_loss, "kwargs": {"delta": 1}},
                 "mse": {"fun": optax.l2_loss, "kwargs": {}},
@@ -281,7 +283,7 @@ class ModelTrainerJaxMLP:
         else:  # pragma: no cover
             self.loss_dict = train_config["loss_dict"]
 
-        if "lr_dict" not in train_config.keys():
+        if "lr_dict" not in train_config:
             # Todo: Add more schedules (for now warmup_cosine_decay_schedule)
             self.lr_dict: dict[str, float] = {
                 "init_value": 0.0002,
@@ -556,9 +558,7 @@ class ModelTrainerJaxMLP:
                 )
 
         # Initialize Training history
-        training_history = pd.DataFrame(
-            np.zeros((self.train_config["n_epochs"], 2)), columns=["epoch", "val_loss"]
-        )
+        training_history = _create_training_history(self.train_config["n_epochs"])
 
         # Initialize network
         if not isinstance(self.seed, int):
@@ -592,7 +592,7 @@ class ModelTrainerJaxMLP:
             )
 
             # Collect loss in training history
-            training_history.values[epoch, :] = [int(epoch), float(test_loss)]
+            training_history.iloc[epoch] = [int(epoch), float(test_loss)]
 
             if self.mlflow_on:
                 try:
