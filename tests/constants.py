@@ -26,7 +26,12 @@ class TestGeneratorConstants:
     """Test configuration constants."""
 
     MODEL: str = "angle"
-    N_PARAMETER_SETS: int = 256
+    # A file holds one row per parameter set (CPN/OPN) or
+    # N_SAMPLES_BY_PARAMETER_SET rows per set (LAN), and DatasetTorch requires
+    # rows_per_file % batch_size == 0 (250 and 100000 below). Keep this a
+    # multiple of the generator's n_subruns (10): ssm-simulators < 0.15
+    # truncated to one (256 -> 250 rows), >= 0.15 writes exactly what is set.
+    N_PARAMETER_SETS: int = 250
     N_SAMPLES: int = 2000
     N_TRAINING_SAMPLES: int = 2000
     N_SAMPLES_BY_PARAMETER_SET: int = 2000
