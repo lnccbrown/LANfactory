@@ -6,6 +6,7 @@ to HuggingFace Hub with proper organization and metadata.
 
 import json
 import logging
+import pickle
 import re
 import tempfile
 from pathlib import Path
@@ -39,7 +40,7 @@ ROOT_ONNX_SUFFIX = {
 }
 
 MANIFEST_FILENAME = "manifest.json"
-MANIFEST_SCHEMA_VERSION = 1
+MANIFEST_SCHEMA_VERSION = 2
 
 
 def canonical_root_filename(network_type: str, model_name: str) -> str:
@@ -79,9 +80,68 @@ def validate_model_name(model_name: str) -> None:
 # publishes one model's weights under another's root filename.
 _NT = "lan|cpn|opn|gonogo"
 _ARTIFACT_NAME_PATTERNS = (
-    re.compile(rf"^[^_]+_(?:{_NT})_(?P<model>.+?)__"),  # jax
-    re.compile(rf"^(?P<model>.+?)_(?:{_NT})_[^_]+_"),  # torch
+    re.compile(rf"^(?P<run_uuid>[^_]+)_(?:{_NT})_(?P<model>.+?)__"),  # jax
+    re.compile(rf"^(?P<model>.+?)_(?:{_NT})_(?P<run_uuid>[^_]+)_"),  # torch
 )
+
+
+def run_uuid_from_filename(filename: str) -> str | None:
+    """The trainer ``run_uuid`` embedded in an artifact name, or None.
+
+    This is the MLflow ``tags.run_uuid`` join key: the only identifier both
+    the on-disk / HF artifact set and the training run share.
+    """
+    for pattern in _ARTIFACT_NAME_PATTERNS:
+        if match := pattern.match(filename):
+            return match.group("run_uuid")
+    return None
+
+
+# train_config keys the trainers stamp for provenance (schema v2) and the
+# manifest field each is published under.
+_PROVENANCE_KEYS = ("lineage_id", "mlflow_run_id", "mlflow_tracking_uri")
+
+
+def provenance_from_artifacts(
+    files: list[Path], canonical_onnx: Path | None = None
+) -> dict[str, str]:
+    """Extra manifest fields tying a published network to its MLflow lineage.
+
+    Reads ``lineage_id`` / ``mlflow_run_id`` / ``mlflow_tracking_uri`` from the
+    single ``*_train_config.pickle`` in the artifact set (written by the
+    trainers; schema v2) and ``run_uuid`` from the canonical ONNX filename.
+    Anything unavailable is simply omitted, so legacy artifact sets still
+    publish — with a smaller entry. Never raises.
+    """
+    extra: dict[str, str] = {}
+
+    name_source = canonical_onnx or next(
+        (f for f in files if f.suffix == ".onnx"), None
+    )
+    if name_source is not None and (uuid := run_uuid_from_filename(name_source.name)):
+        extra["run_uuid"] = uuid
+
+    train_configs = [f for f in files if f.name.endswith("_train_config.pickle")]
+    if len(train_configs) != 1:
+        if len(train_configs) > 1:
+            logger.warning(
+                "Multiple train_config pickles in the artifact set %s; not "
+                "recording lineage in the manifest.",
+                [f.name for f in train_configs],
+            )
+        return extra
+    try:
+        with open(train_configs[0], "rb") as f:
+            train_config = pickle.load(f)  # noqa: S301 - our own trainer output
+    except Exception as e:  # noqa: BLE001 - provenance is best-effort
+        logger.warning("Could not read %s for provenance: %s", train_configs[0], e)
+        return extra
+    if isinstance(train_config, dict):
+        for key in _PROVENANCE_KEYS:
+            value = train_config.get(key)
+            if isinstance(value, str) and value:
+                extra[key] = value
+    return extra
 
 
 def names_model(filename: str, model_name: str) -> bool:
@@ -144,7 +204,12 @@ def build_manifest_entry(
     files: list[Path],
     extra: dict | None = None,
 ) -> dict:
-    """One manifest record describing a published network."""
+    """One manifest record describing a published network.
+
+    ``extra`` carries the schema-2 provenance fields (``lineage_id``,
+    ``mlflow_run_id``, ``mlflow_tracking_uri``, ``run_uuid``), see
+    :func:`provenance_from_artifacts`.
+    """
     entry = {
         "model": model_name,
         "network_type": network_type,
@@ -527,7 +592,8 @@ def _upload_to_hf(  # pragma: no cover
 ) -> str:
     """HF-dependent implementation of upload_model."""
     try:
-        from huggingface_hub import HfApi, create_repo as hf_create_repo
+        from huggingface_hub import HfApi
+        from huggingface_hub import create_repo as hf_create_repo
     except ImportError as exc:
         raise ImportError(
             "huggingface_hub is required for HuggingFace uploads. "
@@ -614,6 +680,8 @@ def _upload_to_hf(  # pragma: no cover
                 or existing_root_filename(existing_manifest, network_type, model_name),
                 folder_path=path_in_repo,
                 files=files_to_upload,
+                # lineage_id / mlflow_run_id / run_uuid: the HF -> MLflow join.
+                extra=provenance_from_artifacts(files_to_upload, root_source),
             )
             manifest_path = tmp_path / MANIFEST_FILENAME
             with open(manifest_path, "w") as f:
