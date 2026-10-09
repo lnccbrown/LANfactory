@@ -4,7 +4,88 @@ from unittest.mock import patch, mock_open
 
 import pytest
 
-from lanfactory.cli.utils import _make_train_network_configs, _get_train_network_config
+from lanfactory.cli.utils import (
+    _get_train_network_config,
+    _make_train_network_configs,
+    resolve_mlflow_artifact_location,
+    resolve_mlflow_tracking_enabled,
+)
+
+
+class TestResolveMlflowTrackingEnabled:
+    _off = dict(
+        mlflow_run_name=None, mlflow_run_id=None, data_generation_experiment_id=None
+    )
+
+    def test_nothing_set_is_disabled(self):
+        assert resolve_mlflow_tracking_enabled(mlflow_flag=None, **self._off) is False
+
+    @pytest.mark.parametrize(
+        "override",
+        [
+            {"mlflow_run_name": "r"},
+            {"mlflow_run_id": "abc"},
+            {"data_generation_experiment_id": "1"},
+        ],
+    )
+    def test_any_tracking_option_enables(self, override):
+        kwargs = {**self._off, **override}
+        assert resolve_mlflow_tracking_enabled(mlflow_flag=None, **kwargs) is True
+
+    def test_tracking_uri_env_enables(self):
+        assert (
+            resolve_mlflow_tracking_enabled(
+                mlflow_flag=None, tracking_uri_env="http://mlflow:5000", **self._off
+            )
+            is True
+        )
+
+    def test_empty_env_does_not_enable(self):
+        assert (
+            resolve_mlflow_tracking_enabled(
+                mlflow_flag=None, tracking_uri_env="", **self._off
+            )
+            is False
+        )
+
+    def test_explicit_flag_wins_both_ways(self):
+        assert (
+            resolve_mlflow_tracking_enabled(
+                mlflow_flag=False,
+                tracking_uri_env="http://x",
+                mlflow_run_name="r",
+                mlflow_run_id=None,
+                data_generation_experiment_id=None,
+            )
+            is False
+        )
+        assert resolve_mlflow_tracking_enabled(mlflow_flag=True, **self._off) is True
+
+
+class TestResolveMlflowArtifactLocation:
+    def test_none_and_empty_pass_through(self):
+        assert resolve_mlflow_artifact_location(None) is None
+        assert resolve_mlflow_artifact_location("") is None
+
+    def test_relative_path_becomes_absolute(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        assert resolve_mlflow_artifact_location("mlruns") == str(tmp_path / "mlruns")
+
+    def test_absolute_path_unchanged(self, tmp_path):
+        assert resolve_mlflow_artifact_location(str(tmp_path)) == str(tmp_path)
+
+    @pytest.mark.parametrize(
+        "uri",
+        [
+            "s3://bucket/prefix",
+            "gs://bucket/prefix",
+            "mlflow-artifacts:/",
+            "file:///oscar/data/lab/mlflow/artifacts",
+            "hdfs://nn:8020/mlflow",
+        ],
+    )
+    def test_uris_pass_through_untouched(self, uri):
+        assert resolve_mlflow_artifact_location(uri) == uri
 
 
 def test_make_train_network_configs_with_dict_args():

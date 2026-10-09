@@ -20,12 +20,13 @@ Train a JAX network. Either `--training-data-folder` or
 | `--networks-path-base PATH` | required | Base directory for saved network artifacts |
 | `--dry-run` | off | Validate configuration and data discovery without training |
 | `--export-onnx` / `--no-export-onnx` | on | Export the HSSM-consumable ONNX artifact after training |
+| `--mlflow` / `--no-mlflow` | auto | Force tracking on or off; when omitted, tracking is on if any `--mlflow-*` option, `--data-generation-experiment-id`, or `MLFLOW_TRACKING_URI` is set |
 | `--mlflow-run-name TEXT` | unset | Enable tracking under this run name |
 | `--mlflow-experiment-name TEXT` | `MLFLOW_EXPERIMENT_NAME` or unset | MLflow experiment name |
 | `--mlflow-run-id TEXT` | unset | Resume an existing MLflow run |
 | `--data-generation-experiment-id TEXT` | unset | Derive the data location and lineage from an MLflow experiment |
 | `--mlflow-tracking-uri TEXT` | `MLFLOW_TRACKING_URI` or `sqlite:///mlflow.db` | MLflow tracking backend |
-| `--mlflow-artifact-location TEXT` | `MLFLOW_ARTIFACT_LOCATION` or `./mlruns` | MLflow artifact root |
+| `--mlflow-artifact-location TEXT` | `MLFLOW_ARTIFACT_LOCATION` or MLflow's default | Artifact root for a newly created experiment; local paths are made absolute, URIs (`s3://`, `gs://`, …) pass through. Omit when the server proxies artifacts |
 | `--log-level LEVEL`, `-l LEVEL` | `WARNING` | Logging threshold |
 
 ## `torchtrain`
@@ -41,12 +42,13 @@ Train a PyTorch network. Its data-discovery and MLflow options match
 | `--network-id INTEGER` | `0` | Network entry selected from the configuration |
 | `--dl-workers INTEGER` | `1` | DataLoader worker count; non-positive values request automatic sizing |
 | `--dry-run` | off | Validate configuration and data discovery without training |
+| `--mlflow` / `--no-mlflow` | auto | Force tracking on or off; when omitted, tracking is on if any `--mlflow-*` option, `--data-generation-experiment-id`, or `MLFLOW_TRACKING_URI` is set |
 | `--mlflow-run-name TEXT` | unset | Enable tracking under this run name |
 | `--mlflow-experiment-name TEXT` | `MLFLOW_EXPERIMENT_NAME` or unset | MLflow experiment name |
 | `--mlflow-run-id TEXT` | unset | Resume an existing MLflow run |
 | `--data-generation-experiment-id TEXT` | unset | Derive the data location and lineage from an MLflow experiment |
 | `--mlflow-tracking-uri TEXT` | `MLFLOW_TRACKING_URI` or `sqlite:///mlflow.db` | MLflow tracking backend |
-| `--mlflow-artifact-location TEXT` | `MLFLOW_ARTIFACT_LOCATION` or `./mlruns` | MLflow artifact root |
+| `--mlflow-artifact-location TEXT` | `MLFLOW_ARTIFACT_LOCATION` or MLflow's default | Artifact root for a newly created experiment; local paths are made absolute, URIs (`s3://`, `gs://`, …) pass through. Omit when the server proxies artifacts |
 | `--log-level LEVEL`, `-l LEVEL` | `WARNING` | Logging threshold |
 
 ## `transform-onnx`

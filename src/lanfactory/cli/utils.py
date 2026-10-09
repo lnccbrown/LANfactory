@@ -187,6 +187,53 @@ def _get_train_network_config(yaml_config_path: str | Path | None = None, net_in
     return config
 
 
+def resolve_mlflow_tracking_enabled(
+    *,
+    mlflow_flag: bool | None,
+    mlflow_run_name: str | None,
+    mlflow_run_id: str | None,
+    data_generation_experiment_id: str | None,
+    tracking_uri_env: str | None = None,
+) -> bool:
+    """Decide whether a training CLI should log to MLflow.
+
+    ``--mlflow`` / ``--no-mlflow`` is authoritative when given. Otherwise
+    tracking is enabled implicitly when any tracking-related option
+    (run name, run id, data-generation experiment) is present, **or** when
+    ``MLFLOW_TRACKING_URI`` is set in the environment: a lab that points
+    everyone at a shared server (see HSSMSpine ``_docs/mlflow-deployment.md``)
+    wants every run recorded without each caller remembering a flag.
+    """
+    if mlflow_flag is not None:
+        return mlflow_flag
+    return (
+        mlflow_run_name is not None
+        or mlflow_run_id is not None
+        or data_generation_experiment_id is not None
+        or bool(tracking_uri_env)
+    )
+
+
+def resolve_mlflow_artifact_location(value: str | None) -> str | None:
+    """Normalise an MLflow artifact location for ``create_experiment``.
+
+    Local paths are made absolute so a run launched from a different working
+    directory (or a SLURM job) resolves the same folder. Anything carrying a
+    URI scheme (``s3://``, ``gs://``, ``mlflow-artifacts:/``, ``file:///``…)
+    is returned untouched — wrapping it in ``Path(...).absolute()`` would turn
+    ``s3://bucket/x`` into ``/cwd/s3:/bucket/x``.
+    """
+    if not value:
+        return None
+    from urllib.parse import urlsplit
+
+    scheme = urlsplit(value).scheme
+    # A one-letter scheme is a Windows drive letter, not a URI.
+    if len(scheme) > 1:
+        return value
+    return str(Path(value).absolute())
+
+
 def log_training_run_identity(
     *,
     model: str,

@@ -30,6 +30,8 @@ import lanfactory
 from lanfactory.cli.utils import (
     _get_train_network_config,
     log_training_run_identity,
+    resolve_mlflow_artifact_location,
+    resolve_mlflow_tracking_enabled,
 )
 
 app = typer.Typer()
@@ -52,6 +54,13 @@ def main(
         "--dry-run",
         help="Validate the pipeline without training. Useful for testing configurations.",
         is_flag=True,
+    ),
+    mlflow_enabled: bool = typer.Option(
+        None,
+        "--mlflow/--no-mlflow",
+        help="Force MLflow tracking on or off. When omitted, tracking is enabled "
+        "if any --mlflow-* option or --data-generation-experiment-id is given, "
+        "or if MLFLOW_TRACKING_URI is set in the environment.",
     ),
     mlflow_run_name: str = typer.Option(
         None,
@@ -84,8 +93,9 @@ def main(
     mlflow_artifact_location: str = typer.Option(
         None,
         "--mlflow-artifact-location",
-        help="Root directory for MLflow artifacts. "
-        "Defaults to MLFLOW_ARTIFACT_LOCATION env var, then './mlruns'.",
+        help="Artifact root for a newly created experiment (local path or URI such "
+        "as s3://…). Defaults to MLFLOW_ARTIFACT_LOCATION env var, then MLflow's "
+        "default. Omit when the tracking server proxies artifacts.",
     ),
     log_level: str = typer.Option(
         "WARNING",
@@ -155,12 +165,16 @@ def main(
             "Cannot proceed without a data source."
         )
 
-    # Determine if MLflow tracking should be enabled
-    # Enable if: --mlflow-run-name provided OR --mlflow-run-id provided OR --data-generation-experiment-id provided
-    mlflow_tracking_enabled = (
-        mlflow_run_name is not None
-        or mlflow_run_id is not None
-        or data_generation_experiment_id is not None
+    # Determine if MLflow tracking should be enabled: --mlflow/--no-mlflow wins;
+    # otherwise any tracking option, or MLFLOW_TRACKING_URI in the env, turns it on.
+    import os
+
+    mlflow_tracking_enabled = resolve_mlflow_tracking_enabled(
+        mlflow_flag=mlflow_enabled,
+        mlflow_run_name=mlflow_run_name,
+        mlflow_run_id=mlflow_run_id,
+        data_generation_experiment_id=data_generation_experiment_id,
+        tracking_uri_env=os.getenv("MLFLOW_TRACKING_URI"),
     )
 
     # Initialize MLflow if needed
@@ -193,10 +207,9 @@ def main(
                 else:
                     artifact_location = os.getenv("MLFLOW_ARTIFACT_LOCATION", None)
 
+                # Local paths become absolute; URIs (s3://, gs://, …) pass through.
+                artifact_location = resolve_mlflow_artifact_location(artifact_location)
                 if artifact_location:
-                    # Ensure artifact location is absolute path
-                    artifact_location = str(Path(artifact_location).absolute())
-
                     # Try to get existing experiment, or create new one with artifact location
                     experiment = mlflow.get_experiment_by_name(mlflow_experiment)
                     if experiment is None:

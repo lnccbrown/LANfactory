@@ -120,6 +120,9 @@ def mock_data_generation_experiment(test_mlflow_dir):
 
             mlflow.log_dict(file_inventory, "generated_files_inventory.json")
             mlflow.log_param("run_index", i)
+            # ssm-simulators' ``generate`` logs this on every real run; the
+            # training CLIs derive the data folder from it in MLflow-first mode.
+            mlflow.log_param("data_output_folder", "/shared/data/training_data")
 
     return {
         "experiment_id": experiment.experiment_id,
@@ -179,6 +182,28 @@ class TestMLflowUtils:
         expected_files = set(mock_data_generation_experiment["all_files"])
         actual_files = set(result["all_files"])
         assert expected_files == actual_files
+
+        # The training CLIs read ``data_output_folder`` off ``runs_info`` to
+        # locate the data in MLflow-first mode; it must be carried through.
+        for run_info in result["runs_info"]:
+            assert run_info["data_output_folder"] == "/shared/data/training_data"
+
+    def test_runs_without_data_output_folder_yield_none(self, test_mlflow_dir):
+        """A datagen run that never logged the folder param gives None, not NaN."""
+        artifact_location = test_mlflow_dir["artifact_location"]
+        set_experiment_with_artifact_location("no-folder-param", artifact_location)
+        experiment = mlflow.get_experiment_by_name("no-folder-param")
+        with mlflow.start_run():
+            mlflow.log_dict(
+                {"num_files": 0, "total_size_mb": 0.0, "files": []},
+                "generated_files_inventory.json",
+            )
+
+        result = get_files_from_data_generation_experiment(
+            experiment_id=experiment.experiment_id,
+            tracking_uri=test_mlflow_dir["tracking_uri"],
+        )
+        assert result["runs_info"][0]["data_output_folder"] is None
 
     def test_get_files_from_empty_experiment(self, test_mlflow_dir):
         """Test behavior when experiment has no runs."""

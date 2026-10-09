@@ -29,7 +29,10 @@ def get_files_from_data_generation_experiment(
             - num_runs: number of runs in the experiment
             - total_files: total number of files generated
             - all_files: list of all filenames
-            - runs_info: list of dicts with run details
+            - runs_info: list of dicts with run details (``run_id``,
+              ``run_name``, ``num_files``, ``total_size_mb``, ``files``, and
+              ``data_output_folder`` — the folder the data-generation run
+              wrote to, or None if that param was not logged)
 
     Raises
     ------
@@ -82,6 +85,15 @@ def get_files_from_data_generation_experiment(
             run_files = [file_info["filename"] for file_info in inventory["files"]]
             all_files.extend(run_files)
 
+            # ``data_output_folder`` is a param the ssm-simulators ``generate``
+            # CLI logs on every non-dry run; the training CLIs read it from
+            # ``runs_info`` to derive the training-data folder in MLflow-first
+            # mode. ``search_runs`` yields NaN for a missing param, so
+            # normalise that to None.
+            data_output_folder = run.get("params.data_output_folder")
+            if not isinstance(data_output_folder, str):
+                data_output_folder = None
+
             runs_info.append(
                 {
                     "run_id": run_id,
@@ -89,6 +101,7 @@ def get_files_from_data_generation_experiment(
                     "num_files": inventory["num_files"],
                     "total_size_mb": inventory["total_size_mb"],
                     "files": run_files,
+                    "data_output_folder": data_output_folder,
                 }
             )
 
