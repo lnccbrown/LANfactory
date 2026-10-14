@@ -1,69 +1,91 @@
-site_name: LANFactory
-repo_name: AlexanderFengler/LANFactory
-repo_url: htps://github.com/AlexanderFengler/LANFactory
+site_name: LANfactory
+site_url: https://lnccbrown.github.io/LANfactory/
+repo_name: lnccbrown/LANfactory
+repo_url: https://github.com/lnccbrown/LANfactory
 edit_uri: edit/main/docs
+exclude_docs: overrides/
 
 nav:
   - Home:
       - Overview: index.md
-  - Tutorials:
-      - LAN (JAX): basic_tutorial/basic_tutorial_lan_jax.ipynb
-      - LAN (PyTorch): basic_tutorial/basic_tutorial_lan_torch.ipynb
-      - CPN (PyTorch): basic_tutorial/basic_tutorial_cpn_torch.ipynb
-      - OPN (PyTorch): basic_tutorial/basic_tutorial_opn_torch.ipynb
-      - Exporting sbi → ONNX: tutorials/exporting_sbi_to_onnx.ipynb
-      - Exporting bayesflow → ONNX: tutorials/exporting_bayesflow_to_onnx.ipynb
-  - Guides:
-      - MLflow Integration: using_mlflow.md
-      - HuggingFace Hub: using_huggingface.md
-      - Exporting sbi Models: exporting_sbi_models.md
-      - Exporting bayesflow Models: exporting_bayesflow_models.md
-  - API:
-      - lanfactory: api/lanfactory.md
-      - config: api/config.md
-      - hf: api/hf.md
-      - onnx: api/onnx.md
-      - trainers: api/trainers.md
-      - utils: api/utils.md
+      - The HSSM ecosystem: https://lnccbrown.github.io/HSSM/ecosystem/
+  - Learn:
+      - Train your first LAN (PyTorch): basic_tutorial/basic_tutorial_lan_torch.ipynb
+  - How-to guides:
+      - Train with the JAX backend: basic_tutorial/basic_tutorial_lan_jax.ipynb
+      - Export an sbi model to ONNX: tutorials/exporting_sbi_to_onnx.ipynb
+      - Export a bayesflow model to ONNX: tutorials/exporting_bayesflow_to_onnx.ipynb
+      - Track training runs with MLflow: using_mlflow.md
+      - Share trained networks on HuggingFace Hub: using_huggingface.md
+  - Explanations:
+      - Likelihood approximation networks and LANfactory: what_are_lans.md
+  - Reference:
+      - "Network types: LAN, CPN, OPN": network_types.md
+      - sbi export — architectures and constraints: exporting_sbi_models.md
+      - bayesflow export — architectures and constraints: exporting_bayesflow_models.md
+      - Command-line interface: api/cli.md
+      - API:
+          - config: api/config.md
+          - hf: api/hf.md
+          - onnx: api/onnx.md
+          - network_inspectors: api/network_inspectors.md
+          - trainers: api/trainers.md
+          - utils: api/utils.md
+
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
 
 plugins:
   - search
   - autorefs
+  - redirects:
+      redirect_maps:
+        basic_tutorial/basic_tutorial_cpn_torch.md: network_types.md
+        basic_tutorial/basic_tutorial_opn_torch.md: network_types.md
   - mkdocs-jupyter:
       execute: True
       execute_ignore:
         - basic_tutorial/basic_tutorial_lan_jax.ipynb
         - basic_tutorial/basic_tutorial_lan_torch.ipynb
-        - basic_tutorial/basic_tutorial_cpn_torch.ipynb
-        - basic_tutorial/basic_tutorial_opn_torch.ipynb
         - tutorials/exporting_sbi_to_onnx.ipynb
         - tutorials/exporting_bayesflow_to_onnx.ipynb
   - mkdocstrings:
       default_handler: python
       handlers:
         python:
-          import:
+          inventories:
             - https://docs.python.org/3/objects.inv
             - https://mkdocstrings.github.io/objects.inv
             - https://mkdocstrings.github.io/griffe/objects.inv
           options:
-            show_submodules: true
             separate_signature: true
             merge_init_into_class: true
             docstring_options:
               ignore_init_summary: true
-            docstring_style: "numpy"
-            docstring_section_style: "list"
+            docstring_style: numpy
+            docstring_section_style: list
             show_root_members_full_path: true
             show_object_full_path: false
-            show_category_heading: true
-            show_signature_annotations: false
+            show_category_heading: false
+            show_signature_annotations: true
+            show_docstring_attributes: false
             show_source: false
-            group_by_category: false
-            signature_crossrefs: true
+            show_root_heading: true
+            group_by_category: true
+            signature_crossrefs: false
+            summary: true
+            line_length: 80
+            unwrap_annotated: false
+            modernize_annotations: true
+            filters:
+              - "!^_"
 
 theme:
   logo: images/navlogo.png
+  favicon: images/navlogo.png
   name: material
   custom_dir: docs/overrides
   features:
@@ -78,6 +100,8 @@ theme:
     - content.action.edit
     - header.autohide
     - announce.dismiss
+    - navigation.footer
+    - navigation.indexes
   palette:
     # Palette toggle for automatic mode
     - media: "(prefers-color-scheme)"
@@ -103,14 +127,24 @@ theme:
         icon: material/brightness-4
         name: Switch to automatic mode
 
+copyright: Copyright © 2021 Alexander Fengler. MIT License.
+
 extra:
-  homepage: "https://AlexanderFengler.github.io/LANFactory/"
+  homepage: "https://lnccbrown.github.io/LANfactory/"
+  release_announcement: true
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/lnccbrown/LANfactory
+    - icon: material/forum
+      link: https://github.com/lnccbrown/HSSM/discussions
 
 extra_css:
   - "styles/extra.css"
 
 markdown_extensions:
   - admonition
+  - toc:
+      permalink: true
   - pymdownx.highlight:
       anchor_linenums: true
       line_spans: __span
@@ -120,5 +154,5 @@ markdown_extensions:
   - pymdownx.superfences
   - attr_list
   - pymdownx.emoji:
-      emoji_index: !!python/name:materialx.emoji.twemoji
-      emoji_generator: !!python/name:materialx.emoji.to_svg
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg

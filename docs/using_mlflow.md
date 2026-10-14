@@ -1,4 +1,4 @@
-# MLflow Tutorial for LANfactory
+# Track training runs with MLflow
 
 Track and manage your network training experiments with MLflow.
 

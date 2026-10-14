@@ -39,6 +39,7 @@ from bayesflow.datasets import OfflineDataset  # noqa: E402
 from bayesflow.networks.inference.coupling.transforms import AffineTransform  # noqa: E402
 
 from lanfactory.onnx import transform_bayesflow_to_onnx  # noqa: E402
+from tests._onnx_utils import max_int64_abs  # noqa: E402
 
 # bayesflow under KERAS_BACKEND=torch globally disables autograd at import to
 # avoid excessive memory in long training loops. Restore the global default so
@@ -308,6 +309,38 @@ def test_transform_rejects_invalid_mode(tmp_path: Path) -> None:
             example_theta_dim=_THETA_DIM,
             example_x_dim=_X_DIM,
         )
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="bayesflow's CouplingFlow emits internal INT64_MAX Constants (from its "
+    "open-ended split ops) that LANfactory cannot remove — so bayesflow ONNX is "
+    "NOT int32-clean even with bounded wrapper slices. Such exports require x64 on "
+    "the consumer side (or a value-aware int cast). This xfail is a tripwire: if "
+    "bayesflow ever stops emitting INT64_MAX, it will xpass and flag that the "
+    "consumer can drop its x64 requirement. Contrast test_sbi_nle_export, which "
+    "IS int32-clean after the bounded-slice fix.",
+)
+def test_export_int64_values_fit_in_int32(
+    trained_nle: bf.ContinuousApproximator, tmp_path: Path
+) -> None:
+    """Document: bayesflow exports are NOT int32-clean (flow-internal INT64_MAX).
+
+    The bounded-slice wrapper fix removes the wrapper-level ``INT64_MAX`` sentinel,
+    but bayesflow's CouplingFlow split ops emit their own — so this assertion fails
+    (xfail). The sbi exporter test of the same name passes because nflows/MAF does
+    not emit such sentinels.
+    """
+    onnx_path = tmp_path / "bayesflow_nle_int_range.onnx"
+    transform_bayesflow_to_onnx(
+        trained_nle,
+        str(onnx_path),
+        mode="nle",
+        example_theta_dim=_THETA_DIM,
+        example_x_dim=_X_DIM,
+    )
+    model = onnx.load(str(onnx_path))
+    assert max_int64_abs(model) <= np.iinfo(np.int32).max
 
 
 def test_transform_rejects_nonpositive_dims(tmp_path: Path) -> None:

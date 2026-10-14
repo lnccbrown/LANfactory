@@ -155,3 +155,10 @@ explorations/
 
 # marimo session/layout cache (notebook source .py is the artifact we track)
 __marimo__/
+
+uv.lock
+
+# Generated per-checkout by HSSMSpine's cross-editor sync
+# (scripts/sync_agent_config.py materializes these from .claude/).
+.cursor/
+.agents/

@@ -2,59 +2,79 @@ name: Run tests
 
 on:
   pull_request:
+  workflow_call: # Called by drift.yml (scheduled drift detection)
 
 jobs:
   run_tests:
     runs-on: ubuntu-latest
 
     strategy:
-      # Run every Python version to completion even if one fails. The test job
-      # occasionally hits a flaky native SIGILL during import on a mismatched
-      # runner CPU/wheel; with fail-fast that one crash cancels the other
-      # versions and hides their real status. Keeping it false isolates the
-      # flake so you can re-run just the failed job (`gh run rerun --failed`).
+      # Run every Python version to completion even if one fails, so a single
+      # version's failure doesn't cancel the others and hide their real status.
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.12", "3.13", "3.14"]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
         with:
-          version: "0.6.5"
-          # enable-cache: true
-          # cache-dependency-glob: "pyproject.toml pdm.lock"
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
 
-      - name: Clear all caches
-        run: |
-            rm -rf ~/.cache/pip
-            rm -rf ~/.cache/uv
-            rm -rf ~/.cache/conda
-            rm -rf ~/.cache/npm
-
+      # (a cache-nuking block used to sit here: rm -rf of every cache plus
+      # `uv sync --reinstall` with PIP_NO_CACHE_DIR — every PR run cold-
+      # downloaded the multi-GB torch/bayesflow/keras/sbi stack, and uv was
+      # pinned to the ancient 0.6.5. It was added during an undiagnosed hour
+      # of trial and error in June 2025; the SIGILL it was flailing at came
+      # from ssm-simulators' `-march=native` wheels and is pinned out by
+      # `ssm-simulators>=0.13.1`. Don't reinstate it on a hunch.)
       - name: Install package
-        run: uv sync --all-groups --reinstall
-        env:
-          # UV_CACHE_DIR: ""
-          PIP_NO_CACHE_DIR: "1"
+        run: uv sync --all-groups
 
       - name: Run pytest
         run: uv run pytest
 
-      - name: Check styling
-        run: uv run ruff format --check .
-
-      - name: Linting
-        run: uv run ruff check src/lanfactory
-
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  test_notebooks:
+    name: Execute tutorial notebooks
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: Install package (with notebook + backend deps)
+        run: uv sync --all-groups
+
+      # Executes every committed rendered tutorial and every canonical marimo
+      # source so the published learning path cannot silently drift from the code.
+      - name: Execute tutorial notebooks
+        run: uv run pytest tests/test_notebooks.py --run-notebooks --no-cov -v

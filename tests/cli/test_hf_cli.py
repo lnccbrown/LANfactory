@@ -132,8 +132,9 @@ class TestUploadHfDryRun:
         with open(yaml_path, "w", encoding="utf-8") as f:
             yaml.dump(yaml_content, f)
 
-        # Create a dummy model file
-        (tmp_path / "model.onnx").write_text("dummy content")
+        # Dummy artifact named the way the trainers name them: the model name
+        # must appear in the filename, or the root-alias selection refuses.
+        (tmp_path / "abc_lan_test-model__model.onnx").write_text("dummy content")
 
         result = subprocess.run(
             [
@@ -154,8 +155,13 @@ class TestUploadHfDryRun:
         assert result.returncode == 0
         assert "DRY RUN" in result.stdout
 
-    def test_dry_run_missing_model_card(self, tmp_path):
-        """Test dry run fails when model_card.yaml is missing."""
+    def test_dry_run_missing_model_card_no_longer_blocks(self, tmp_path):
+        """A missing model_card.yaml no longer blocks the run.
+
+        This folder still fails, but on the thing that actually matters — it
+        holds no artifacts at all. And the dry run leaves the folder untouched:
+        the card is written only on a real upload.
+        """
         result = subprocess.run(
             [
                 "upload-hf",
@@ -173,7 +179,53 @@ class TestUploadHfDryRun:
         )
 
         assert result.returncode != 0
-        assert (
-            "model_card.yaml not found" in result.stderr
-            or "model_card.yaml not found" in result.stdout
+        combined = result.stdout + result.stderr
+        assert "No files matching patterns" in combined
+        assert "model_card.yaml not found" not in combined
+        assert not (tmp_path / "model_card.yaml").exists()
+
+    def test_dry_run_leaves_the_artifact_folder_untouched(self, tmp_path):
+        (tmp_path / "abc_lan_test-model__model.onnx").write_text("dummy")
+        before = sorted(p.name for p in tmp_path.iterdir())
+
+        result = subprocess.run(
+            [
+                "upload-hf",
+                "--model-folder",
+                str(tmp_path),
+                "--network-type",
+                "lan",
+                "--model-name",
+                "test-model",
+                "--dry-run",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
         )
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert sorted(p.name for p in tmp_path.iterdir()) == before
+
+    def test_dry_run_missing_model_card_with_require_flag(self, tmp_path):
+        """--require-model-card restores the old hard failure."""
+        (tmp_path / "model.onnx").write_text("content")
+        result = subprocess.run(
+            [
+                "upload-hf",
+                "--model-folder",
+                str(tmp_path),
+                "--network-type",
+                "lan",
+                "--model-name",
+                "test-model",
+                "--dry-run",
+                "--require-model-card",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert result.returncode != 0
+        assert "model_card.yaml not found" in result.stdout + result.stderr

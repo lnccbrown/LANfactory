@@ -12,6 +12,8 @@ from typing import Any
 
 import yaml
 
+from lanfactory.hf import DEFAULT_LICENSE
+
 logger = logging.getLogger(__name__)
 
 
@@ -26,7 +28,8 @@ class ModelCardConfig:
     library_name : str
         Library name for HuggingFace (default: "onnx").
     license : str
-        License identifier (default: "mit").
+        License identifier (defaults to DEFAULT_LICENSE, which tracks the
+        artifact repo franklab/HSSM — currently bsd-2-clause).
     title : str
         Model title.
     description : str
@@ -41,12 +44,30 @@ class ModelCardConfig:
 
     tags: list[str] = field(default_factory=lambda: ["lan", "ssm", "hssm"])
     library_name: str = "onnx"
-    license: str = "mit"
+    license: str = DEFAULT_LICENSE
     title: str = "LAN Model"
     description: str = "Likelihood Approximation Network trained with LANfactory."
     architecture: dict | None = None
     training: dict | None = None
     usage_example: str | None = None
+
+
+def _require_mapping(data: dict, key: str, yaml_path: Path) -> dict | None:
+    """Return ``data[key]`` when it is a mapping (or absent), else raise.
+
+    Both ``architecture`` and ``training`` are consumed with ``.get()`` during
+    README generation. A wrong shape here is otherwise only discovered there --
+    after the artifact upload has already started -- and it silently suppresses
+    the pickle fallback, since a bad value is still not ``None``.
+    """
+    value = data.get(key)
+    if value is None or isinstance(value, dict):
+        return value
+    raise ValueError(
+        f"{yaml_path}: '{key}' must be a mapping, got {type(value).__name__}. "
+        "Omit it to have LANfactory fill it in from the pickled configs, which "
+        "are the authoritative record of what was trained."
+    )
 
 
 def load_model_card_yaml(model_folder: Path) -> ModelCardConfig:
@@ -66,6 +87,8 @@ def load_model_card_yaml(model_folder: Path) -> ModelCardConfig:
     ------
     FileNotFoundError
         If model_card.yaml is not found in the model folder.
+    ValueError
+        If 'architecture' or 'training' is present but is not a mapping.
     """
     yaml_path = model_folder / "model_card.yaml"
 
@@ -82,13 +105,13 @@ def load_model_card_yaml(model_folder: Path) -> ModelCardConfig:
     config = ModelCardConfig(
         tags=data.get("tags", ["lan", "ssm", "hssm"]),
         library_name=data.get("library_name", "onnx"),
-        license=data.get("license", "mit"),
+        license=data.get("license", DEFAULT_LICENSE),
         title=data.get("title", "LAN Model"),
         description=data.get(
             "description", "Likelihood Approximation Network trained with LANfactory."
         ),
-        architecture=data.get("architecture"),
-        training=data.get("training"),
+        architecture=_require_mapping(data, "architecture", yaml_path),
+        training=_require_mapping(data, "training", yaml_path),
         usage_example=data.get("usage_example"),
     )
 

@@ -1,19 +1,19 @@
 """This module contains the classes for training TorchMLP models."""
 
+import logging
+import pickle
+from collections.abc import Callable
+from pathlib import Path
+from time import time
+
 import numpy as np
 import pandas as pd
-import pickle
-from typing import Callable
-from time import time
-import logging
-from pathlib import Path
-
-
 import torch
-import torch.nn as nn
-import torch.optim as optim
 import torch.nn.functional as F
+from torch import nn, optim
 from torch.utils.data import DataLoader
+
+from lanfactory.utils.util_funs import _create_training_history
 
 try:
     import mlflow
@@ -21,6 +21,25 @@ except ImportError:
     print("mlflow not available")
 
 logger = logging.getLogger(__name__)
+
+
+def _picklable_copy(config):
+    """Return a copy of a config dict safe for stdlib pickle.
+
+    Values that stdlib pickle rejects (e.g. local lambdas used as boundary
+    functions in ssm-simulators model configs) are replaced by their repr, so
+    provenance survives without carrying live callables.
+    """
+    if not isinstance(config, dict):
+        return config
+    out = {}
+    for key, value in config.items():
+        try:
+            pickle.dumps(value)
+            out[key] = value
+        except Exception:  # noqa: BLE001 - any unpicklable value gets repr'd
+            out[key] = repr(value)
+    return out
 
 
 class DatasetTorch(torch.utils.data.Dataset):
@@ -65,7 +84,12 @@ class DatasetTorch(torch.utils.data.Dataset):
         self.features_key = features_key
         self.label_key = label_key
         self.out_framework = out_framework
-        self.data_generator_config: str = "None"
+        self.data_generator_config: str | dict = "None"
+        # model_config from the training data (param_bounds, params, choices):
+        # the provenance HSSM-facing consumers need. Populated from the first
+        # data file when present; training pickles embed it alongside
+        # generator_config (ssm-simulators lan_mlp.py).
+        self.data_model_config: str | dict = "None"
 
         self.tmp_data: dict = {}
 
@@ -81,11 +105,12 @@ class DatasetTorch(torch.utils.data.Dataset):
         if ((index % self.batches_per_file) == 0) or (self.tmp_data == {}):
             self.__load_file(file_index=self.indexes[index // self.batches_per_file])
 
-        # Generate and return a batch
+        # Generate and return a batch.
+        #
+        # A slice, not np.arange: the range is always contiguous, and fancy
+        # indexing with it copies the batch where a slice is a free view.
         start_idx = (index % self.batches_per_file) * self.batch_size
-        end_idx = start_idx + self.batch_size
-        batch_ids = np.arange(start_idx, end_idx, 1)
-        X, y = self.__data_generation(batch_ids)
+        X, y = self.__data_generation(slice(start_idx, start_idx + self.batch_size))
         return X, y
 
     def __load_file(self, file_index: int) -> None:
@@ -100,7 +125,7 @@ class DatasetTorch(torch.utils.data.Dataset):
             shuffle_idx, :
         ]
         self.tmp_data[self.label_key] = self.tmp_data[self.label_key][shuffle_idx]
-        return
+        self.__apply_label_bounds()
 
     def __init_file_shape(self) -> None:
         # Function gets dimensionalities form a test data file
@@ -126,32 +151,52 @@ class DatasetTorch(torch.utils.data.Dataset):
         if "generator_config" in init_file:
             self.data_generator_config = init_file["generator_config"]
 
+        if "model_config" in init_file:
+            # Sanitized at capture: ssm-simulators model_configs can carry
+            # callables (boundary/simulator lambdas) which the training data
+            # pickles tolerate (cloudpickle) but stdlib pickle in
+            # _save_data_details cannot. The catalog-relevant fields (params,
+            # param_bounds, choices, ...) are plain data and pass through.
+            self.data_model_config = _picklable_copy(init_file["model_config"])
+
         if len(self.file_shape_dict["labels"]) > 1:
             self.label_dim = self.file_shape_dict["labels"][1]
         else:
             self.label_dim = 1
-        return
 
     def __data_generation(
-        self, batch_ids: np.ndarray | None = None
+        self, batch_ids: np.ndarray | slice | None = None
     ) -> tuple[np.ndarray, np.ndarray]:
-        # Generates data containing batch_size samples
-        X = self.tmp_data[self.features_key][batch_ids, :]
-        if self.tmp_data[self.label_key].ndim == 1:
-            y = np.expand_dims(self.tmp_data[self.label_key][batch_ids], axis=1)
-        elif self.tmp_data[self.label_key].ndim == 2:
-            y = self.tmp_data[self.label_key][batch_ids]
+        """Return one batch.
+
+        With a slice (the normal path) both returns are *views* into the
+        loaded file — no copy. That is only safe because the label bounds are
+        applied once in ``__load_file`` rather than per batch: clamping here
+        would write through the view and mutate the cached file.
+        """
+        X = self.tmp_data[self.features_key][batch_ids]
+        labels = self.tmp_data[self.label_key]
+        if labels.ndim == 1:
+            y = labels[batch_ids][:, None]
+        elif labels.ndim == 2:
+            y = labels[batch_ids]
         else:  # pragma: no cover
-            bad_shape = str(self.tmp_data[self.label_key].shape)
-            raise ValueError(f"Label data has unexpected shape: {bad_shape}")
-
-        if self.label_lower_bound is not None:
-            y[y < self.label_lower_bound] = self.label_lower_bound
-
-        if self.label_upper_bound is not None:  # pragma: no cover
-            y[y > self.label_upper_bound] = self.label_upper_bound
+            raise ValueError(f"Label data has unexpected shape: {labels.shape}")
 
         return X, y
+
+    def __apply_label_bounds(self) -> None:
+        """Clamp labels once per file load, not once per batch.
+
+        Same total work — every row is visited exactly once either way — but
+        doing it here keeps the per-batch path free of in-place writes, which
+        is what lets it hand out views.
+        """
+        labels = self.tmp_data[self.label_key]
+        if self.label_lower_bound is not None:
+            np.maximum(labels, self.label_lower_bound, out=labels)
+        if self.label_upper_bound is not None:  # pragma: no cover
+            np.minimum(labels, self.label_upper_bound, out=labels)
 
 
 # --- Helper Functions for DataLoader Creation ---
@@ -337,7 +382,7 @@ def TorchMLPFactory(
     """
     if isinstance(network_config, str):
         with open(network_config, "rb") as f:
-            network_config = pickle.load(f)  # noqa: S301
+            network_config = pickle.load(f)
 
     assert isinstance(network_config, dict)
     return TorchMLP(
@@ -366,7 +411,7 @@ class TorchMLP(nn.Module):
         input_shape: int = 10,
         network_type: str | None = None,
     ) -> None:
-        super(TorchMLP, self).__init__()
+        super().__init__()
 
         self.input_shape = input_shape
         self.network_config = network_config
@@ -452,7 +497,7 @@ class TorchMLP(nn.Module):
             return self.layers[-1](x)
         elif self.train_output_type == "logits":
             return -torch.log(
-                (1 + torch.exp(-self.layers[-1](x)))
+                1 + torch.exp(-self.layers[-1](x))
             )  # log ( 1 / (1 + exp(-x))), where x = log(p / (1 - p))
         else:
             return self.layers[-1](x)
@@ -501,7 +546,7 @@ class ModelTrainerTorchMLP:
                 self.train_config: dict = pickle.load(open(train_config, "rb"))
             except (OSError, pickle.PickleError) as e:  # pragma: no cover
                 logger.error(
-                    f"Error loading training config from file {train_config}: {str(e)}"
+                    f"Error loading training config from file {train_config}: {e!s}"
                 )
                 raise
         elif isinstance(train_config, dict):
@@ -525,6 +570,7 @@ class ModelTrainerTorchMLP:
         self.scheduler: (
             optim.lr_scheduler.ExponentialLR
             | optim.lr_scheduler.ReduceLROnPlateau
+            | optim.lr_scheduler.CosineAnnealingLR
             | None
         ) = None
 
@@ -577,38 +623,69 @@ class ModelTrainerTorchMLP:
                 self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
                     self.optimizer,
                     mode="min",
-                    factor=(
-                        self.train_config["lr_scheduler_params"]["factor"]
-                        if "factor" in self.train_config["lr_scheduler_params"]
-                        else 0.1
+                    factor=self.train_config["lr_scheduler_params"].get("factor", 0.1),
+                    patience=self.train_config["lr_scheduler_params"].get(
+                        "patience", 2
                     ),
-                    patience=(
-                        self.train_config["lr_scheduler_params"]["patience"]
-                        if "patience" in self.train_config["lr_scheduler_params"]
-                        else 2
-                    ),
-                    threshold=(
-                        self.train_config["lr_scheduler_params"]["threshold"]
-                        if "threshold" in self.train_config["lr_scheduler_params"]
-                        else 0.001
+                    threshold=self.train_config["lr_scheduler_params"].get(
+                        "threshold", 0.001
                     ),
                     threshold_mode="rel",
                     cooldown=0,
-                    min_lr=(
-                        self.train_config["lr_scheduler_params"]["min_lr"]
-                        if "min_lr" in self.train_config["lr_scheduler_params"]
-                        else 0.00000001
+                    min_lr=self.train_config["lr_scheduler_params"].get(
+                        "min_lr", 0.00000001
                     ),
                 )
             elif self.train_config["lr_scheduler"] == "multiply":
                 self.scheduler = optim.lr_scheduler.ExponentialLR(
                     self.optimizer,
-                    gamma=(
-                        self.train_config["lr_scheduler_params"]["factor"]
-                        if "factor" in self.train_config["lr_scheduler_params"]
-                        else 0.1
-                    ),
+                    gamma=self.train_config["lr_scheduler_params"].get("factor", 0.1),
                     last_epoch=-1,
+                )
+            elif self.train_config["lr_scheduler"] == "cosine":
+                # T_max defaults to the run length. What makes cosine worth
+                # having is that the whole trajectory is fixed in advance by
+                # that number, so two runs of one config anneal identically —
+                # something reduce_on_plateau cannot promise, since its cuts
+                # land wherever the validation noise puts them.
+                #
+                # The final epoch trains near eta_min rather than exactly at
+                # it: the loop reads the rate before stepping, so epoch n uses
+                # lr(n-1). Setting T_max = n_epochs - 1 would hit eta_min
+                # exactly and is worse — with the default eta_min=0 the last
+                # epoch would train at a learning rate of zero and learn
+                # nothing. At T_max = n_epochs the last epoch runs at a few
+                # percent of the initial rate, which is the intent.
+                params = self.train_config["lr_scheduler_params"]
+                t_max = params.get("t_max", self.train_config["n_epochs"])
+                eta_min = params.get("min_lr", 0.0)
+                # Both are fatal rather than merely odd, and both are quiet:
+                # T_max=0 raises ZeroDivisionError from inside the first
+                # step(), after training has already begun; an eta_min above
+                # the initial rate makes cosine *raise* the learning rate for
+                # the whole run (measured: 0.010 -> 0.453 over five epochs).
+                if t_max <= 0:
+                    raise ValueError(
+                        f"cosine needs t_max > 0, got {t_max}. It defaults to "
+                        "n_epochs, so check that n_epochs is set."
+                    )
+                base_lr = self.train_config["learning_rate"]
+                if not 0.0 <= eta_min <= base_lr:
+                    raise ValueError(
+                        f"cosine needs 0 <= min_lr <= learning_rate, got "
+                        f"min_lr={eta_min} with learning_rate={base_lr}. Above "
+                        "the initial rate the schedule anneals upward."
+                    )
+                self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
+                    self.optimizer, T_max=t_max, eta_min=eta_min
+                )
+            else:
+                # Silently ignoring a typo here costs a whole training run:
+                # the job trains fine, at a constant rate, and nothing in the
+                # record says the requested schedule never existed.
+                raise ValueError(
+                    f"Unknown lr_scheduler {self.train_config['lr_scheduler']!r}. "
+                    "Expected 'reduce_on_plateau', 'multiply', 'cosine', or None."
                 )
 
     def __load_weights(self) -> None:
@@ -654,15 +731,19 @@ class ModelTrainerTorchMLP:
         if mlflow_on:
             self.__try_mlflow(run_id=run_id)
 
-        training_history: pd.DataFrame = pd.DataFrame(
-            np.zeros((self.train_config["n_epochs"], 2)), columns=["epoch", "val_loss"]
-        )
+        training_history = _create_training_history(self.train_config["n_epochs"])
 
         step_cnt = 0
         self.model.train()
         for epoch in range(self.train_config["n_epochs"]):
             cnt = 0
             epoch_s_t = time()
+            # Accumulated ON DEVICE. `float(loss)` per step forced a
+            # host-device synchronisation on every iteration, so the CPU
+            # blocked until the GPU drained and the two never overlapped —
+            # pin_memory and non_blocking transfers were being paid for and
+            # then thrown away. Read it once at the end of the epoch instead.
+            epoch_loss_sum = torch.zeros((), device=self.dev)
 
             # Training loop
             for xb, yb in self.train_dl:
@@ -684,8 +765,12 @@ class ModelTrainerTorchMLP:
                 # Log training progress
                 self._log_training_progress(epoch, cnt, loss, verbose)
 
+                epoch_loss_sum += loss.detach()
                 cnt += 1
                 step_cnt += 1
+
+            # The one sync per epoch, after the loop has been queued.
+            epoch_loss_mean = float(epoch_loss_sum) / max(cnt, 1)
 
             print(
                 f"Epoch took {epoch} / {self.train_config['n_epochs']}, took {time() - epoch_s_t} seconds"
@@ -703,21 +788,36 @@ class ModelTrainerTorchMLP:
                 f"epoch {epoch} / {self.train_config['n_epochs']}, validation_loss: {val_loss:2.4}"
             )
 
+            # Read before stepping: this is the rate the epoch just reported on.
+            # Logged because otherwise a schedule leaves no trace in the record —
+            # comparing two runs means re-deriving when the scheduler fired from
+            # the loss curve, which only works at all for reduce_on_plateau.
+            epoch_lr = self.optimizer.param_groups[0]["lr"]
+
             # Scheduler step:
             if self.train_config["lr_scheduler"] is not None:
                 if self.train_config["lr_scheduler"] == "reduce_on_plateau":
                     self.scheduler.step(val_loss)
-                elif self.train_config["lr_scheduler"] == "multiply":
+                elif self.train_config["lr_scheduler"] in ("multiply", "cosine"):
                     self.scheduler.step()
 
             # Append training history
-            training_history.values[epoch, :] = [epoch, val_loss.cpu()]
+            training_history.iloc[epoch] = [int(epoch), val_loss.item()]
 
             if mlflow_on:
                 try:
+                    # Legacy metrics unchanged (loss = last minibatch, at the
+                    # cumulative batch step). The cross-backend schema metric
+                    # train_loss (HSSMSpine _docs/mlflow-schema.md) is the
+                    # EPOCH-MEAN training loss at step=epoch, matching the jax
+                    # trainer's semantics so the two backends are comparable.
                     mlflow.log_metrics(
                         {"loss": float(loss), "val_loss": float(val_loss)},
                         step=step_cnt,
+                    )
+                    mlflow.log_metrics(
+                        {"train_loss": epoch_loss_mean, "learning_rate": epoch_lr},
+                        step=int(epoch),
                     )
                 except Exception as e:
                     logger.error(f"Unexpected mlflow error: {e}")
@@ -817,8 +917,10 @@ class ModelTrainerTorchMLP:
             pickle.dump(
                 {
                     "train_data_generator_config": train_dl.dataset.data_generator_config,
+                    "train_data_model_config": train_dl.dataset.data_model_config,
                     "train_datafile_ids": train_dl.dataset.file_ids,
                     "valid_data_generator_config": valid_dl.dataset.data_generator_config,
+                    "valid_data_model_config": valid_dl.dataset.data_model_config,
                     "valid_datafile_ids": valid_dl.dataset.file_ids,
                 },
                 f,

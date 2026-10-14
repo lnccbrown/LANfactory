@@ -95,13 +95,19 @@ class TestUploadModel:
                 model_name="ddm",
             )
 
-    def test_raises_if_model_card_missing(self, tmp_path):
-        """Test raises FileNotFoundError if model_card.yaml is missing."""
+    def test_raises_if_model_card_missing_and_required(self, tmp_path):
+        """A missing model_card.yaml is only fatal on request.
+
+        It used to be fatal always, which blocked automated publishing for a
+        file the library can generate from the artifacts; the strict behavior
+        now lives behind require_model_card (see tests/hf/test_dual_layout.py).
+        """
         with pytest.raises(FileNotFoundError, match="model_card.yaml not found"):
             upload_model(
                 model_folder=tmp_path,
                 network_type="lan",
                 model_name="ddm",
+                require_model_card=True,
             )
 
     def test_raises_if_no_matching_files(self, tmp_path):
@@ -129,8 +135,8 @@ class TestUploadModel:
         with open(yaml_path, "w") as f:
             yaml.dump(yaml_content, f)
 
-        # Create a model file
-        (tmp_path / "model.onnx").write_text("onnx content")
+        # Artifact named the way the trainers name them (model in the filename)
+        (tmp_path / "abc_lan_ddm__model.onnx").write_text("onnx content")
 
         result = upload_model(
             model_folder=tmp_path,
@@ -140,6 +146,36 @@ class TestUploadModel:
         )
 
         assert result is None
+
+    def test_generically_named_onnx_needs_an_explicit_choice(self, tmp_path):
+        """A filename that does not name the model must be opted into.
+
+        The root filename is what HSSM downloads, so an artifact that cannot
+        corroborate --model-name is not published by guesswork.
+        """
+        (tmp_path / "model_card.yaml").write_text(yaml.dump({"title": "T"}))
+        onnx = tmp_path / "model.onnx"
+        onnx.write_text("onnx content")
+
+        with pytest.raises(ValueError, match="No ONNX artifact in this folder"):
+            upload_model(
+                model_folder=tmp_path,
+                network_type="lan",
+                model_name="ddm",
+                dry_run=True,
+            )
+
+        # ...and the override works
+        assert (
+            upload_model(
+                model_folder=tmp_path,
+                network_type="lan",
+                model_name="ddm",
+                dry_run=True,
+                canonical_onnx=onnx,
+            )
+            is None
+        )
 
     @requires_hf
     @patch("huggingface_hub.HfApi")
@@ -152,19 +188,21 @@ class TestUploadModel:
         yaml_content = {"tags": ["lan", "ssm"], "title": "Test"}
         with open(tmp_path / "model_card.yaml", "w") as f:
             yaml.dump(yaml_content, f)
-        (tmp_path / "model.onnx").write_text("content")
+        (tmp_path / "abc_lan_ddm__model.onnx").write_text("content")
 
         # Mock API
         mock_api = MagicMock()
         mock_api_class.return_value = mock_api
+        mock_api.list_repo_files.return_value = []
 
-        upload_model(
-            model_folder=tmp_path,
-            network_type="lan",
-            model_name="ddm",
-            create_repo=True,
-            token="fake_token",
-        )
+        with patch("lanfactory.hf.upload.fetch_existing_manifest", return_value=None):
+            upload_model(
+                model_folder=tmp_path,
+                network_type="lan",
+                model_name="ddm",
+                create_repo=True,
+                token="fake_token",
+            )
 
         mock_create_repo.assert_called_once()
 
@@ -172,29 +210,37 @@ class TestUploadModel:
     @patch("huggingface_hub.HfApi")
     @patch("huggingface_hub.create_repo")
     def test_uploads_to_correct_path(self, mock_create_repo, mock_api_class, tmp_path):
-        """Test files are uploaded to correct path in repo."""
+        """Files land under {network_type}/{model} in one commit.
+
+        The upload is a single create_commit rather than upload_folder, so the
+        folder, the root alias and the manifest cannot land separately (see
+        tests/hf/test_dual_layout.py for the layout assertions).
+        """
         # Create model_card.yaml
         yaml_content = {"tags": ["lan", "ssm"], "title": "Test"}
         with open(tmp_path / "model_card.yaml", "w") as f:
             yaml.dump(yaml_content, f)
-        (tmp_path / "model.onnx").write_text("content")
+        (tmp_path / "abc_lan_ddm__model.onnx").write_text("content")
 
         # Mock API
         mock_api = MagicMock()
         mock_api_class.return_value = mock_api
+        mock_api.list_repo_files.return_value = []
 
-        upload_model(
-            model_folder=tmp_path,
-            network_type="lan",
-            model_name="ddm",
-            repo_id="test/repo",
-        )
+        with patch("lanfactory.hf.upload.fetch_existing_manifest", return_value=None):
+            upload_model(
+                model_folder=tmp_path,
+                network_type="lan",
+                model_name="ddm",
+                repo_id="test/repo",
+            )
 
-        # Check upload_folder was called with correct path
-        mock_api.upload_folder.assert_called_once()
-        call_kwargs = mock_api.upload_folder.call_args[1]
-        assert call_kwargs["path_in_repo"] == "lan/ddm"
+        mock_api.create_commit.assert_called_once()
+        call_kwargs = mock_api.create_commit.call_args[1]
         assert call_kwargs["repo_id"] == "test/repo"
+        destinations = {op.path_in_repo for op in call_kwargs["operations"]}
+        assert "lan/ddm/abc_lan_ddm__model.onnx" in destinations
+        assert "ddm.onnx" in destinations  # root alias HSSM resolves
 
 
 class TestDefaults:

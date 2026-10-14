@@ -23,7 +23,7 @@ def main(
     model_folder: Path = typer.Option(
         ...,
         "--model-folder",
-        help="Path to the folder containing trained model artifacts (should contain model_card.yaml).",
+        help="Path to trained model artifacts; may contain model_card.yaml.",
         exists=True,
         file_okay=False,
         dir_okay=True,
@@ -32,7 +32,7 @@ def main(
     network_type: str = typer.Option(
         ...,
         "--network-type",
-        help="Network type: lan, cpn, or opn.",
+        help=f"Network type: one of {', '.join(VALID_NETWORK_TYPES)}.",
     ),
     model_name: str = typer.Option(
         ...,
@@ -88,6 +88,43 @@ def main(
         help="Show what would be uploaded without uploading.",
         is_flag=True,
     ),
+    publish_root_alias: bool = typer.Option(
+        True,
+        "--publish-root-alias/--no-publish-root-alias",
+        help="Also publish the canonical ONNX at the repo root under the "
+        "filename HSSM downloads ({model}.onnx / {model}_cpn.onnx / ...). "
+        "Without it the upload is not consumable by released HSSM versions.",
+    ),
+    update_manifest: bool = typer.Option(
+        True,
+        "--update-manifest/--no-update-manifest",
+        help="Record this network in manifest.json at the repository root.",
+    ),
+    require_model_card: bool = typer.Option(
+        False,
+        "--require-model-card",
+        help="Fail when model_card.yaml is missing instead of generating one.",
+        is_flag=True,
+    ),
+    canonical_onnx: Path = typer.Option(
+        None,
+        "--canonical-onnx",
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        help="Which ONNX in the model folder to publish at the repo root. "
+        "Needed when the artifact filename does not name the model (the "
+        "trainers' names do).",
+    ),
+    overwrite_root: bool = typer.Option(
+        False,
+        "--overwrite-root",
+        help="Allow replacing a root network that is already published. "
+        "Released HSSM versions download root filenames from main without "
+        "pinning a revision, so replacing one changes the likelihood for all "
+        "existing users. Without this flag such an upload is refused.",
+        is_flag=True,
+    ),
     log_level: str = typer.Option(
         "WARNING",
         "--log-level",
@@ -101,8 +138,10 @@ def main(
     This command uploads model artifacts to a HuggingFace repository at the path
     {network_type}/{model_name}/ (e.g., lan/ddm/).
 
-    The model folder must contain a model_card.yaml file with model metadata.
-    This YAML file is converted to a README.md for HuggingFace.
+    A model_card.yaml file is optional by default. When it is absent, LANfactory
+    generates metadata from the command arguments; ``--require-model-card``
+    restores strict validation. Publication coordinates the network-type/model
+    folder, optional root alias, and repository manifest.
 
     Example:
         upload-hf --model-folder ./networks/lan/ddm/ --network-type lan --model-name ddm
@@ -137,7 +176,8 @@ def main(
     except ImportError as e:
         logger.error(
             "huggingface_hub is required for HuggingFace uploads. "
-            "Install it with: pip install lanfactory[hf]"
+            "Install it with: pip install 'lanfactory[hf]' "
+            "(or, in a checkout: uv sync --extra hf)."
         )
         raise typer.Exit(code=1) from e
 
@@ -159,6 +199,11 @@ def main(
             revision=revision,
             token=token,
             dry_run=dry_run,
+            publish_root_alias=publish_root_alias,
+            update_manifest=update_manifest,
+            require_model_card=require_model_card,
+            overwrite_root=overwrite_root,
+            canonical_onnx=canonical_onnx,
         )
 
         if url and not dry_run:

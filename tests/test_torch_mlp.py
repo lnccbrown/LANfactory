@@ -1145,3 +1145,238 @@ def test_torch_mlp_factory_with_pickle_path(tmp_path):
 
     assert isinstance(model, TorchMLP)
     assert model.input_shape == 6
+
+
+# --- Batch path: views, not copies -----------------------------------------
+#
+# The per-batch range is always contiguous, so it is taken as a slice. That
+# makes both returns views into the loaded file, which is only sound because
+# the label bounds are applied once at load time — clamping per batch would
+# write through the view and mutate the cached file.
+
+
+def _theta_blocked_file(tmp_path, n_theta=20, per_theta=50, n_param=5):
+    """A file shaped like real training data: rows blocked by parameter set.
+
+    ssm-simulators writes N_SAMPLES_PER_PARAM consecutive rows per theta, so a
+    contiguous batch sees very few distinct theta and a shuffled one sees many.
+    """
+    import pickle
+
+    import numpy as np
+
+    n = n_theta * per_theta
+    theta = np.random.rand(n_theta, n_param).astype(np.float32)
+    X = np.empty((n, n_param + 2), dtype=np.float32)
+    X[:, :n_param] = np.repeat(theta, per_theta, axis=0)
+    X[:, n_param:] = np.random.randn(n, 2).astype(np.float32)
+    y = (np.random.randn(n) * 5).astype(np.float32)
+    path = tmp_path / "theta_blocked.pickle"
+    with open(path, "wb") as f:
+        pickle.dump({"lan_data": X, "lan_labels": y}, f, protocol=5)
+    return str(path), n_theta, n
+
+
+def test_batch_is_a_view_not_a_copy(tmp_path):
+    path, _, n = _theta_blocked_file(tmp_path)
+    ds = DatasetTorch(
+        file_ids=[path],
+        batch_size=n // 4,
+        features_key="lan_data",
+        label_key="lan_labels",
+    )
+    X, y = ds[0]
+    assert X.base is not None, "features batch should be a view, not a copy"
+    assert y.base is not None, "label batch should be a view, not a copy"
+
+
+def test_label_bounds_are_applied_to_the_whole_file_at_load(tmp_path):
+    """The clamp moved from per-batch to per-load.
+
+    Per batch it only ever touched the rows being served; at load it covers
+    the whole array. Checking the cached array directly is what distinguishes
+    the two — every served batch is clamped under either scheme.
+    """
+    path, _, n = _theta_blocked_file(tmp_path)
+    lower = -1.0
+    ds = DatasetTorch(
+        file_ids=[path],
+        batch_size=n // 4,
+        features_key="lan_data",
+        label_key="lan_labels",
+        label_lower_bound=lower,
+    )
+    ds[0]  # trigger a load
+    cached = ds.tmp_data["lan_labels"]
+    assert float(cached.min()) >= lower - 1e-6, (
+        "the whole cached file should be clamped, not just the served rows"
+    )
+    assert all(float(ds[i][1].min()) >= lower - 1e-6 for i in range(len(ds)))
+
+
+def test_shuffle_still_mixes_parameter_sets_within_a_batch(tmp_path):
+    """The load-time shuffle is load-bearing, not cosmetic.
+
+    Rows arrive blocked by theta, so an unshuffled contiguous batch would see
+    only batch_size / rows_per_theta distinct parameter vectors. Gradients over
+    such a batch are dominated by within-theta noise.
+    """
+    import numpy as np
+
+    path, n_theta, n = _theta_blocked_file(tmp_path, n_theta=20, per_theta=50)
+    batch_size = n // 4  # spans 5 theta blocks if taken contiguously
+    ds = DatasetTorch(
+        file_ids=[path],
+        batch_size=batch_size,
+        features_key="lan_data",
+        label_key="lan_labels",
+    )
+    X, _ = ds[0]
+    distinct = len(np.unique(X[:, :5], axis=0))
+    contiguous_would_give = batch_size // 50  # 5 blocks spanned by this slice
+    # A batch can never exceed min(batch_size, n_theta), so compare against
+    # the achievable ceiling rather than a multiple of the contiguous figure.
+    assert distinct >= 0.75 * n_theta, (
+        f"batch saw {distinct} of {n_theta} theta; contiguous access would "
+        f"give {contiguous_would_give}. The load-time shuffle is not working."
+    )
+
+
+def _scheduler_trainer(lr_scheduler, params, n_epochs=10, lr=0.01):
+    """A trainer built only far enough to construct its scheduler."""
+    train_config = {
+        "n_epochs": n_epochs,
+        "learning_rate": lr,
+        "weight_decay": 0.0,
+        "optimizer": "adam",
+        "loss": "huber",
+        "lr_scheduler": lr_scheduler,
+        "lr_scheduler_params": params,
+    }
+    network_config = {
+        "layer_sizes": [100, 100, 1],
+        "activations": ["tanh", "tanh", "linear"],
+        "train_output_type": "logprob",
+    }
+    return ModelTrainerTorchMLP(
+        train_config=train_config,
+        model=TorchMLP(network_config=network_config, input_shape=6),
+        train_dl=MagicMock(),
+        valid_dl=MagicMock(),
+    )
+
+
+def test_cosine_anneals_monotonically_along_a_path_fixed_by_the_run_length():
+    # The reason to prefer cosine here is reproducibility, not accuracy: the
+    # whole trajectory follows from n_epochs, so two runs of one config anneal
+    # identically. reduce_on_plateau cannot promise that -- its cuts land
+    # wherever the validation noise puts them.
+    trainer = _scheduler_trainer("cosine", {}, n_epochs=10, lr=0.01)
+    assert isinstance(trainer.scheduler, torch.optim.lr_scheduler.CosineAnnealingLR)
+
+    # The trainer reads the rate and *then* steps, so this mirrors the order in
+    # train_and_evaluate. Asserting on a bare sequence of step() calls would
+    # test PyTorch rather than the way we drive it.
+    seen = []
+    for _ in range(10):
+        seen.append(trainer.optimizer.param_groups[0]["lr"])
+        trainer.scheduler.step()
+
+    assert seen[0] == pytest.approx(0.01)
+    assert seen == sorted(seen, reverse=True)  # monotone, no restarts
+    # The last epoch trains NEAR the floor, not at it: epoch n uses lr(n-1).
+    # T_max = n_epochs - 1 would land exactly on eta_min and is worse -- with
+    # the default eta_min=0 the final epoch would train at lr 0.
+    assert 0.0 < seen[-1] < 0.05 * 0.01
+
+
+def test_cosine_honours_explicit_t_max_and_min_lr():
+    trainer = _scheduler_trainer("cosine", {"t_max": 4, "min_lr": 1e-4}, lr=0.01)
+    for _ in range(4):
+        trainer.scheduler.step()
+    assert trainer.optimizer.param_groups[0]["lr"] == pytest.approx(1e-4)
+
+
+@pytest.mark.parametrize("t_max", [0, -1])
+def test_cosine_refuses_a_non_positive_t_max(t_max):
+    # Unguarded this raises ZeroDivisionError from inside the first step(),
+    # i.e. after training has already started.
+    with pytest.raises(ValueError, match="t_max > 0"):
+        _scheduler_trainer("cosine", {"t_max": t_max})
+
+
+@pytest.mark.parametrize("min_lr", [-0.1, 0.5])
+def test_cosine_refuses_a_min_lr_outside_zero_to_the_initial_rate(min_lr):
+    # min_lr above the initial rate makes cosine anneal *upward* for the whole
+    # run (measured: 0.010 -> 0.453 over five epochs) with no error anywhere.
+    with pytest.raises(ValueError, match="min_lr"):
+        _scheduler_trainer("cosine", {"min_lr": min_lr}, lr=0.01)
+
+
+def test_the_logged_learning_rate_is_the_one_the_epoch_actually_used(
+    tmp_path, monkeypatch
+):
+    """The rate is read before the scheduler steps, and that ordering matters.
+
+    Logging after the step would attribute epoch n's loss to epoch n+1's rate,
+    which is exactly the off-by-one that makes a schedule comparison
+    unreadable. This drives the real training loop rather than the scheduler in
+    isolation, so the ordering is pinned where it actually happens.
+    """
+    inputs = torch.randn(40, 5)
+    labels = torch.randn(40, 1)
+    dl = torch.utils.data.DataLoader(
+        torch.utils.data.TensorDataset(inputs, labels), batch_size=10
+    )
+    trainer = ModelTrainerTorchMLP(
+        train_config={
+            "n_epochs": 3,
+            "learning_rate": 0.01,
+            "weight_decay": 0.0,
+            "optimizer": "adam",
+            "loss": "huber",
+            "lr_scheduler": "cosine",
+            "lr_scheduler_params": {},
+        },
+        model=TorchMLP(
+            network_config={
+                "layer_sizes": [10, 1],
+                "activations": ["tanh", "linear"],
+                "train_output_type": "logprob",
+            },
+            input_shape=5,
+        ),
+        train_dl=dl,
+        valid_dl=dl,
+    )
+
+    # The whole mlflow module, so no run is started and nothing is written.
+    fake_mlflow = MagicMock()
+    monkeypatch.setattr("lanfactory.trainers.torch_mlp.mlflow", fake_mlflow)
+    trainer.train_and_evaluate(
+        output_folder=str(tmp_path), mlflow_on=True, save_outputs=False, verbose=0
+    )
+
+    logged = [
+        call.args[0]["learning_rate"]
+        for call in fake_mlflow.log_metrics.call_args_list
+        if "learning_rate" in call.args[0]
+    ]
+    assert len(logged) == 3
+    # First epoch runs at the configured rate: the read happens before any step.
+    assert logged[0] == pytest.approx(0.01)
+    assert logged == sorted(logged, reverse=True)
+    assert logged[-1] > 0.0
+
+
+@pytest.mark.parametrize("name", ["cosinne", "plateau", "CosineAnnealingLR"])
+def test_an_unrecognised_scheduler_name_is_refused(name):
+    # The expensive failure mode: a typo used to fall through silently, and the
+    # job then trained a full run at a constant rate with nothing in the record
+    # saying the requested schedule never existed.
+    with pytest.raises(ValueError, match="Unknown lr_scheduler"):
+        _scheduler_trainer(name, {})
+
+
+def test_no_scheduler_is_still_allowed():
+    assert _scheduler_trainer(None, {}).scheduler is None

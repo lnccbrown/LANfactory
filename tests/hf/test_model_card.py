@@ -5,6 +5,7 @@ import pickle
 import pytest
 import yaml
 
+from lanfactory.hf import DEFAULT_LICENSE
 from lanfactory.hf.model_card import (
     ModelCardConfig,
     generate_readme,
@@ -21,7 +22,9 @@ class TestModelCardConfig:
         config = ModelCardConfig()
         assert config.tags == ["lan", "ssm", "hssm"]
         assert config.library_name == "onnx"
-        assert config.license == "mit"
+        # Follows the artifact repo (franklab/HSSM is bsd-2-clause), not the
+        # ecosystem's code licence — a card describes the published artifact.
+        assert config.license == "bsd-2-clause"
         assert config.title == "LAN Model"
         assert config.architecture is None
         assert config.training is None
@@ -108,6 +111,21 @@ class TestLoadModelCardYaml:
         assert config.architecture["layer_sizes"] == [100, 100, 1]
         assert config.architecture["network_type"] == "lan"
 
+    @pytest.mark.parametrize("key", ["architecture", "training"])
+    def test_load_yaml_rejects_non_mapping(self, key, tmp_path):
+        """A wrong shape must fail here, not deep inside README generation.
+
+        A list is the plausible mistake -- `architecture: [100, 100, 1]` reads
+        naturally -- and it used to survive load, suppress the pickle fallback,
+        and only blow up on `.get()` after the upload had begun.
+        """
+        yaml_path = tmp_path / "model_card.yaml"
+        with open(yaml_path, "w") as f:
+            yaml.dump({"title": "Test Model", key: [100, 100, 1]}, f)
+
+        with pytest.raises(ValueError, match=f"'{key}' must be a mapping"):
+            load_model_card_yaml(tmp_path)
+
 
 class TestGenerateReadme:
     """Tests for generate_readme function."""
@@ -131,7 +149,9 @@ class TestGenerateReadme:
 
         assert frontmatter["tags"] == ["lan", "ssm", "ddm"]
         assert frontmatter["library_name"] == "onnx"
-        assert frontmatter["license"] == "mit"
+        # The config did not set a licence, so the frontmatter carries the
+        # default — which tracks the artifact repo, not the code licence.
+        assert frontmatter["license"] == DEFAULT_LICENSE
 
     def test_includes_title_and_description(self):
         """Test that README includes title and description."""

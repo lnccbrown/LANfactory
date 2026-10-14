@@ -3,20 +3,22 @@ are used to train Jax based LANs and CPNs.
 """
 
 import pickle
+from collections.abc import Callable, Sequence
 from functools import partial
 from pathlib import Path
 from time import time
-from typing import Any, Callable, Sequence
+from typing import Any
 
 import flax
 import jax
 import numpy as np
 import optax
-import pandas as pd
 from flax import linen as nn
 from flax.training import train_state
 from frozendict import frozendict
 from jax import numpy as jnp
+
+from lanfactory.utils.util_funs import _create_training_history
 
 try:
     import mlflow
@@ -134,7 +136,7 @@ class JaxMLP(nn.Module):
         if (not self.train) and (self.train_output_type == "logprob"):
             x = x  # just for pedagogy
         elif (not self.train) and (self.train_output_type == "logits"):
-            x = -jnp.log((1 + jnp.exp(-x)))
+            x = -jnp.log(1 + jnp.exp(-x))
         elif not self.train:  # pragma: no cover
             x = x  # just for pedagogy
 
@@ -272,7 +274,7 @@ class ModelTrainerJaxMLP:
                 The ModelTrainerJaxMLP object.
 
         """
-        if "loss_dict" not in train_config.keys():
+        if "loss_dict" not in train_config:
             self.loss_dict: dict[str, dict] = {
                 "huber": {"fun": optax.huber_loss, "kwargs": {"delta": 1}},
                 "mse": {"fun": optax.l2_loss, "kwargs": {}},
@@ -281,7 +283,7 @@ class ModelTrainerJaxMLP:
         else:  # pragma: no cover
             self.loss_dict = train_config["loss_dict"]
 
-        if "lr_dict" not in train_config.keys():
+        if "lr_dict" not in train_config:
             # Todo: Add more schedules (for now warmup_cosine_decay_schedule)
             self.lr_dict: dict[str, float] = {
                 "init_value": 0.0002,
@@ -289,6 +291,8 @@ class ModelTrainerJaxMLP:
                 "end_value": 0.0,
                 "exponent": 1.0,  # note, exponent currently not used (optax bug)
             }
+        else:  # use the caller-supplied schedule
+            self.lr_dict = train_config["lr_dict"]
 
         self.train_config = train_config
         self.model = model
@@ -500,6 +504,8 @@ class ModelTrainerJaxMLP:
         mlflow_on: bool = False,
         save_outputs: bool = True,
         verbose: int = 1,
+        network_type: str | None = None,
+        export_onnx: bool = True,
     ) -> train_state.TrainState:
         """Train and evaluate JAXMLP model.
         Arguments
@@ -517,6 +523,14 @@ class ModelTrainerJaxMLP:
                 Whether to save all files or not.
             verbose (int):
                 The verbosity level.
+            network_type (str | None):
+                The network type ('lan', 'cpn', 'opn', ...), used in output
+                filenames. When None it is inferred from train_output_type —
+                which cannot distinguish cpn from opn (both use logits), so
+                callers that know the type should pass it.
+            export_onnx (bool):
+                Whether to export the trained network to ONNX alongside the
+                flax state (single-trial contract; the artifact HSSM consumes).
         Returns
         -------
             flax.core.frozen_dict.FrozenDict:
@@ -528,23 +542,25 @@ class ModelTrainerJaxMLP:
         if mlflow_on:
             self.__try_mlflow(run_id=run_id)
 
-        # Identify network type:
-        if self.model.train_output_type == "logprob":
-            network_type = "lan"
-        elif self.model.train_output_type == "logits":
-            network_type = "cpn"
-        else:
-            network_type = "unknown"
-            print(
-                'Model type identified as "unknown" because '
-                "the training_output_type attribute"
-                ' of the supplied jax model is neither "logprob", nor "logits"'
-            )
+        # Identify network type. Inference from train_output_type is a
+        # fallback only: logits cannot distinguish cpn from opn, which used to
+        # mislabel OPN artifacts as cpn.
+        if network_type is None:
+            if self.model.train_output_type == "logprob":
+                network_type = "lan"
+            elif self.model.train_output_type == "logits":
+                network_type = "cpn"
+            else:  # pragma: no cover - unreachable: JaxMLP.setup() raises on
+                # train_output_type values outside network_type_dict
+                network_type = "unknown"
+                print(
+                    'Model type identified as "unknown" because '
+                    "the training_output_type attribute"
+                    ' of the supplied jax model is neither "logprob", nor "logits"'
+                )
 
         # Initialize Training history
-        training_history = pd.DataFrame(
-            np.zeros((self.train_config["n_epochs"], 2)), columns=["epoch", "val_loss"]
-        )
+        training_history = _create_training_history(self.train_config["n_epochs"])
 
         # Initialize network
         if not isinstance(self.seed, int):
@@ -578,7 +594,22 @@ class ModelTrainerJaxMLP:
             )
 
             # Collect loss in training history
-            training_history.values[epoch, :] = [int(epoch), float(test_loss)]
+            training_history.iloc[epoch] = [int(epoch), float(test_loss)]
+
+            if self.mlflow_on:
+                try:
+                    # Per-epoch metrics under the cross-backend schema names
+                    # (HSSMSpine _docs/mlflow-schema.md), matching torchtrain.
+                    # The per-100-step `loss` metric above is kept as-is.
+                    mlflow.log_metrics(
+                        {
+                            "train_loss": float(train_loss),
+                            "val_loss": float(test_loss),
+                        },
+                        step=int(epoch),
+                    )
+                except Exception:
+                    pass
 
             print(
                 "Epoch: {} / {}, test_loss: {}".format(
@@ -618,13 +649,48 @@ class ModelTrainerJaxMLP:
             pickle.dump(
                 {
                     "train_data_generator_config": self.train_dl.dataset.data_generator_config,
+                    "train_data_model_config": self.train_dl.dataset.data_model_config,
                     "train_data_file_ids": self.train_dl.dataset.file_ids,
                     "valid_data_generator_config": self.valid_dl.dataset.data_generator_config,
+                    "valid_data_model_config": self.valid_dl.dataset.data_model_config,
                     "valid_data_file_ids": self.valid_dl.dataset.file_ids,
                 },
                 open(data_details_path, "wb"),
             )
             print("Saving training data details to: " + data_details_path)
+
+            # ONNX export (single-trial contract) — the artifact HSSM consumes.
+            # Mirrors the torch trainer's _save_onnx step; previously the jax
+            # path produced only flax bytes, which nothing downstream reads.
+            onnx_path = None
+            if export_onnx:
+                try:
+                    from functools import partial as _partial
+
+                    from lanfactory.onnx.jax_export import export_forward_to_onnx
+
+                    # Export the EVAL head, not the raw training head: for
+                    # logits networks (cpn/opn) eval applies logsigmoid, which
+                    # is what the torch exporters emit and what HSSM consumes
+                    # as log-likelihood. Parameters are head-independent, so
+                    # the trained state applies to the eval twin unchanged.
+                    eval_model = JaxMLP(
+                        layer_sizes=self.model.layer_sizes,
+                        activations=self.model.activations,
+                        train_output_type=self.model.train_output_type,
+                        train=False,
+                    )
+                    onnx_path = f"{full_path}_model.onnx"
+                    export_forward_to_onnx(
+                        _partial(eval_model.apply, state.params),
+                        input_shape=int(self.train_dl.dataset.input_dim),
+                        output_onnx_file=onnx_path,
+                        model_name=network_type,
+                    )
+                    print("Saving ONNX export to: " + onnx_path)
+                except Exception as e:
+                    onnx_path = None
+                    print(f"Failed to export ONNX: {e}")
 
             if self.mlflow_on:
                 try:
@@ -638,6 +704,8 @@ class ModelTrainerJaxMLP:
                     mlflow.log_artifact(
                         data_details_path, artifact_path="training_output"
                     )
+                    if onnx_path is not None:
+                        mlflow.log_artifact(onnx_path, artifact_path="training_output")
                     mlflow.end_run()
                 except Exception as e:
                     print(f"Failed to log artifacts to MLflow: {e}")

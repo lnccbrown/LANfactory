@@ -3,11 +3,12 @@ requires = ["setuptools", "wheel"]
 
 [project.urls]
 "Homepage" = "https://github.com/lnccbrown/LANFactory"
+"Documentation" = "https://lnccbrown.github.io/LANfactory/"
 "Bug Tracker" = "https://github.com/lnccbrown/LANFactory/issues"
 
 [project]
 name = "lanfactory"
-version = "0.7.0"
+version = "0.8.0"
 authors = [
     { name = "Alexander Fengler", email = "alexander_fengler@brown.edu" },
     { name = "Carlos Paniagua", email = "carlos_paniagua@brown.edu" },
@@ -16,29 +17,35 @@ authors = [
 description = "Package with convenience functions to train LANs"
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">3.10, <3.14"
+requires-python = ">=3.12, <3.15"
 classifiers = [
     "Development Status :: 1 - Planning",
     "Environment :: Console",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering",
 ]
 
 dependencies = [
-    "ssm-simulators>=0.12.2",
+    "ssm-simulators>=0.13.1",
     "scipy>=1.15.2",
     "pandas>=2.2.3",
-    "torch>=2.7.0",
-    "flax>=0.10.6",
+    "torch>=2.10.0",
+    "flax>=0.12.7",
     "tqdm>=4.67.1",
     "frozendict>=2.4.6",
     "onnx>=1.17.0",
+    # jax -> ONNX export for jaxtrain networks. Exact-pinned to the 0.15 line:
+    # 0.x releases move the API, and the parity test in tests/onnx guards the
+    # ecosystem's single-trial ONNX contract against silent changes.
+    "jax2onnx>=0.15,<0.18",
     "matplotlib>=3.10.1",
+    "plotly>=6.0.0",
+    "seaborn>=0.13.2",
     "typer>=0.9.0",
 ]
 
@@ -51,12 +58,12 @@ keywords = [
 ]
 
 [project.optional-dependencies]
-mlflow = ["mlflow>=3.6.0"]
+mlflow = ["mlflow>=3.14.0"]
 hf = ["huggingface-hub>=0.20.0"]
 sbi = ["sbi>=0.26", "nflows>=0.14"]
 bayesflow = ["bayesflow>=2.0.8", "keras>=3.12"]
 all = [
-    "mlflow>=3.6.0",
+    "mlflow>=3.14.0",
     "huggingface-hub>=0.20.0",
     "sbi>=0.26",
     "nflows>=0.14",
@@ -65,6 +72,11 @@ all = [
 ]
 
 [dependency-groups]
+lint = [
+    # <0.16: ruff 0.16 flags ~111 pre-existing errors repo-wide (same drift that
+    # broke ssm-simulators CI, pinned identically there); migrate deliberately.
+    "ruff>=0.15.1,<0.16",
+]
 dev = [
     "coverage>=7.6.4",
     "ipykernel>=6.29.5",
@@ -80,9 +92,9 @@ dev = [
     "pytest-timer>=1.0.0",
     "pytest-xdist>=3.6.1",
     "pytest>=8.3.1",
-    "ruff>=0.14.4",
+    { include-group = "lint" },
     "types-PyYAML",
-    "mlflow>=3.6.0",
+    "mlflow>=3.14.0",
     "jaxonnxruntime>=0.3",
     "onnxruntime>=1.17",
     "nflows>=0.14",
@@ -90,6 +102,16 @@ dev = [
     "keras>=3.12",
     "sbi>=0.26",
     "marimo>=0.23",
+]
+docs = [
+    "mkdocs==1.6.1",
+    "mkdocs-material==9.7.7",
+    "mkdocstrings==1.0.6",
+    "mkdocstrings-python==2.0.9",
+    "mkdocs-jupyter==0.26.3",
+    "mkdocs-autorefs==1.4.4",
+    # 1.2.3 depends on ProperDocs, which injects an unrelated migration banner.
+    "mkdocs-redirects==1.2.3",
 ]
 
 [tool.setuptools.packages.find]
@@ -109,7 +131,10 @@ addopts = [
     "--exitfirst",
     "--timer-top-n=25",
 ]
-markers = ["slow: marks tests as slow (deselect with '-m \"not slow\"')"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "notebooks: mark test as a notebook test (skipped unless --run-notebooks is passed)",
+]
 
 [tool.ruff]
 line-length = 88
@@ -150,6 +175,7 @@ exclude_lines = [
 jaxtrain = "lanfactory.cli.jax_train:app"
 torchtrain = "lanfactory.cli.torch_train:app"
 transform-onnx = "lanfactory.onnx.transform_onnx:app"
+transform-jax-onnx = "lanfactory.onnx.jax_export:app"
 upload-hf = "lanfactory.cli.upload_hf:app"
 download-hf = "lanfactory.cli.download_hf:app"
 
