@@ -2,11 +2,21 @@
 
 import pickle
 
+import numpy as np
 import pytest
 import jax
 import jax.numpy as jnp
 
 from lanfactory.trainers.jax_mlp import JaxMLPFactory, JaxMLP
+
+# Independent of JaxMLP.activations_dict, so the alignment test below checks
+# the model against plain math rather than against itself.
+REFERENCE_ACTIVATIONS = {
+    "tanh": jnp.tanh,
+    "relu": jax.nn.relu,
+    "sigmoid": jax.nn.sigmoid,
+    "linear": lambda z: z,
+}
 
 
 def test_mlp_jax_factory_with_dict():
@@ -84,6 +94,39 @@ def test_mlp_jax_forward_pass():
 
     assert output.shape == (5, 1)
     assert isinstance(output, jnp.ndarray)
+
+
+@pytest.mark.parametrize(
+    "activations",
+    [
+        ["tanh", "tanh", "linear"],  # production default
+        ["tanh", "linear", "linear"],  # issue #105: IndexError
+        ["linear", "tanh", "linear"],
+        ["relu", "linear", "sigmoid"],
+    ],
+)
+def test_mlp_jax_activations_stay_layer_aligned(activations):
+    """Each layer applies its own activation, "linear" hidden layers included."""
+    model = JaxMLP(
+        layer_sizes=[10, 10, 1],
+        activations=activations,
+        train_output_type="logprob",
+        train=True,
+    )
+    x = jax.random.normal(jax.random.PRNGKey(1), (5, 6))
+    params = model.init(jax.random.PRNGKey(0), x)
+
+    expected = x
+    for i, activation in enumerate(activations):
+        layer = params["params"][f"layers_{i}"]
+        expected = REFERENCE_ACTIVATIONS[activation](
+            expected @ layer["kernel"] + layer["bias"]
+        )
+
+    output = model.apply(params, x)
+
+    assert output.shape == (5, 1)
+    np.testing.assert_allclose(output, expected, rtol=1e-6, atol=1e-6)
 
 
 def test_mlp_jax_with_different_activations():
