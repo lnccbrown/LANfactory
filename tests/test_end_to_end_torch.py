@@ -1,13 +1,11 @@
 import pytest
 import ssms
 import lanfactory
-import os
 import numpy as np
 from copy import deepcopy
 import torch
 from .constants import (
     TEST_GENERATOR_CONSTANTS,
-    TEST_MODEL_FOLDER_CONSTANTS_TORCH,
 )
 
 import logging
@@ -17,24 +15,7 @@ logger = logging.getLogger(__name__)
 LEN_FORWARD_PASS_DUMMY = 2000
 
 
-def dummy_training_data_files(generator_config, model_config, save=True):
-    """Fixture providing a dummy training data for testing."""
-    output_folder = generator_config["output"]["folder"]
-    os.makedirs(output_folder, exist_ok=True)
-    for i in range(TEST_GENERATOR_CONSTANTS.N_DATA_FILES):
-        logger.info(
-            "Generating training data for file %d of %d",
-            i + 1,
-            TEST_GENERATOR_CONSTANTS.N_DATA_FILES,
-        )
-        my_dataset_generator = ssms.dataset_generators.lan_mlp.TrainingDataGenerator(
-            config=generator_config, model_config=model_config
-        )
-        _ = my_dataset_generator.generate_data_training(save=save)
-
-    return [os.path.join(output_folder, file_) for file_ in os.listdir(output_folder)]
-
-
+@pytest.mark.slow
 @pytest.mark.flaky(reruns=2)
 @pytest.mark.parametrize(
     "train_type, config_fixture, generator_config_fixture",
@@ -61,6 +42,9 @@ def test_end_to_end_lan_mlp(
     config_fixture,
     request,
     generator_config_fixture,
+    data_folder,
+    model_folder,
+    dummy_training_data_files,
 ):
     """End-to-end test for LAN/CPN/OPN MLP models.
 
@@ -71,20 +55,14 @@ def test_end_to_end_lan_mlp(
         config_fixture: Fixture name for network and training configuration
         request: Pytest request object for fixture access
         generator_config_fixture: Fixture name for data generator configuration
+        data_folder: Temporary folder for generated training data
+        model_folder: Temporary folder for trained model artifacts
+        dummy_training_data_files: Factory fixture generating dummy training data
     """
-    if train_type == "lan":
-        MODEL_FOLDER = TEST_MODEL_FOLDER_CONSTANTS_TORCH.LAN_MODEL_FOLDER
-    elif train_type == "cpn":
-        MODEL_FOLDER = TEST_MODEL_FOLDER_CONSTANTS_TORCH.CPN_MODEL_FOLDER
-    elif train_type == "opn":
-        MODEL_FOLDER = TEST_MODEL_FOLDER_CONSTANTS_TORCH.OPN_MODEL_FOLDER
-    else:
-        raise ValueError(f"Invalid train type: {train_type}")
-
     train_config_dict = request.getfixturevalue(config_fixture)
     config_generator = request.getfixturevalue(generator_config_fixture)
 
-    generator_config_dict = config_generator()
+    generator_config_dict = config_generator(output_folder=data_folder)
 
     logger.info("Generator config: %s \n", generator_config_dict)
     generator_config = generator_config_dict["generator_config"]
@@ -160,7 +138,7 @@ def test_end_to_end_lan_mlp(
     )
 
     torch_trainer.train_and_evaluate(
-        output_folder=MODEL_FOLDER,
+        output_folder=model_folder,
         output_file_id=model_config["name"],
         run_id="runid",
         mlflow_on=False,
@@ -169,9 +147,9 @@ def test_end_to_end_lan_mlp(
     )
 
     network = lanfactory.trainers.LoadTorchMLPInfer(
-        model_file_path=os.path.join(
-            MODEL_FOLDER,
-            f"{model_config['name']}_{train_type}_runid_train_state_dict.pt",
+        model_file_path=str(
+            model_folder
+            / f"{model_config['name']}_{train_type}_runid_train_state_dict.pt"
         ),
         network_config=network_config,
         input_dim=torch_training_dataset.input_dim,

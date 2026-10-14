@@ -132,6 +132,7 @@ addopts = [
     "--timer-top-n=25",
 ]
 markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "notebooks: mark test as a notebook test (skipped unless --run-notebooks is passed)",
 ]
 
