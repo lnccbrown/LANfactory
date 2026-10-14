@@ -140,6 +140,7 @@ def test_end_to_end_lan_mlp(
         mlflow_on=False,
         save_outputs=True,
         verbose=1,
+        network_type=train_type,
     )
 
     jax_infer = lanfactory.trainers.JaxMLPFactory(
@@ -147,7 +148,7 @@ def test_end_to_end_lan_mlp(
         train=False,
     )
 
-    network_name = train_type if train_type == "lan" else "cpn"
+    network_name = train_type
     state_file = str(
         model_folder / f"jax_{network_name}_{model_config['name']}__train_state.jax"
     )
