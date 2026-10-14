@@ -234,6 +234,103 @@ def resolve_mlflow_artifact_location(value: str | None) -> str | None:
     return str(Path(value).absolute())
 
 
+# MLflow run-schema version emitted by the training CLIs. Documented in
+# HSSMSpine ``_docs/mlflow-schema.md``; bump together with ssm-simulators.
+MLFLOW_SCHEMA_VERSION = "2"
+
+# Key under which ssm-simulators stamps the lineage id into ``data_config``
+# (and therefore into every training pickle's ``generator_config``), and under
+# which the trainers carry it in ``train_config`` / ``network_config``.
+LINEAGE_ID_KEY = "lineage_id"
+
+
+def _git_sha() -> str | None:
+    """Best-effort commit sha when lanfactory runs from a checkout, else None."""
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(Path(__file__).resolve().parent), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    sha = result.stdout.strip()
+    return sha if result.returncode == 0 and sha else None
+
+
+def common_run_tags(lineage_id: str) -> dict[str, str]:
+    """Tags every phase of the schema carries (v2 "common" block)."""
+    import getpass
+    import socket
+
+    tags = {
+        "schema_version": MLFLOW_SCHEMA_VERSION,
+        LINEAGE_ID_KEY: lineage_id,
+        "hostname": socket.gethostname(),
+    }
+    try:
+        tags["user"] = getpass.getuser()
+    except (KeyError, OSError):  # no passwd entry in some containers
+        pass
+    if sha := _git_sha():
+        tags["git_sha"] = sha
+    return tags
+
+
+def resolve_training_lineage_id(
+    *,
+    explicit: str | None,
+    dataset=None,
+    data_generation_runs: list[dict] | None = None,
+) -> tuple[str, str]:
+    """Pick the lineage id for a training run and say where it came from.
+
+    Precedence: ``--lineage-id`` > the id ssm-simulators stamped into the
+    training pickles (``generator_config["lineage_id"]``, read via the dataset)
+    > the ``lineage_id`` tag of the data-generation runs (MLflow lineage mode)
+    > a freshly minted UUID4 hex. Legacy data therefore still gets an id, so
+    the network -> fit half of the chain works even when the data half is
+    unknown (user decision, 2026-09).
+
+    Returns ``(lineage_id, source)`` with ``source`` one of ``"cli"``,
+    ``"training_data"``, ``"data_generation_runs"``, ``"minted"``.
+    """
+    import uuid
+
+    if explicit is not None and explicit.strip():
+        return explicit.strip(), "cli"
+
+    generator_config = getattr(dataset, "data_generator_config", None)
+    if isinstance(generator_config, dict):
+        from_data = generator_config.get(LINEAGE_ID_KEY)
+        if isinstance(from_data, str) and from_data:
+            return from_data, "training_data"
+
+    ids = [
+        r.get(LINEAGE_ID_KEY)
+        for r in (data_generation_runs or [])
+        if isinstance(r.get(LINEAGE_ID_KEY), str) and r.get(LINEAGE_ID_KEY)
+    ]
+    if ids:
+        distinct = sorted(set(ids))
+        if len(distinct) > 1:
+            logger.warning(
+                "Data-generation runs carry %d distinct lineage ids %s; "
+                "using the most recent run's (%s). Pass --lineage-id to "
+                "override.",
+                len(distinct),
+                distinct,
+                ids[0],
+            )
+        return ids[0], "data_generation_runs"
+
+    return uuid.uuid4().hex, "minted"
+
+
 def log_training_run_identity(
     *,
     model: str,
@@ -244,6 +341,8 @@ def log_training_run_identity(
     training_data_folder: Path | str | None,
     n_training_files: int,
     dataset=None,
+    lineage_id: str | None = None,
+    data_generation_run_ids: list[str] | None = None,
 ) -> None:
     """Log identity params/tags that make a training run self-describing.
 
@@ -270,6 +369,16 @@ def log_training_run_identity(
     trainer separately bulk-logs ``train_config`` whose ``n_training_files``
     is the configured *cap*, and reusing that param key with the effective
     value would make MLflow reject the trainer's entire param batch.
+
+    Schema v2 adds the common block (``schema_version="2"``, ``lineage_id``,
+    ``user``, ``hostname``, ``git_sha``) and the ``data_generation_run_ids``
+    tag. A missing ``lineage_id`` is minted so the tag is never absent.
+
+    Architecture (``layer_sizes``, ``activations``, ``train_output_type``) is
+    deliberately *not* logged here: those keys live in ``train_config`` and the
+    trainer bulk-logs them. Logging them again with a different encoding makes
+    MLflow reject the trainer's entire param batch (same trap as
+    ``n_training_files`` above).
 
     Best-effort: failures are logged, never raised — training must not die on
     a tracking hiccup. No-op when no MLflow run is active.
@@ -314,12 +423,18 @@ def log_training_run_identity(
 
         mlflow.log_params(params)
 
-        tags = {
-            "schema_version": "1",
-            "phase": "train",
-            "run_uuid": run_uuid,
-            "n_training_files_used": str(n_training_files),
-        }
+        if lineage_id is None:
+            lineage_id, _ = resolve_training_lineage_id(explicit=None, dataset=dataset)
+        tags = common_run_tags(lineage_id)
+        tags.update(
+            {
+                "phase": "train",
+                "run_uuid": run_uuid,
+                "n_training_files_used": str(n_training_files),
+            }
+        )
+        if data_generation_run_ids:
+            tags["data_generation_run_ids"] = ",".join(data_generation_run_ids)
         if training_data_folder is not None:
             tags["training_data_folder"] = str(training_data_folder)
         if config_path is not None and Path(config_path).is_file():

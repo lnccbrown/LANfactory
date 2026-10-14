@@ -32,7 +32,8 @@ def get_files_from_data_generation_experiment(
             - runs_info: list of dicts with run details (``run_id``,
               ``run_name``, ``num_files``, ``total_size_mb``, ``files``, and
               ``data_output_folder`` — the folder the data-generation run
-              wrote to, or None if that param was not logged)
+              wrote to, or None if that param was not logged — and
+              ``lineage_id``, the schema-v2 tag or None)
 
     Raises
     ------
@@ -94,8 +95,14 @@ def get_files_from_data_generation_experiment(
             if not isinstance(data_output_folder, str):
                 data_output_folder = None
 
+            # Schema v2 datagen runs tag their lineage id; None for v1 runs.
+            lineage_id = run.get("tags.lineage_id")
+            if not isinstance(lineage_id, str) or not lineage_id:
+                lineage_id = None
+
             runs_info.append(
                 {
+                    "lineage_id": lineage_id,
                     "run_id": run_id,
                     "run_name": run.get("tags.mlflow.runName", "unknown"),
                     "num_files": inventory["num_files"],

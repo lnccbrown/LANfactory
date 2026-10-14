@@ -12,15 +12,17 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 from lanfactory.hf.upload import (
     MANIFEST_FILENAME,
+    MANIFEST_SCHEMA_VERSION,
     ROOT_ONNX_SUFFIX,
     build_manifest_entry,
     canonical_root_filename,
     merge_manifest,
     names_model,
     plan_upload_placements,
+    provenance_from_artifacts,
+    run_uuid_from_filename,
     select_canonical_onnx,
     upload_model,
     write_default_model_card,
@@ -219,7 +221,7 @@ class TestManifestMerge:
 
     def test_creates_manifest_from_nothing(self):
         merged = merge_manifest(None, self.entry())
-        assert merged["schema_version"] == 1
+        assert merged["schema_version"] == MANIFEST_SCHEMA_VERSION == 2
         assert [n["model"] for n in merged["networks"]] == ["ddm"]
 
     def test_republish_replaces_rather_than_duplicates(self):
@@ -754,7 +756,6 @@ def test_generated_card_uses_the_artifact_repo_license(tmp_path):
     """franklab/HSSM declares bsd-2-clause; the code is MIT but a model card
     describes the artifact, so a generated card must not contradict the repo."""
     import yaml
-
     from lanfactory.hf import DEFAULT_LICENSE
     from lanfactory.hf.upload import write_default_model_card
 
@@ -763,3 +764,63 @@ def test_generated_card_uses_the_artifact_repo_license(tmp_path):
     write_default_model_card(tmp_path, "lan", "ddm")
     card = yaml.safe_load((tmp_path / "model_card.yaml").read_text())
     assert card["license"] == DEFAULT_LICENSE
+
+
+class TestProvenance:
+    """Schema-2 manifest entries carry the HF -> MLflow join fields."""
+
+    def test_run_uuid_from_both_trainer_conventions(self):
+        assert run_uuid_from_filename("ddm_lan_abc123_model.onnx") == "abc123"  # torch
+        assert run_uuid_from_filename("abc123_lan_ddm__model.onnx") == "abc123"  # jax
+        assert run_uuid_from_filename("model.onnx") is None
+
+    def test_reads_lineage_from_train_config_pickle(self, tmp_path):
+        import pickle
+
+        onnx = tmp_path / "ddm_lan_abc123_model.onnx"
+        onnx.write_bytes(b"x")
+        cfg = tmp_path / "ddm_lan_abc123_train_config.pickle"
+        with open(cfg, "wb") as f:
+            pickle.dump(
+                {
+                    "n_epochs": 2,
+                    "lineage_id": "lin-9",
+                    "mlflow_run_id": "run-9",
+                    "mlflow_tracking_uri": "http://mlflow:5000",
+                },
+                f,
+            )
+        extra = provenance_from_artifacts([onnx, cfg], onnx)
+        assert extra == {
+            "run_uuid": "abc123",
+            "lineage_id": "lin-9",
+            "mlflow_run_id": "run-9",
+            "mlflow_tracking_uri": "http://mlflow:5000",
+        }
+
+    def test_legacy_artifacts_yield_partial_or_empty_extra(self, tmp_path):
+        import pickle
+
+        onnx = tmp_path / "abc_lan_ddm__model.onnx"
+        onnx.write_bytes(b"x")
+        cfg = tmp_path / "abc_lan_ddm__train_config.pickle"
+        with open(cfg, "wb") as f:
+            pickle.dump({"n_epochs": 2}, f)  # v1 trainer: no provenance keys
+        assert provenance_from_artifacts([onnx, cfg], onnx) == {"run_uuid": "abc"}
+        assert provenance_from_artifacts([tmp_path / "model.onnx"]) == {}
+
+    def test_unreadable_pickle_is_ignored(self, tmp_path):
+        cfg = tmp_path / "x_train_config.pickle"
+        cfg.write_bytes(b"not a pickle")
+        assert provenance_from_artifacts([cfg]) == {}
+
+    def test_entry_carries_extra(self):
+        entry = build_manifest_entry(
+            network_type="lan",
+            model_name="ddm",
+            root_filename="ddm.onnx",
+            folder_path="lan/ddm",
+            files=[Path("a.onnx")],
+            extra={"lineage_id": "lin", "run_uuid": "u"},
+        )
+        assert entry["lineage_id"] == "lin" and entry["run_uuid"] == "u"

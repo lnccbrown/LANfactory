@@ -71,6 +71,8 @@ def make_training_pickle(path: Path, features_key="lan_data", label_key="lan_lab
 
 class TestLogTrainingRunIdentity:
     def _log_and_fetch(self, tmp_tracking, tmp_path, **overrides):
+        """Log identity into a fresh run and return it. ``overrides`` may
+        replace any kwarg of ``log_training_run_identity``."""
         config_yaml = tmp_path / "train.yaml"
         config_yaml.write_text("NETWORK_TYPE: lan\nMODEL: ddm\n")
 
@@ -171,7 +173,7 @@ class TestLogTrainingRunIdentity:
 
     def test_schema_tags(self, tmp_tracking, tmp_path):
         run = self._log_and_fetch(tmp_tracking, tmp_path)
-        assert run.data.tags["schema_version"] == "1"
+        assert run.data.tags["schema_version"] == "2"
         assert run.data.tags["phase"] == "train"
 
     def test_no_dataset_still_logs_core_identity(self, tmp_tracking, tmp_path):
@@ -203,6 +205,67 @@ class TestLogTrainingRunIdentity:
             training_data_folder=None,
             n_training_files=1,
         )
+
+    def test_v2_common_tags_and_minted_lineage(self, tmp_tracking, tmp_path):
+        """No lineage anywhere -> minted uuid; common block always present."""
+        run = self._log_and_fetch(tmp_tracking, tmp_path)
+        tags = run.data.tags
+        assert tags["schema_version"] == "2"
+        assert len(tags["lineage_id"]) == 32
+        int(tags["lineage_id"], 16)
+        assert tags["hostname"]
+        assert tags["user"]
+
+    def test_lineage_id_from_training_pickles(self, tmp_tracking, tmp_path):
+        """The id ssm-simulators stamped into generator_config is reused."""
+        dataset = SimpleNamespace(
+            input_dim=6,
+            data_model_config=MODEL_CONFIG,
+            data_generator_config={"model": "ddm", "lineage_id": "from-data-7"},
+        )
+        run = self._log_and_fetch(tmp_tracking, tmp_path, dataset=dataset)
+        assert run.data.tags["lineage_id"] == "from-data-7"
+
+    def test_explicit_lineage_id_wins(self, tmp_tracking, tmp_path):
+        dataset = SimpleNamespace(
+            input_dim=6,
+            data_model_config=MODEL_CONFIG,
+            data_generator_config={"lineage_id": "from-data"},
+        )
+        run = self._log_and_fetch(
+            tmp_tracking, tmp_path, dataset=dataset, lineage_id="explicit"
+        )
+        assert run.data.tags["lineage_id"] == "explicit"
+
+    def test_datagen_run_ids_tag(self, tmp_tracking, tmp_path):
+        run = self._log_and_fetch(
+            tmp_tracking, tmp_path, data_generation_run_ids=["r1", "r2"]
+        )
+        assert run.data.tags["data_generation_run_ids"] == "r1,r2"
+
+    def test_identity_params_never_collide_with_train_config(
+        self, tmp_tracking, tmp_path
+    ):
+        """The trainer bulk-logs train_config; re-logging any of its keys here
+        with a different encoding makes MLflow reject that whole batch (seen
+        live with ``activations`` during the schema-v2 smoke run)."""
+        from lanfactory.cli.utils import _get_train_network_config
+
+        run = self._log_and_fetch(tmp_tracking, tmp_path)
+        yaml_path = tmp_path / "full.yaml"
+        yaml_path.write_text(
+            "NETWORK_TYPE: lan\nMODEL: ddm\nLAYER_SIZES: [[10, 1]]\n"
+            "ACTIVATIONS: [['tanh']]\nN_EPOCHS: 1\nOPTIMIZER_: adam\n"
+            "N_TRAINING_FILES: 1\nTRAIN_VAL_SPLIT: 0.5\nWEIGHT_DECAY: 0.0\n"
+            "CPU_BATCH_SIZE: 1\nGPU_BATCH_SIZE: 1\nSHUFFLE: true\n"
+            "LABELS_LOWER_BOUND: np.log(1e-7)\nLEARNING_RATE: 0.001\n"
+            "LR_SCHEDULER: reduce_on_plateau\nLR_SCHEDULER_PARAMS: {}\n"
+            "TRAINING_DATA_FOLDER: x\n"
+        )
+        train_config = _get_train_network_config(str(yaml_path), 0)["config_dict"][
+            "train_config"
+        ]
+        assert not set(run.data.params) & set(train_config)
 
 
 class TestDatasetModelConfigRetention:
