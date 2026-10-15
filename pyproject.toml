@@ -74,7 +74,7 @@ all = [
 [dependency-groups]
 lint = [
     # ruff moves its default rule set at minor releases (0.16: 59 -> 413 default
-    # rules; 0.17 dropped the DTZ rules), so bump the minor deliberately with
+    # rules; 0.17 dropped most DTZ rules), so bump the minor deliberately with
     # `ruff check --fix` plus a triage pass of the new findings. Keep the
     # ruff-pre-commit rev in .pre-commit-config.yaml in lockstep.
     "ruff>=0.17,<0.18",
