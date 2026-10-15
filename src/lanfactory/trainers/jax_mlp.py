@@ -223,7 +223,9 @@ class JaxMLP(nn.Module):
         elif isinstance(state, dict):
             loaded_state = state
         else:
-            raise ValueError("state argument has to be a dictionary or a string!")  # noqa: TRY004 - ValueError is the tested public contract
+            raise ValueError(  # noqa: TRY004 - ValueError is the tested public contract
+                "state argument has to be a dictionary or a string!"
+            )
 
         # Make forward pass
         net_forward = partial(self.apply, loaded_state)

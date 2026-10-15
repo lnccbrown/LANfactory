@@ -150,7 +150,8 @@ extend-exclude = ["notebooks/*", "docs/*", "docs/basic_tutorial/basic_tutorial.i
 ignore = [
     # Blind `except Exception` is deliberate at the MLflow / HuggingFace /
     # artifact-IO boundaries: tracking and metadata are best-effort and must
-    # never abort a training run (the error is logged, execution continues).
+    # never abort a training run silently (the error is logged; most sites
+    # continue, the two dry-run checks end the run with a non-zero exit).
     "BLE001",
 ]
 
