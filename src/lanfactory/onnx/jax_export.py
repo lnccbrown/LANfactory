@@ -54,9 +54,8 @@ def export_forward_to_onnx(
     dims, so the trainers' forward functions qualify unchanged).
     """
     import jax.numpy as jnp
-    from jax2onnx import to_onnx
-
     import onnx as onnx_lib
+    from jax2onnx import to_onnx
 
     model_proto = to_onnx(
         forward,

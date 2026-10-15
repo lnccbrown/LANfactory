@@ -23,14 +23,15 @@ from importlib.resources import as_file, files
 from pathlib import Path
 
 import jax
-import lanfactory
 import psutil
 import typer
+from torch.utils.data import DataLoader
+
+import lanfactory
 from lanfactory.cli.utils import (
     _get_train_network_config,
     log_training_run_identity,
 )
-from torch.utils.data import DataLoader
 
 app = typer.Typer()
 
@@ -171,8 +172,9 @@ def main(
 
     if mlflow_tracking_enabled:
         try:
-            import mlflow
             import os
+
+            import mlflow
 
             # Set tracking URI with priority: CLI arg > env var > default
             if mlflow_tracking_uri:
@@ -241,8 +243,9 @@ def main(
 
             if not mlflow_tracking_enabled:
                 # Need to initialize MLflow just for querying
-                import mlflow
                 import os
+
+                import mlflow
 
                 # Use same logic as above for tracking URI
                 if mlflow_tracking_uri:

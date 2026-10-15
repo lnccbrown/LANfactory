@@ -138,7 +138,10 @@ markers = [
 
 [tool.ruff]
 line-length = 88
-src = ["src/lanfactory", "tests"]
+# Module roots for first-party detection (import sorting). `src` resolves
+# `lanfactory`; `.` resolves `tests`. Do not add `tests` itself: `tests/onnx/`
+# would make ruff treat the PyPI `onnx` package as first-party.
+src = [".", "src"]
 exclude = ["notebooks/*", "docs/*", "docs/basic_tutorial/basic_tutorial.ipynb"]
 
 # Coverage settings

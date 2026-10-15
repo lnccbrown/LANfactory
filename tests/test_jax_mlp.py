@@ -2,11 +2,11 @@
 
 import pickle
 
-import pytest
 import jax
 import jax.numpy as jnp
+import pytest
 
-from lanfactory.trainers.jax_mlp import JaxMLPFactory, JaxMLP
+from lanfactory.trainers.jax_mlp import JaxMLP, JaxMLPFactory
 
 
 def test_mlp_jax_factory_with_dict():
@@ -163,8 +163,9 @@ def test_mlp_jax_inference_mode_with_logits():
 
 def test_mlp_jax_load_state_from_file_error():
     """Test JaxMLP load_state_from_file raises error when file_path is None."""
-    from lanfactory.trainers.jax_mlp import JaxMLPFactory
     import pytest
+
+    from lanfactory.trainers.jax_mlp import JaxMLPFactory
 
     network_config = {
         "layer_sizes": [10, 10, 1],
@@ -180,8 +181,9 @@ def test_mlp_jax_load_state_from_file_error():
 
 def test_mlp_jax_load_state_from_file_without_input_dim(tmp_path):
     """Test JaxMLP load_state_from_file without providing input_dim."""
-    from lanfactory.trainers.jax_mlp import JaxMLPFactory
     import flax.serialization
+
+    from lanfactory.trainers.jax_mlp import JaxMLPFactory
 
     network_config = {
         "layer_sizes": [10, 10, 1],
@@ -242,8 +244,9 @@ def test_mlp_jax_make_forward_partial_with_dict_state(tmp_path):
 
 def test_mlp_jax_make_forward_partial_without_jit(tmp_path):
     """Test JaxMLP make_forward_partial without JIT compilation."""
-    from lanfactory.trainers.jax_mlp import JaxMLPFactory
     import flax.serialization
+
+    from lanfactory.trainers.jax_mlp import JaxMLPFactory
 
     network_config = {
         "layer_sizes": [10, 10, 1],
@@ -276,8 +279,9 @@ def test_mlp_jax_make_forward_partial_without_jit(tmp_path):
 
 def test_mlp_jax_make_forward_partial_invalid_state_type():
     """Test JaxMLP make_forward_partial raises error with invalid state type."""
-    from lanfactory.trainers.jax_mlp import JaxMLPFactory
     import pytest
+
+    from lanfactory.trainers.jax_mlp import JaxMLPFactory
 
     network_config = {
         "layer_sizes": [10, 10, 1],

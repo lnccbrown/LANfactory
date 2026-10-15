@@ -15,10 +15,10 @@ from .config import GridSpec, ModelSpec, PlotConfig
 from .loaders import get_torch_mlp
 
 __all__ = [
+    "GridSpec",
+    "ModelSpec",
+    "PlotConfig",
     "get_torch_mlp",
     "kde_vs_lan_likelihoods",
     "lan_manifold",
-    "ModelSpec",
-    "PlotConfig",
-    "GridSpec",
 ]

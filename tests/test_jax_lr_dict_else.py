@@ -3,6 +3,7 @@
 from types import SimpleNamespace as NS
 
 import jax
+
 from lanfactory.trainers.jax_mlp import JaxMLPFactory, ModelTrainerJaxMLP, optax
 
 NET = {
@@ -19,7 +20,7 @@ KEYS = ("init_value", "peak_value", "end_value")
 
 def test_lr_dict_default_and_supplied(monkeypatch):
     net = JaxMLPFactory(network_config=NET, train=True)
-    make = lambda tc: ModelTrainerJaxMLP(tc, net, DL, None)  # noqa: E731
+    make = lambda tc: ModelTrainerJaxMLP(tc, net, DL, None)
     real, seen = optax.warmup_cosine_decay_schedule, []
     monkeypatch.setattr(
         optax,

@@ -722,7 +722,6 @@ class TestReviewFixes:
 
         def spy_fetch(repo_id, revision, token):
             calls.append(("fetch_manifest", revision))
-            return None
 
         monkeypatch.setattr(upload_module, "fetch_existing_manifest", spy_fetch)
 

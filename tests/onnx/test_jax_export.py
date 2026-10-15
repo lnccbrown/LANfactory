@@ -8,11 +8,12 @@ but moving) and in our own wrapper.
 import pickle
 from pathlib import Path
 
-import lanfactory
 import numpy as np
 import pytest
-from lanfactory.onnx import transform_jax_to_onnx
 from torch.utils.data import DataLoader
+
+import lanfactory
+from lanfactory.onnx import transform_jax_to_onnx
 
 onnx = pytest.importorskip("onnx")
 ort = pytest.importorskip("onnxruntime")
@@ -243,6 +244,7 @@ class TestLogitsHead:
         from functools import partial
 
         import jax.numpy as jnp
+
         from lanfactory.trainers.jax_mlp import JaxMLP
 
         f = make_training_pickle(

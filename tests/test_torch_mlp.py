@@ -1,15 +1,16 @@
 """Tests for the DatasetTorch class and related components."""
 
 import pickle
+from unittest.mock import MagicMock
+
 import numpy as np
 import pytest
 import torch
-from unittest.mock import MagicMock
 
 from lanfactory.trainers.torch_mlp import (
     DatasetTorch,
-    ModelTrainerTorchMLP,
     LoadTorchMLPInfer,
+    ModelTrainerTorchMLP,
     TorchMLP,
 )
 
@@ -987,12 +988,13 @@ def test_torch_mlp_with_non_linear_output_activation():
 
 def test_model_trainer_torch_mlp_with_none_train_config(create_mock_data_files):
     """Test ModelTrainerTorchMLP raises error when train_config is None."""
+    import pytest
+
     from lanfactory.trainers.torch_mlp import (
         DatasetTorch,
         ModelTrainerTorchMLP,
         TorchMLP,
     )
-    import pytest
 
     file_list = create_mock_data_files(n_files=1)
 
@@ -1113,7 +1115,7 @@ def test_make_train_valid_dataloaders_raises_no_valid_files(create_mock_data_fil
 
 def test_torch_mlp_factory_with_dict():
     """Test TorchMLPFactory with dict config."""
-    from lanfactory.trainers.torch_mlp import TorchMLPFactory, TorchMLP
+    from lanfactory.trainers.torch_mlp import TorchMLP, TorchMLPFactory
 
     network_config = {
         "layer_sizes": [10, 10, 1],
@@ -1129,7 +1131,7 @@ def test_torch_mlp_factory_with_dict():
 
 def test_torch_mlp_factory_with_pickle_path(tmp_path):
     """Test TorchMLPFactory with path to pickled config."""
-    from lanfactory.trainers.torch_mlp import TorchMLPFactory, TorchMLP
+    from lanfactory.trainers.torch_mlp import TorchMLP, TorchMLPFactory
 
     network_config = {
         "layer_sizes": [10, 10, 1],

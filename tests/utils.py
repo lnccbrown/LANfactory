@@ -1,7 +1,6 @@
-import shutil
-import pathlib
-
 import logging
+import pathlib
+import shutil
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +51,7 @@ def clean_out_folder(folder: str | pathlib.Path | None = None, dry_run=True) -> 
         except PermissionError:
             logger.error(f"Permission denied when trying to remove folder '{folder}'.")
         except Exception as e:
-            logger.error(f"Error removing folder '{folder}': {str(e)}")
+            logger.error(f"Error removing folder '{folder}': {e!s}")
     else:
         logger.error(f"Folder '{folder}' does not exist.")
 

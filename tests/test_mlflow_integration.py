@@ -4,8 +4,8 @@ import pickle
 import shutil
 from pathlib import Path
 
-import pytest
 import numpy as np
+import pytest
 
 try:
     import mlflow
@@ -307,6 +307,7 @@ class TestMLflowIntegrationWithTrainers:
     ):
         """Test that JAX trainer logs to MLflow correctly."""
         from torch.utils.data import DataLoader
+
         from lanfactory.trainers.jax_mlp import JaxMLPFactory, ModelTrainerJaxMLP
         from lanfactory.trainers.torch_mlp import DatasetTorch
 
@@ -401,10 +402,11 @@ class TestMLflowIntegrationWithTrainers:
     ):
         """Test that PyTorch trainer logs to MLflow correctly."""
         from torch.utils.data import DataLoader
+
         from lanfactory.trainers.torch_mlp import (
-            TorchMLP,
-            ModelTrainerTorchMLP,
             DatasetTorch,
+            ModelTrainerTorchMLP,
+            TorchMLP,
         )
 
         tracking_uri = test_mlflow_dir["tracking_uri"]
@@ -640,10 +642,11 @@ class TestMLflowEdgeCases:
     ):
         """Test that trainers work correctly when MLflow is disabled."""
         from torch.utils.data import DataLoader
+
         from lanfactory.trainers.torch_mlp import (
-            TorchMLP,
-            ModelTrainerTorchMLP,
             DatasetTorch,
+            ModelTrainerTorchMLP,
+            TorchMLP,
         )
 
         # Generate minimal training data

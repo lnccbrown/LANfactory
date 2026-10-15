@@ -1,14 +1,16 @@
+import logging
+from copy import deepcopy
+
+import numpy as np
 import pytest
 import ssms
-import lanfactory
-import numpy as np
-from copy import deepcopy
 import torch
+
+import lanfactory
+
 from .constants import (
     TEST_GENERATOR_CONSTANTS,
 )
-
-import logging
 
 logger = logging.getLogger(__name__)
 

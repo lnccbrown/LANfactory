@@ -1,16 +1,18 @@
+# import logger
+import logging
+from copy import deepcopy
+
+import jax.numpy as jnp
+import numpy as np
 import pytest
 import ssms
-import lanfactory
-import numpy as np
-from copy import deepcopy
-import jax.numpy as jnp
 import torch
+
+import lanfactory
+
 from .constants import (
     TEST_GENERATOR_CONSTANTS,
 )
-
-# import logger
-import logging
 
 logger = logging.getLogger(__name__)
 

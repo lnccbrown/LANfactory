@@ -141,8 +141,9 @@ def log_training_data_lineage(
             - extra_files
     """
     try:
-        import mlflow
         import os
+
+        import mlflow
     except ImportError:
         logger.error("mlflow package not installed")
         return {}
