@@ -144,7 +144,7 @@ line-length = 88
 # `lanfactory`; `.` resolves `tests`. Do not add `tests` itself: `tests/onnx/`
 # would make ruff treat the PyPI `onnx` package as first-party.
 src = [".", "src"]
-exclude = ["notebooks/*", "docs/*", "docs/basic_tutorial/basic_tutorial.ipynb"]
+extend-exclude = ["notebooks/*", "docs/*", "docs/basic_tutorial/basic_tutorial.ipynb"]
 
 [tool.ruff.lint]
 ignore = [
@@ -152,9 +152,6 @@ ignore = [
     # artifact-IO boundaries: tracking and metadata are best-effort and must
     # never abort a training run (the error is logged, execution continues).
     "BLE001",
-    # Bad-type arguments raise ValueError by established public contract
-    # (tests assert it); switching to TypeError would be a behaviour change.
-    "TRY004",
 ]
 
 [tool.ruff.lint.flake8-bugbear]

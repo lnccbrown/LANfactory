@@ -348,3 +348,26 @@ def test_mlp_jax_with_non_linear_output_activation():
 
     assert output.shape == (5, 1)
     assert isinstance(output, jnp.ndarray)
+
+
+def test_trainer_jax_mlp_non_int_seed_raises_value_error(tmp_path):
+    """train_and_evaluate rejects a non-int seed with ValueError, not TypeError."""
+    from lanfactory.trainers.jax_mlp import ModelTrainerJaxMLP
+
+    network_config = {
+        "layer_sizes": [4, 1],
+        "activations": ["tanh", "linear"],
+        "train_output_type": "logprob",
+    }
+    model = JaxMLPFactory(network_config=network_config, train=True)
+    trainer = ModelTrainerJaxMLP(
+        {"loss": "huber", "n_epochs": 1}, model, None, None, seed=1.5
+    )
+
+    with pytest.raises(ValueError, match="seed argument is not an integer"):
+        trainer.train_and_evaluate(
+            output_folder=tmp_path,
+            network_type="lan",
+            save_outputs=False,
+            export_onnx=False,
+        )

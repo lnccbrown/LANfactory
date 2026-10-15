@@ -52,7 +52,7 @@ def JaxMLPFactory(
     elif isinstance(network_config, dict):
         network_config_internal = network_config
     else:
-        raise ValueError(
+        raise ValueError(  # noqa: TRY004 - ValueError is the tested public contract
             "network_config argument is not passed as either a dictionary or a string (path to a file)!"
         )
 
@@ -223,7 +223,7 @@ class JaxMLP(nn.Module):
         elif isinstance(state, dict):
             loaded_state = state
         else:
-            raise ValueError("state argument has to be a dictionary or a string!")
+            raise ValueError("state argument has to be a dictionary or a string!")  # noqa: TRY004 - ValueError is the tested public contract
 
         # Make forward pass
         net_forward = partial(self.apply, loaded_state)
@@ -560,7 +560,7 @@ class ModelTrainerJaxMLP:
 
         # Initialize network
         if not isinstance(self.seed, int):
-            raise ValueError(
+            raise ValueError(  # noqa: TRY004 - ValueError is the tested public contract
                 "seed argument is not an integer, "
                 + "please specify a valid seed to make this code reproducible!"
             )
