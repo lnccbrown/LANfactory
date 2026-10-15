@@ -559,7 +559,7 @@ def _upload_to_hf(  # pragma: no cover
     if update_manifest:
         try:
             parent_commit = api.repo_info(repo_id=repo_id, revision=revision).sha
-        except Exception as e:  # noqa: BLE001 - optimistic locking is a bonus
+        except Exception as e:  # optimistic locking is a bonus
             logger.warning(f"Could not resolve parent commit for {repo_id}: {e}")
 
     # Refuse to silently replace a network that released HSSM versions are

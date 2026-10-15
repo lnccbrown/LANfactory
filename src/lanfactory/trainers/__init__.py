@@ -12,7 +12,7 @@ from .torch_mlp import (
     make_train_valid_dataloaders,
 )
 
-__all__ = [
+__all__ = [  # noqa: RUF022 - grouped by backend, not alphabetically
     # Dataset and DataLoader helpers
     "DatasetTorch",
     "make_dataloader",

@@ -37,7 +37,7 @@ def _picklable_copy(config):
         try:
             pickle.dumps(value)
             out[key] = value
-        except Exception:  # noqa: BLE001 - any unpicklable value gets repr'd
+        except Exception:  # any unpicklable value gets repr'd
             out[key] = repr(value)
     return out
 
@@ -115,7 +115,8 @@ class DatasetTorch(torch.utils.data.Dataset):
 
     def __load_file(self, file_index: int) -> None:
         # Load file and shuffle the indices
-        self.tmp_data = pickle.load(open(self.file_ids[file_index], "rb"))
+        with open(self.file_ids[file_index], "rb") as data_file:
+            self.tmp_data = pickle.load(data_file)
         shuffle_idx = np.random.choice(
             self.tmp_data[self.features_key].shape[0],
             size=self.tmp_data[self.features_key].shape[0],
@@ -129,7 +130,8 @@ class DatasetTorch(torch.utils.data.Dataset):
 
     def __init_file_shape(self) -> None:
         # Function gets dimensionalities form a test data file
-        init_file = pickle.load(open(self.file_ids[0], "rb"))
+        with open(self.file_ids[0], "rb") as data_file:
+            init_file = pickle.load(data_file)
         self.file_shape_dict = {
             "inputs": init_file[self.features_key].shape,
             "labels": init_file[self.label_key].shape,
@@ -543,7 +545,8 @@ class ModelTrainerTorchMLP:
             print("train_config is passed as string or path: \n", train_config)
             try:
                 logger.info("Trying to load string as path to pickle file: ")
-                self.train_config: dict = pickle.load(open(train_config, "rb"))
+                with open(train_config, "rb") as config_file:
+                    self.train_config: dict = pickle.load(config_file)
             except (OSError, pickle.PickleError) as e:  # pragma: no cover
                 logger.error(
                     f"Error loading training config from file {train_config}: {e!s}"

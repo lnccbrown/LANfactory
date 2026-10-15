@@ -165,14 +165,16 @@ def test_transform_to_onnx_creates_correct_input_tensor(mock_network_config):
 def test_transform_to_onnx_missing_config_file():
     """Test that transform_to_onnx raises error for missing config file."""
     # Mock open to raise FileNotFoundError
-    with patch("builtins.open", side_effect=FileNotFoundError("File not found")):
-        with pytest.raises(FileNotFoundError):
-            transform_to_onnx(
-                network_config_file="/nonexistent/config.pickle",
-                state_dict_file="/fake/state.pt",
-                input_shape=6,
-                output_onnx_file="/fake/output.onnx",
-            )
+    with (
+        patch("builtins.open", side_effect=FileNotFoundError("File not found")),
+        pytest.raises(FileNotFoundError),
+    ):
+        transform_to_onnx(
+            network_config_file="/nonexistent/config.pickle",
+            state_dict_file="/fake/state.pt",
+            input_shape=6,
+            output_onnx_file="/fake/output.onnx",
+        )
 
 
 def test_transform_to_onnx_missing_state_dict_file(mock_network_config):

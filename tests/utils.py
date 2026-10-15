@@ -60,7 +60,7 @@ def print_tree(
     path: pathlib.Path | str,
     prefix: str = "",
     logger: logging.Logger | None = logger,
-    out_str_list: list[str] = [],
+    out_str_list: list[str] | None = None,
 ) -> list[str]:
     """Print a directory tree structure starting from the given path.
 
@@ -84,6 +84,8 @@ def print_tree(
         from pathlib import Path
         print_tree(Path("./my_directory"))
     """
+    if out_str_list is None:
+        out_str_list = []
     path = pathlib.Path(path)
     contents = sorted(path.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
     for index, item in enumerate(contents):

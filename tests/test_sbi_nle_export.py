@@ -191,7 +191,7 @@ def test_nle_log_prob_ordering_matches_analytical_gaussian(
 def test_transform_rejects_unsupported_score_estimator(tmp_path: Path) -> None:
     """Estimators in the unsupported set should fail loudly."""
 
-    class ScoreEstimator(torch.nn.Module):
+    class ScoreEstimator(torch.nn.Module):  # name is the signal
         pass
 
     with pytest.raises(ValueError, match="does not support"):

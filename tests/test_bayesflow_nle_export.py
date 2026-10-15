@@ -18,6 +18,7 @@ os.environ["KERAS_BACKEND"] = "torch"
 os.environ.setdefault("KERAS_TORCH_DEVICE", "cpu")
 
 from pathlib import Path
+from typing import ClassVar
 
 import jax
 
@@ -399,7 +400,9 @@ def test_nle_wrapper_standardizes_conditions_only() -> None:
             return (samples.sum() + conditions.sum()).reshape(1)
 
     class _Standardizer:
-        standardize_layers = {"inference_conditions": _FakeStandardizeLayer(_THETA_DIM)}
+        standardize_layers: ClassVar[dict] = {
+            "inference_conditions": _FakeStandardizeLayer(_THETA_DIM)
+        }
 
     class _Approx:
         adapter = None

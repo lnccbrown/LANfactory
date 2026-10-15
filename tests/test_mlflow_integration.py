@@ -1,5 +1,6 @@
 """Tests for MLflow integration in LANfactory trainers and utilities."""
 
+import contextlib
 import pickle
 import shutil
 from pathlib import Path
@@ -48,10 +49,8 @@ def cleanup_mlflow():
         shutil.rmtree(mlruns_path)
 
     # Reset to original URI (or default)
-    try:
+    with contextlib.suppress(Exception):
         mlflow.set_tracking_uri(original_uri)
-    except Exception:
-        pass
 
 
 @pytest.fixture

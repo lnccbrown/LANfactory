@@ -128,7 +128,7 @@ def test_mlp_jax_forward_with_non_linear_output_activation():
     x = jax.random.normal(key, (5, 5))
 
     # Initialize model state
-    key1, key2 = jax.random.split(key)
+    key1, _key2 = jax.random.split(key)
     state = model.init(key1, x)
 
     # Forward pass
@@ -152,7 +152,7 @@ def test_mlp_jax_inference_mode_with_logits():
     x = jax.random.normal(key, (5, 5))
 
     # Initialize model state
-    key1, key2 = jax.random.split(key)
+    key1, _key2 = jax.random.split(key)
     state = model.init(key1, x)
 
     # Forward pass in inference mode

@@ -91,7 +91,8 @@ def _make_train_network_configs(
         save_folder = Path(save_folder)
         save_folder.mkdir(parents=True, exist_ok=True)  # pragma: no cover
         save_name = save_folder / save_name
-        pickle.dump(config_dict, open(save_name, "wb"))
+        with open(save_name, "wb") as config_file:
+            pickle.dump(config_dict, config_file)
         print(f"Saved to: {save_name}")
     else:
         print("No save name provided, config not saved to file.")
@@ -101,7 +102,8 @@ def _make_train_network_configs(
 
 def _get_train_network_config(yaml_config_path: str | Path | None = None, net_index=0):
     if yaml_config_path is not None:
-        basic_config = yaml.safe_load(open(yaml_config_path, "rb"))
+        with open(yaml_config_path, "rb") as yaml_file:
+            basic_config = yaml.safe_load(yaml_file)
         network_type = basic_config["NETWORK_TYPE"]
     else:
         raise ValueError("No YAML config path provided")
@@ -293,5 +295,5 @@ def log_training_run_identity(
             if os.getenv(env_key):
                 tags[tag] = os.environ[env_key]
         mlflow.set_tags(tags)
-    except Exception as e:  # noqa: BLE001 - tracking must never kill training
+    except Exception as e:  # tracking must never kill training
         logger.error("Failed to log run identity to MLflow: %s", e)

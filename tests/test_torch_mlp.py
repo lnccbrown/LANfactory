@@ -111,7 +111,7 @@ def test_dataset_torch_getitem_loads_file_on_first_access(
     # First access should load file and populate tmp_data
     assert dataset.tmp_data == {}  # Initially empty
 
-    X, y = dataset[0]
+    _X, _y = dataset[0]
 
     # Now tmp_data should be populated
     assert dataset.tmp_data != {}
@@ -133,9 +133,9 @@ def test_dataset_torch_getitem_multiple_batches_same_file(
     )
 
     # Access multiple batches from the same file
-    X0, y0 = dataset[0]
-    X1, y1 = dataset[1]
-    X2, y2 = dataset[2]
+    X0, _y0 = dataset[0]
+    X1, _y1 = dataset[1]
+    X2, _y2 = dataset[2]
 
     # All should have correct shape
     assert X0.shape == (200, 6)
@@ -164,22 +164,22 @@ def test_dataset_torch_getitem_crosses_file_boundary(
     # So indices 0-3 are from file 0, 4-7 from file 1, 8-11 from file 2
 
     # Access batch from first file
-    X0, y0 = dataset[0]
+    _X0, _y0 = dataset[0]
     first_file_data = dataset.tmp_data["lan_data"].copy()
 
     # Access batch from same file
-    X3, y3 = dataset[3]
+    _X3, _y3 = dataset[3]
     assert np.array_equal(dataset.tmp_data["lan_data"], first_file_data)
 
     # Access first batch from second file - should trigger file load
-    X4, y4 = dataset[4]
+    _X4, _y4 = dataset[4]
     second_file_data = dataset.tmp_data["lan_data"]
 
     # Data should be different (new file loaded)
     assert not np.array_equal(second_file_data, first_file_data)
 
     # Access first batch from third file
-    X8, y8 = dataset[8]
+    _X8, _y8 = dataset[8]
     third_file_data = dataset.tmp_data["lan_data"]
 
     # Should be different from second file
@@ -201,7 +201,7 @@ def test_dataset_torch_getitem_with_label_bounds(
         label_key="lan_labels",
     )
 
-    X, y = dataset[0]
+    _X, y = dataset[0]
 
     # Labels should be clipped to bounds
     assert np.all(y >= -10.0)
@@ -272,7 +272,7 @@ def test_dataset_torch_empty_tmp_data_triggers_load(
     )
 
     # Access batch 2 (not 0), but tmp_data is empty
-    X, y = dataset[2]
+    X, _y = dataset[2]
 
     # Should work - file was loaded due to empty tmp_data
     assert X.shape == (200, 6)
@@ -343,7 +343,7 @@ def test_dataset_torch_label_bounds(tmp_path):
         label_key="lan_labels",
     )
 
-    X, y = dataset[0]
+    _X, y = dataset[0]
 
     # Labels should be clipped to bounds
     assert np.all(y >= -10.0)
@@ -368,7 +368,7 @@ def test_dataset_torch_3d_labels_raises_error(tmp_path):
     )
 
     with pytest.raises(ValueError, match="Label data has unexpected shape"):
-        X, y = dataset[0]
+        _X, _y = dataset[0]
 
 
 def test_dataset_torch_batch_size_not_divisible_raises_error(tmp_path):

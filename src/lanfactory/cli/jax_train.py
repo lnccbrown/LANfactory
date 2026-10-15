@@ -1,4 +1,3 @@
-#!/usr/bin/env -S uv run --script
 """Command-line interface for training JAX neural networks.
 
 This module provides a CLI tool for training JAX neural networks using configurations
@@ -322,7 +321,7 @@ def main(
     # Mode 2: Validation - verify MLflow files exist in training_data_folder
     if mlflow_lineage_info and training_data_folder:
         expected_files = set(mlflow_lineage_info["all_files"])
-        actual_files = set(f.name for f in valid_file_list)
+        actual_files = {f.name for f in valid_file_list}
 
         missing_files = expected_files - actual_files
         extra_files = actual_files - expected_files
@@ -473,13 +472,8 @@ def main(
         ]
     )
 
-    pickle.dump(
-        network_config,
-        open(
-            networks_path / file_name_suffix,
-            "wb",
-        ),
-    )
+    with open(networks_path / file_name_suffix, "wb") as config_file:
+        pickle.dump(network_config, config_file)
 
     if mlflow_tracking_enabled:
         # Identity params/tags: make the run self-describing (model, bounds,
