@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 import os
+import warnings
+from collections.abc import Callable
 from os import PathLike
 from typing import Any
-import warnings
 
 import numpy as np
 from numpy.typing import NDArray

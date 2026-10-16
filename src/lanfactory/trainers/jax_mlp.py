@@ -2,6 +2,7 @@
 are used to train Jax based LANs and CPNs.
 """
 
+import contextlib
 import pickle
 from collections.abc import Callable, Sequence
 from functools import partial
@@ -51,7 +52,7 @@ def JaxMLPFactory(
     elif isinstance(network_config, dict):
         network_config_internal = network_config
     else:
-        raise ValueError(
+        raise ValueError(  # noqa: TRY004 - ValueError is the tested public contract
             "network_config argument is not passed as either a dictionary or a string (path to a file)!"
         )
 
@@ -134,11 +135,11 @@ class JaxMLP(nn.Module):
                     x = self.activation_funs[i](x)
 
         if (not self.train) and (self.train_output_type == "logprob"):
-            x = x  # just for pedagogy
+            pass  # identity: logprob networks already emit log-likelihoods
         elif (not self.train) and (self.train_output_type == "logits"):
             x = -jnp.log(1 + jnp.exp(-x))
         elif not self.train:  # pragma: no cover
-            x = x  # just for pedagogy
+            pass  # identity for any other output type
 
         return x
 
@@ -222,7 +223,9 @@ class JaxMLP(nn.Module):
         elif isinstance(state, dict):
             loaded_state = state
         else:
-            raise ValueError("state argument has to be a dictionary or a string!")
+            raise ValueError(  # noqa: TRY004 - ValueError is the tested public contract
+                "state argument has to be a dictionary or a string!"
+            )
 
         # Make forward pass
         net_forward = partial(self.apply, loaded_state)
@@ -339,10 +342,10 @@ class ModelTrainerJaxMLP:
 
             if train:
                 grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-                (loss, pred), grads = grad_fn(state.params)
+                (loss, _pred), grads = grad_fn(state.params)
                 return grads, loss
             else:
-                loss, pred = loss_fn(state.params)
+                loss, _pred = loss_fn(state.params)
                 return loss
 
         return apply_model_core
@@ -434,8 +437,7 @@ class ModelTrainerJaxMLP:
 
         # Run training for one epoch
         start_time = time()
-        step = 0
-        for X, y in tmp_dataloader:
+        for step, (X, y) in enumerate(tmp_dataloader):
             X_jax = jnp.array(X)
             y_jax = jnp.array(y)
 
@@ -461,10 +463,8 @@ class ModelTrainerJaxMLP:
                     )
 
                 if self.mlflow_on:
-                    try:
+                    with contextlib.suppress(Exception):
                         mlflow.log_metric("loss", float(loss), step=int(state.step))
-                    except Exception:
-                        pass
 
                 elif verbose == 1:  # pragma: no cover
                     if (step % 1000) == 0:
@@ -479,8 +479,6 @@ class ModelTrainerJaxMLP:
                         )
                 else:
                     pass
-
-            step += 1
 
         end_time = time()
         print(
@@ -564,7 +562,7 @@ class ModelTrainerJaxMLP:
 
         # Initialize network
         if not isinstance(self.seed, int):
-            raise ValueError(
+            raise ValueError(  # noqa: TRY004 - ValueError is the tested public contract
                 "seed argument is not an integer, "
                 + "please specify a valid seed to make this code reproducible!"
             )
@@ -597,10 +595,10 @@ class ModelTrainerJaxMLP:
             training_history.iloc[epoch] = [int(epoch), float(test_loss)]
 
             if self.mlflow_on:
-                try:
-                    # Per-epoch metrics under the cross-backend schema names
-                    # (HSSMSpine _docs/mlflow-schema.md), matching torchtrain.
-                    # The per-100-step `loss` metric above is kept as-is.
+                # Per-epoch metrics under the cross-backend schema names
+                # (HSSMSpine _docs/mlflow-schema.md), matching torchtrain.
+                # The per-100-step `loss` metric above is kept as-is.
+                with contextlib.suppress(Exception):
                     mlflow.log_metrics(
                         {
                             "train_loss": float(train_loss),
@@ -608,8 +606,6 @@ class ModelTrainerJaxMLP:
                         },
                         step=int(epoch),
                     )
-                except Exception:
-                    pass
 
             print(
                 "Epoch: {} / {}, test_loss: {}".format(
@@ -636,27 +632,28 @@ class ModelTrainerJaxMLP:
 
             # Write to file
             train_state_path = f"{full_path}_train_state.jax"
-            file = open(train_state_path, "wb")
-            file.write(byte_output)
-            file.close()
+            with open(train_state_path, "wb") as state_file:
+                state_file.write(byte_output)
             print("Saving model parameters to: " + train_state_path)
 
             config_path = f"{full_path}_train_config.pickle"
-            pickle.dump(self.train_config, open(config_path, "wb"))
+            with open(config_path, "wb") as config_file:
+                pickle.dump(self.train_config, config_file)
             print("Saving training config to: " + config_path)
 
             data_details_path = f"{full_path}_data_details.pickle"
-            pickle.dump(
-                {
-                    "train_data_generator_config": self.train_dl.dataset.data_generator_config,
-                    "train_data_model_config": self.train_dl.dataset.data_model_config,
-                    "train_data_file_ids": self.train_dl.dataset.file_ids,
-                    "valid_data_generator_config": self.valid_dl.dataset.data_generator_config,
-                    "valid_data_model_config": self.valid_dl.dataset.data_model_config,
-                    "valid_data_file_ids": self.valid_dl.dataset.file_ids,
-                },
-                open(data_details_path, "wb"),
-            )
+            with open(data_details_path, "wb") as data_details_file:
+                pickle.dump(
+                    {
+                        "train_data_generator_config": self.train_dl.dataset.data_generator_config,
+                        "train_data_model_config": self.train_dl.dataset.data_model_config,
+                        "train_data_file_ids": self.train_dl.dataset.file_ids,
+                        "valid_data_generator_config": self.valid_dl.dataset.data_generator_config,
+                        "valid_data_model_config": self.valid_dl.dataset.data_model_config,
+                        "valid_data_file_ids": self.valid_dl.dataset.file_ids,
+                    },
+                    data_details_file,
+                )
             print("Saving training data details to: " + data_details_path)
 
             # ONNX export (single-trial contract) — the artifact HSSM consumes.

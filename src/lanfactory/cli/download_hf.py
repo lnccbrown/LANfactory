@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Command-line interface for downloading models from HuggingFace Hub.
 
 This module provides a CLI tool for downloading LANfactory models

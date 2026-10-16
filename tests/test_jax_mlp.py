@@ -2,11 +2,11 @@
 
 import pickle
 
-import pytest
 import jax
 import jax.numpy as jnp
+import pytest
 
-from lanfactory.trainers.jax_mlp import JaxMLPFactory, JaxMLP
+from lanfactory.trainers.jax_mlp import JaxMLP, JaxMLPFactory
 
 
 def test_mlp_jax_factory_with_dict():
@@ -128,7 +128,7 @@ def test_mlp_jax_forward_with_non_linear_output_activation():
     x = jax.random.normal(key, (5, 5))
 
     # Initialize model state
-    key1, key2 = jax.random.split(key)
+    key1, _key2 = jax.random.split(key)
     state = model.init(key1, x)
 
     # Forward pass
@@ -152,7 +152,7 @@ def test_mlp_jax_inference_mode_with_logits():
     x = jax.random.normal(key, (5, 5))
 
     # Initialize model state
-    key1, key2 = jax.random.split(key)
+    key1, _key2 = jax.random.split(key)
     state = model.init(key1, x)
 
     # Forward pass in inference mode
@@ -163,8 +163,9 @@ def test_mlp_jax_inference_mode_with_logits():
 
 def test_mlp_jax_load_state_from_file_error():
     """Test JaxMLP load_state_from_file raises error when file_path is None."""
-    from lanfactory.trainers.jax_mlp import JaxMLPFactory
     import pytest
+
+    from lanfactory.trainers.jax_mlp import JaxMLPFactory
 
     network_config = {
         "layer_sizes": [10, 10, 1],
@@ -180,8 +181,9 @@ def test_mlp_jax_load_state_from_file_error():
 
 def test_mlp_jax_load_state_from_file_without_input_dim(tmp_path):
     """Test JaxMLP load_state_from_file without providing input_dim."""
-    from lanfactory.trainers.jax_mlp import JaxMLPFactory
     import flax.serialization
+
+    from lanfactory.trainers.jax_mlp import JaxMLPFactory
 
     network_config = {
         "layer_sizes": [10, 10, 1],
@@ -242,8 +244,9 @@ def test_mlp_jax_make_forward_partial_with_dict_state(tmp_path):
 
 def test_mlp_jax_make_forward_partial_without_jit(tmp_path):
     """Test JaxMLP make_forward_partial without JIT compilation."""
-    from lanfactory.trainers.jax_mlp import JaxMLPFactory
     import flax.serialization
+
+    from lanfactory.trainers.jax_mlp import JaxMLPFactory
 
     network_config = {
         "layer_sizes": [10, 10, 1],
@@ -276,8 +279,9 @@ def test_mlp_jax_make_forward_partial_without_jit(tmp_path):
 
 def test_mlp_jax_make_forward_partial_invalid_state_type():
     """Test JaxMLP make_forward_partial raises error with invalid state type."""
-    from lanfactory.trainers.jax_mlp import JaxMLPFactory
     import pytest
+
+    from lanfactory.trainers.jax_mlp import JaxMLPFactory
 
     network_config = {
         "layer_sizes": [10, 10, 1],
@@ -344,3 +348,26 @@ def test_mlp_jax_with_non_linear_output_activation():
 
     assert output.shape == (5, 1)
     assert isinstance(output, jnp.ndarray)
+
+
+def test_trainer_jax_mlp_non_int_seed_raises_value_error(tmp_path):
+    """train_and_evaluate rejects a non-int seed with ValueError, not TypeError."""
+    from lanfactory.trainers.jax_mlp import ModelTrainerJaxMLP
+
+    network_config = {
+        "layer_sizes": [4, 1],
+        "activations": ["tanh", "linear"],
+        "train_output_type": "logprob",
+    }
+    model = JaxMLPFactory(network_config=network_config, train=True)
+    trainer = ModelTrainerJaxMLP(
+        {"loss": "huber", "n_epochs": 1}, model, None, None, seed=1.5
+    )
+
+    with pytest.raises(ValueError, match="seed argument is not an integer"):
+        trainer.train_and_evaluate(
+            output_folder=tmp_path,
+            network_type="lan",
+            save_outputs=False,
+            export_onnx=False,
+        )

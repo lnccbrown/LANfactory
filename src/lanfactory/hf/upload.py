@@ -527,7 +527,8 @@ def _upload_to_hf(  # pragma: no cover
 ) -> str:
     """HF-dependent implementation of upload_model."""
     try:
-        from huggingface_hub import HfApi, create_repo as hf_create_repo
+        from huggingface_hub import HfApi
+        from huggingface_hub import create_repo as hf_create_repo
     except ImportError as exc:
         raise ImportError(
             "huggingface_hub is required for HuggingFace uploads. "
@@ -558,7 +559,7 @@ def _upload_to_hf(  # pragma: no cover
     if update_manifest:
         try:
             parent_commit = api.repo_info(repo_id=repo_id, revision=revision).sha
-        except Exception as e:  # noqa: BLE001 - optimistic locking is a bonus
+        except Exception as e:  # optimistic locking is a bonus
             logger.warning(f"Could not resolve parent commit for {repo_id}: {e}")
 
     # Refuse to silently replace a network that released HSSM versions are

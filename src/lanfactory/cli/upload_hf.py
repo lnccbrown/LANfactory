@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Command-line interface for uploading models to HuggingFace Hub.
 
 This module provides a CLI tool for uploading trained LANfactory models
