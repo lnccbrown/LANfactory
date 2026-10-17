@@ -103,12 +103,16 @@ def test_mlp_jax_forward_pass():
         ["tanh", "linear", "linear"],  # issue #105: IndexError
         ["linear", "tanh", "linear"],
         ["relu", "linear", "sigmoid"],
+        # Over-long: jaxtrain appends the output "linear" to a YAML that
+        # already lists it. Must keep working (hence no zip(strict=True)).
+        ["tanh", "tanh", "linear", "linear"],
     ],
 )
 def test_mlp_jax_activations_stay_layer_aligned(activations):
     """Each layer applies its own activation, "linear" hidden layers included."""
+    layer_sizes = [10, 10, 1]
     model = JaxMLP(
-        layer_sizes=[10, 10, 1],
+        layer_sizes=layer_sizes,
         activations=activations,
         train_output_type="logprob",
         train=True,
@@ -117,9 +121,10 @@ def test_mlp_jax_activations_stay_layer_aligned(activations):
     params = model.init(jax.random.PRNGKey(0), x)
 
     expected = x
-    for i, activation in enumerate(activations):
+    # One activation per layer; entries past the last layer are ignored.
+    for i in range(len(layer_sizes)):
         layer = params["params"][f"layers_{i}"]
-        expected = REFERENCE_ACTIVATIONS[activation](
+        expected = REFERENCE_ACTIVATIONS[activations[i]](
             expected @ layer["kernel"] + layer["bias"]
         )
 
@@ -127,6 +132,18 @@ def test_mlp_jax_activations_stay_layer_aligned(activations):
 
     assert output.shape == (5, 1)
     np.testing.assert_allclose(output, expected, rtol=1e-6, atol=1e-6)
+
+
+def test_mlp_jax_too_few_activations_raises():
+    """Fewer activations than layers is a clear ValueError, not an IndexError."""
+    # A jaxtrain YAML missing one hidden activation: the CLI appends the
+    # output "linear", leaving 3 activations for 4 layers.
+    model = JaxMLP(
+        layer_sizes=[10, 10, 10, 1],
+        activations=["tanh", "tanh", "linear"],
+    )
+    with pytest.raises(ValueError, match="got 3 activations for 4 layers"):
+        model.init(jax.random.PRNGKey(0), jnp.ones((1, 6)))
 
 
 def test_mlp_jax_with_different_activations():

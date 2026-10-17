@@ -70,7 +70,8 @@ class JaxMLP(nn.Module):
         layer_sizes (Sequence[int]):
             Sequence of integers containing the sizes of the layers.
         activations (Sequence[str]):
-            Sequence of strings containing the activation functions.
+            One activation name per layer ("relu", "tanh", "sigmoid" or
+            "linear"). Entries past the last layer are ignored.
         train (bool):
             Whether the model should be set to training mode or not.
         train_output_type (str):
@@ -101,6 +102,13 @@ class JaxMLP(nn.Module):
         """Setup function for the JaxMLP class.
         Initializes the layers and activation functions.
         """
+        if len(self.activations) < len(self.layer_sizes):
+            raise ValueError(
+                f"JaxMLP got {len(self.activations)} activations for "
+                f"{len(self.layer_sizes)} layers; every layer needs one "
+                f"(activations={list(self.activations)}, "
+                f"layer_sizes={list(self.layer_sizes)})"
+            )
         # TODO: Warn if unknown activation string used
         self.layers = [nn.Dense(layer_size) for layer_size in self.layer_sizes]
         # One entry per activation, "linear" included (as identity), so that
