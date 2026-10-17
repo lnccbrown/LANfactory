@@ -14,21 +14,21 @@ DEFAULT_LICENSE = "bsd-2-clause"
 # it here made a trainable, loadable network type unpublishable.
 VALID_NETWORK_TYPES = ("lan", "cpn", "opn", "gonogo")
 
-from lanfactory.hf.model_card import (  # noqa: E402
-    load_model_card_yaml,
-    generate_readme,
+from lanfactory.hf.download import download_model
+from lanfactory.hf.model_card import (
     ModelCardConfig,
+    generate_readme,
+    load_model_card_yaml,
 )
-from lanfactory.hf.upload import upload_model  # noqa: E402
-from lanfactory.hf.download import download_model  # noqa: E402
+from lanfactory.hf.upload import upload_model
 
 __all__ = [
-    "DEFAULT_REPO_ID",
     "DEFAULT_LICENSE",
+    "DEFAULT_REPO_ID",
     "VALID_NETWORK_TYPES",
-    "load_model_card_yaml",
-    "generate_readme",
     "ModelCardConfig",
-    "upload_model",
     "download_model",
+    "generate_readme",
+    "load_model_card_yaml",
+    "upload_model",
 ]

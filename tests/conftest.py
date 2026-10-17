@@ -7,11 +7,12 @@ from copy import deepcopy
 from pathlib import Path
 
 import jax
-import lanfactory
 import numpy as np
 import pytest
 import ssms
 import torch
+
+import lanfactory
 
 from .constants import (
     TEST_GENERATOR_CONSTANTS,
