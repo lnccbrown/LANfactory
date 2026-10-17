@@ -72,7 +72,8 @@ class JaxMLP(nn.Module):
             Sequence of integers containing the sizes of the layers.
         activations (Sequence[str]):
             One activation name per layer ("relu", "tanh", "sigmoid" or
-            "linear"). Entries past the last layer are ignored.
+            "linear"). Entries past the last layer are not applied, but
+            must still be valid names.
         train (bool):
             Whether the model should be set to training mode or not.
         train_output_type (str):

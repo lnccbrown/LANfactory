@@ -106,7 +106,12 @@ def test_mlp_jax_forward_pass():
         # Over-long: jaxtrain appends the output "linear" to a YAML that
         # already lists it. Must keep working (hence no zip(strict=True)).
         ["tanh", "tanh", "linear", "linear"],
+        # Over-long with a hidden "linear": main ran these without an error
+        # but applied shifted activations (issue #105's silent case).
+        ["linear", "tanh", "linear", "tanh"],
+        ["tanh", "linear", "linear", "sigmoid"],
     ],
+    ids="-".join,
 )
 def test_mlp_jax_activations_stay_layer_aligned(activations):
     """Each layer applies its own activation, "linear" hidden layers included."""
