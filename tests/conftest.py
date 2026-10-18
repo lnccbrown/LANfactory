@@ -150,10 +150,16 @@ def test_run_seed():
     return int(time.time())
 
 
+# The default parameter sampler draws each drift rate independently, so models
+# whose simulator requires the drift rates to sum to 1 can never generate
+# training data. Keep them out of the random pool.
+UNSAMPLEABLE_MODELS = {"lba_3_vs_constraint", "lba_angle_3_vs_constraint"}
+
+
 @pytest.fixture
 def available_models():
     """Fixture providing a list of available models."""
-    return list(ssms.config.model_config.keys())
+    return [m for m in ssms.config.model_config if m not in UNSAMPLEABLE_MODELS]
 
 
 @pytest.fixture
@@ -251,12 +257,10 @@ def dummy_generator_config_simple_two_choices(model_selector, tmp_path):
                 TEST_GENERATOR_CONSTANTS.N_SAMPLES_BY_PARAMETER_SET
             )
             model_config = deepcopy(ssms.config.model_config[generator_config["model"]])
-            if model_config["nchoices"] == 2:
-                two_choices = True
-            if "simulator_param_mappings" in model_config:
-                simulator_param_mapping = True
-            else:
-                simulator_param_mapping = False
+            # Re-evaluate both conditions for every candidate: a flag left over
+            # from an earlier draw used to let a non-two-choice model through.
+            two_choices = model_config["nchoices"] == 2
+            simulator_param_mapping = "simulator_param_mappings" in model_config
 
         logger.info(f"Generator config from dummy_generator_config: {generator_config}")
         logger.info(f"Model config from dummy_generator_config: {model_config}")
