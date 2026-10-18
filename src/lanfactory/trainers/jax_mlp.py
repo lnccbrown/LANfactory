@@ -71,7 +71,9 @@ class JaxMLP(nn.Module):
         layer_sizes (Sequence[int]):
             Sequence of integers containing the sizes of the layers.
         activations (Sequence[str]):
-            Sequence of strings containing the activation functions.
+            One activation name per layer ("relu", "tanh", "sigmoid" or
+            "linear"). Entries past the last layer are not applied, but
+            must still be valid names.
         train (bool):
             Whether the model should be set to training mode or not.
         train_output_type (str):
@@ -86,7 +88,12 @@ class JaxMLP(nn.Module):
     # such that: f(train_output_type) = logprob
     train_output_type: str = "logprob"
     activations_dict = frozendict(
-        {"relu": nn.relu, "tanh": nn.tanh, "sigmoid": nn.sigmoid}
+        {
+            "relu": nn.relu,
+            "tanh": nn.tanh,
+            "sigmoid": nn.sigmoid,
+            "linear": lambda x: x,
+        }
     )
     # network_type: Optional[str] = "none"
 
@@ -97,13 +104,19 @@ class JaxMLP(nn.Module):
         """Setup function for the JaxMLP class.
         Initializes the layers and activation functions.
         """
+        if len(self.activations) < len(self.layer_sizes):
+            raise ValueError(
+                f"JaxMLP got {len(self.activations)} activations for "
+                f"{len(self.layer_sizes)} layers; every layer needs one "
+                f"(activations={list(self.activations)}, "
+                f"layer_sizes={list(self.layer_sizes)})"
+            )
         # TODO: Warn if unknown activation string used
-        # TODO: Warn if linear activation is used before final layer
         self.layers = [nn.Dense(layer_size) for layer_size in self.layer_sizes]
+        # One entry per activation, "linear" included (as identity), so that
+        # activation_funs[i] always belongs to layers[i].
         self.activation_funs = [
-            self.activations_dict[activation]
-            for activation in self.activations
-            if (activation != "linear")
+            self.activations_dict[activation] for activation in self.activations
         ]
 
         # Identification
@@ -125,14 +138,7 @@ class JaxMLP(nn.Module):
         x = inputs
 
         for i, lyr in enumerate(self.layers):
-            x = lyr(x)
-            if i != (len(self.layers) - 1):
-                x = self.activation_funs[i](x)
-            else:
-                if self.activations[i] == "linear":
-                    pass
-                else:
-                    x = self.activation_funs[i](x)
+            x = self.activation_funs[i](lyr(x))
 
         if (not self.train) and (self.train_output_type == "logprob"):
             pass  # identity: logprob networks already emit log-likelihoods
