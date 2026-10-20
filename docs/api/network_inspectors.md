@@ -11,6 +11,16 @@ defaults explicit.
 
 ::: lanfactory.network_inspectors.lan_manifold
 
+::: lanfactory.network_inspectors.compute_kde_vs_lan_likelihoods
+
+::: lanfactory.network_inspectors.compute_lan_manifold
+
+::: lanfactory.network_inspectors.LikelihoodComparison
+
+::: lanfactory.network_inspectors.LikelihoodRow
+
+::: lanfactory.network_inspectors.ManifoldComputation
+
 ::: lanfactory.network_inspectors.ModelSpec
 
 ::: lanfactory.network_inspectors.PlotConfig

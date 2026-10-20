@@ -43,7 +43,7 @@ jobs:
       # from ssm-simulators' `-march=native` wheels and is pinned out by
       # `ssm-simulators>=0.13.1`. Don't reinstate it on a hunch.)
       - name: Install package
-        run: uv sync --all-groups
+        run: uv sync --all-groups --extra ui
 
       - name: Run pytest
         run: uv run pytest
@@ -75,7 +75,7 @@ jobs:
           cache-dependency-glob: "pyproject.toml"
 
       - name: Install package (with notebook + backend deps)
-        run: uv sync --all-groups
+        run: uv sync --all-groups --extra ui
 
       # Executes every committed rendered tutorial and every canonical marimo
       # source so the published learning path cannot silently drift from the code.

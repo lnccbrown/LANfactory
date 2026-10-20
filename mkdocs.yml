@@ -17,6 +17,7 @@ nav:
       - Export a bayesflow model to ONNX: tutorials/exporting_bayesflow_to_onnx.ipynb
       - Track training runs with MLflow: using_mlflow.md
       - Share trained networks on HuggingFace Hub: using_huggingface.md
+      - Inspect trained networks in the UI: network_inspectors_tutorial.md
   - Explanations:
       - Likelihood approximation networks and LANfactory: what_are_lans.md
   - Reference:
