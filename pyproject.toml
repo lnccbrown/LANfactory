@@ -86,6 +86,7 @@ dev = [
     "keras>=3.12",
     "sbi>=0.26",
     "marimo>=0.23",
+    "streamlit>=1.40.0",
 ]
 
 [tool.setuptools.packages.find]
