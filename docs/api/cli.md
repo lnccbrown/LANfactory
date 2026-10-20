@@ -121,6 +121,13 @@ Retrieve one `{network-type}/{model-name}/` folder from a Hub repository.
 | `--force` | off | Replace an existing destination |
 | `--log-level LEVEL`, `-l LEVEL` | `WARNING` | Logging threshold |
 
+## `network-inspectors-ui`
+
+Launch the Streamlit network inspector for trained Torch LANs. Requires the
+`ui` extra. The command defines no options of its own; any arguments are
+forwarded to `streamlit run`. See
+[Inspect trained networks in the UI](../network_inspectors_tutorial.md).
+
 For task-oriented workflows, see [Track training with MLflow](../using_mlflow.md)
 and [Share trained networks on Hugging Face Hub](../using_huggingface.md). The
 [Python API reference](hf.md) documents the Hub helpers and constants called by
