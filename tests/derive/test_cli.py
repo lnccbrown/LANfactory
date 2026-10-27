@@ -57,11 +57,6 @@ def test_derive_aux_writes_files_and_manifest(tmp_path):
             "16",
             "--deadline-quantile-frac",
             "0.3",
-            "--fallback-window",
-            "0.9",
-            "1.1",
-            "--fallback-n-sim",
-            "200",
             "--seed",
             "7",
             "--source-run-uuid",
@@ -81,8 +76,7 @@ def test_derive_aux_writes_files_and_manifest(tmp_path):
     assert manifest["model"] == "ddm" and manifest["network_type"] == "opn"
     assert manifest["n_files"] == 3 and manifest["n_theta_per_file"] == 16
     assert manifest["deadline_quantile_frac"] == 0.3
-    assert manifest["fallback_window"] == [0.9, 1.1]
-    assert manifest["fallback_n_sim"] == 200
+    assert manifest["fallback_window"] == [0.98, 1.03]  # not a CLI option
     assert manifest["seed"] == 7
     source = manifest["source"]
     assert source["hf_repo"] == "franklab/HSSM"
@@ -98,8 +92,6 @@ def test_derive_aux_writes_files_and_manifest(tmp_path):
         n_files=3,
         n_theta_per_file=16,
         deadline_quantile_frac=0.3,
-        fallback_window=(0.9, 1.1),
-        fallback_n_sim=200,
         seed=7,
         source=SourceLAN.from_onnx(
             DDM_ONNX,
@@ -113,31 +105,6 @@ def test_derive_aux_writes_files_and_manifest(tmp_path):
     for cli_file, lib_file in zip(sorted(out.glob("*.pickle")), library, strict=True):
         assert cli_file.name == lib_file.name
         assert cli_file.read_bytes() == lib_file.read_bytes()
-
-
-def test_derive_aux_short_aliases_match_the_long_options(tmp_path):
-    """``--type`` / ``--model`` / ``--out`` are aliases, not separate options."""
-    result = runner.invoke(
-        app,
-        [
-            "--from-onnx",
-            str(DDM_ONNX),
-            "--type",
-            "cpn",
-            "--model",
-            "ddm",
-            "--out",
-            str(tmp_path / "cpn"),
-            "--n-files",
-            "2",
-            "--n-theta-per-file",
-            "8",
-        ],
-    )
-    assert result.exit_code == 0, _out(result)
-    manifest = json.loads((tmp_path / "cpn" / MANIFEST_NAME).read_text())
-    assert manifest["network_type"] == "cpn" and manifest["model"] == "ddm"
-    assert manifest["n_rows_per_file"] == 16  # 8 thetas x 2 choices
 
 
 def test_derive_aux_requires_type(tmp_path):
@@ -207,50 +174,3 @@ def test_derive_aux_rejects_missing_onnx_and_bad_counts(tmp_path):
     )
     assert result.exit_code == 2
     assert "n_files must be >= 2" in _out(result)
-
-
-def test_derive_aux_no_fallback_disables_the_window(tmp_path):
-    result = runner.invoke(
-        app,
-        [
-            "--from-onnx",
-            str(DDM_ONNX),
-            "--network-type",
-            "cpn",
-            "--model-name",
-            "ddm",
-            "--output-folder",
-            str(tmp_path / "raw"),
-            "--n-files",
-            "2",
-            "--n-theta-per-file",
-            "8",
-            "--no-fallback",
-        ],
-    )
-    assert result.exit_code == 0, _out(result)
-    manifest = json.loads((tmp_path / "raw" / MANIFEST_NAME).read_text())
-    assert manifest["fallback_window"] is None
-    assert manifest["derive_stats"]["derive_fallback_frac"] == 0.0
-
-
-def test_derive_aux_rejects_a_bad_fallback_window(tmp_path):
-    result = runner.invoke(
-        app,
-        [
-            "--from-onnx",
-            str(DDM_ONNX),
-            "--network-type",
-            "cpn",
-            "--model-name",
-            "ddm",
-            "--output-folder",
-            str(tmp_path),
-            "--fallback-window",
-            "1.1",
-            "0.9",
-        ],
-    )
-    assert result.exit_code == 2
-    assert "fallback_window must satisfy" in _out(result)
-    assert not list(tmp_path.glob("*.pickle"))

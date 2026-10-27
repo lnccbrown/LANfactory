@@ -8,8 +8,7 @@ Usage:
         --output-folder data/cpn/ddm
 
 The option names follow the Hub CLIs (``--network-type``, ``--model-name``,
-``--output-folder``); ``--type``, ``--model`` and ``--out`` are accepted as
-short aliases.
+``--output-folder``).
 """
 
 from pathlib import Path
@@ -39,19 +38,16 @@ def main(
     network_type: str = typer.Option(
         ...,
         "--network-type",
-        "--type",
         help=f"Auxiliary network type to derive: one of {', '.join(NETWORK_TYPES)}.",
     ),
     model_name: str = typer.Option(
         ...,
         "--model-name",
-        "--model",
         help="ssms model name the LAN was trained for (e.g., ddm, angle).",
     ),
     output_folder: Path = typer.Option(
         ...,
         "--output-folder",
-        "--out",
         help="Destination folder for the pickles and the manifest.",
         file_okay=False,
         resolve_path=True,
@@ -70,22 +66,6 @@ def main(
         "--deadline-quantile-frac",
         help="Share of opn deadlines drawn from the LAN's own RT quantiles; "
         "the rest are uniform on the deadline bounds.",
-    ),
-    fallback_window: tuple[float, float] = typer.Option(
-        (0.98, 1.03),
-        "--fallback-window",
-        help="LO HI: a parameter vector whose total LAN mass is outside [LO, HI] "
-        "is labelled by ssms simulation instead of the LAN.",
-    ),
-    fallback_n_sim: int = typer.Option(
-        20_000,
-        "--fallback-n-sim",
-        help="Trials simulated per parameter vector that falls back.",
-    ),
-    no_fallback: bool = typer.Option(
-        False,
-        "--no-fallback",
-        help="Label every parameter vector from the LAN, whatever its total.",
     ),
     seed: int = typer.Option(0, "--seed", help="Base random seed."),
     source_run_uuid: str = typer.Option(
@@ -128,8 +108,6 @@ def main(
             n_files=n_files,
             n_theta_per_file=n_theta_per_file,
             deadline_quantile_frac=deadline_quantile_frac,
-            fallback_window=None if no_fallback else fallback_window,
-            fallback_n_sim=fallback_n_sim,
             seed=seed,
             source=source,
         )

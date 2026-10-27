@@ -129,21 +129,17 @@ integrating its density over reaction time (see
 [Deriving auxiliary networks](../network_types.md#deriving-auxiliary-networks-from-a-trained-lan)).
 Writes `--n-files` pickles plus `derive_manifest.json` to `--output-folder`,
 in the layout `torchtrain` and `jaxtrain` read, and prints the manifest path.
-The option names follow the Hub commands; `--type`, `--model`, and `--out` are
-short aliases.
+The option names follow the Hub commands.
 
 | Option | Required/default | Contract |
 | --- | --- | --- |
 | `--from-onnx PATH` | required | The trained LAN; a `(1, n_params + 2)` ONNX artifact |
-| `--network-type TEXT`, `--type TEXT` | required | Auxiliary network type to derive: `cpn` or `opn` |
-| `--model-name TEXT`, `--model TEXT` | required | ssms model name the LAN was trained for (e.g. `ddm`) |
-| `--output-folder PATH`, `--out PATH` | required | Destination folder; created if absent |
+| `--network-type TEXT` | required | Auxiliary network type to derive: `cpn` or `opn` |
+| `--model-name TEXT` | required | ssms model name the LAN was trained for (e.g. `ddm`) |
+| `--output-folder PATH` | required | Destination folder; created if absent |
 | `--n-files INTEGER` | `100` | Number of pickles to write; at least 2 |
 | `--n-theta-per-file INTEGER` | `4096` | Parameter vectors per file; rows per file for `opn`, times the number of choices for `cpn` |
 | `--deadline-quantile-frac FLOAT` | `0.7` | Share of `opn` deadlines drawn from the LAN's own RT quantiles; the rest are uniform on the deadline bounds |
-| `--fallback-window LO HI` | `0.98 1.03` | A parameter vector whose total LAN mass lies outside `[LO, HI]` (endpoints trusted) is labelled by ssms simulation instead of the LAN; the share that fell back is recorded as `derive_fallback_frac` |
-| `--fallback-n-sim INTEGER` | `20000` | Trials simulated per parameter vector that falls back |
-| `--no-fallback` | off | Label every parameter vector from the LAN, whatever its total (`fallback_window = None`) |
 | `--seed INTEGER` | `0` | Base seed; file `i` is generated from `[seed, i]`, and the fallback's simulator seeds are drawn from the same generator |
 | `--source-run-uuid TEXT` | parsed from the filename | Training run uuid recorded in the provenance |
 | `--source-hf-repo TEXT` | unset | Hub repository the LAN was downloaded from |

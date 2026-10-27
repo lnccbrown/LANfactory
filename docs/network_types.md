@@ -185,14 +185,14 @@ network's own total; the total is recorded, never hidden** — per file in
 per corpus in the manifest.
 
 What remains after renormalising sits where the total is off. A parameter
-vector whose total lies outside `--fallback-window` (default the open
-interval `0.98 1.03`, which flags 3.7 % of the ddm box) is therefore labelled
-by **ssms simulation** instead of the LAN (`--fallback-n-sim` trials, default
-20 000): the CPN label is the choice frequency conditional on responding
-within `max_t` — what the renormalised LAN label estimates — and the OPN
-label comes from the `{model}_deadline` simulator with the row's deadline. With the fallback on, the unflagged residual against simulation is
-≤ 0.023 (CPN) / ≤ 0.033 (OPN). `--no-fallback` labels everything from the
-LAN. Every file and the manifest record the share that fell back
+vector whose total lies outside the fallback window (the open interval
+`0.98 1.03`, which flags 3.7 % of the ddm box) is therefore labelled by
+**ssms simulation** instead of the LAN (20 000 trials): the CPN label is the
+choice frequency conditional on responding within `max_t` — what the
+renormalised LAN label estimates — and the OPN label comes from the
+`{model}_deadline` simulator with the row's deadline. With the fallback on,
+the unflagged residual against simulation is ≤ 0.023 (CPN) / ≤ 0.033 (OPN).
+Every file and the manifest record the share that fell back
 (`derive_fallback_frac`) and the simulation's own blind spot,
 `derive_sim_past_max_t_max` — the largest share of base-model trials still
 running at `max_t` among the fallback thetas (ssms returns those with a choice
