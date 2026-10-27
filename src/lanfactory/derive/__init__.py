@@ -17,7 +17,6 @@ from .corpus import (
 )
 from .integrate import (
     ChoiceMass,
-    IntegrationGrid,
     OnnxPredictor,
     OnsetGrid,
     Predictor,
@@ -30,7 +29,6 @@ __all__ = [
     "AUX_CATEGORY",
     "ChoiceMass",
     "DERIVATION_METHOD",
-    "IntegrationGrid",
     "MANIFEST_NAME",
     "NETWORK_TYPES",
     "OnnxPredictor",
