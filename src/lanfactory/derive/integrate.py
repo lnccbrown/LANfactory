@@ -15,15 +15,18 @@ A LAN's density is not smooth — it rises from zero over a few milliseconds
 at the non-decision time ``t`` — so the one grid, :class:`OnsetGrid`, is
 refined per parameter vector around ``t`` (32 points on ``[t_min, t−0.05]``,
 128 on ``[t−0.05, t]``, 600 on ``[t, t+1]``, 400 on ``[t+1, max_t]``) and
-matches a 16 000-point uniform grid to ``5e-5`` at ~1160 points. A uniform
-1000-point grid, once :func:`choice_mass`'s silent default, carried 15–25 %
-quadrature error on the Hub ddm LAN at ``a < 0.5`` (totals down to 0.66 that
-are pure grid artefacts) and is gone: a model without an onset parameter
-passes ``onset = 0``, which is at least as accurate on a closed-form gamma
-mixture (max error 7.1e-5 vs the uniform grid's 9.3e-5). Integrating from
-``t`` only was tested and rejected (mean error 0.0083 vs 0.0042 against
-simulation): the LAN leaks mass below ``t`` (mean 0.0035, p99 0.052 on the
-same LAN) and that leak is part of what it predicts.
+matches a 16 000-point uniform grid to ``5e-5`` at ~1160 points. On it,
+over 20 000 uniform draws from the Hub ddm LAN's box, the total mass has
+median ``|total − 1|`` 0.0037, p99 0.080, min 0.877 / max 1.219, with 1.9 %
+of the box beyond 0.05. A uniform 1000-point grid, once :func:`choice_mass`'s
+silent default, carried 15–25 % quadrature error on the same LAN at
+``a < 0.5`` (totals down to 0.66 that are pure grid artefacts) and is gone:
+a model without an onset parameter passes ``onset = 0``, which is at least
+as accurate on a closed-form gamma mixture (max error 7.1e-5 vs the uniform
+grid's 9.3e-5). Integrating from ``t`` only was tested and rejected (mean
+error 0.0083 vs 0.0042 against simulation): the LAN leaks mass below ``t``
+(mean 0.0035, p99 0.052 on the same LAN) and that leak is part of what it
+predicts.
 
 Tail policy
 -----------
@@ -353,11 +356,7 @@ class ChoiceMass:
 
     Notes
     -----
-    Masses are not renormalised. ``total`` differs from one by the density
-    the LAN puts past ``max_t`` plus any approximation error in the network
-    itself (ssms returns such trials at ``rt ≈ max_t + t`` rather than as
-    omissions, so its ``choice_p`` does not share this deficit); record it
-    with the masses.
+    Masses are not renormalised; see the module's tail policy.
     """
 
     t: NDArray[np.float64]
