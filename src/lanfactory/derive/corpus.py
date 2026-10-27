@@ -140,8 +140,8 @@ def sample_deadlines(
     from_quantile = rng.random(n_theta) < quantile_frac
     uniform = rng.uniform(lower, upper, size=n_theta)
     quantile = mass.quantile(rng.uniform(0.05, 0.95, size=n_theta))
-    from_quantile &= ~np.isnan(quantile)
-    return np.clip(np.where(from_quantile, quantile, uniform), lower, upper)
+    use_quantile = from_quantile & ~np.isnan(quantile)
+    return np.clip(np.where(use_quantile, quantile, uniform), lower, upper)
 
 
 # --------------------------------------------------------------------------
@@ -253,9 +253,8 @@ def simulate_labels(
       choice (ddm) or censored as ``rt == -999`` (racing_diffusion_3,
       poisson_race, addm); both count as past ``max_t``.
     * ``opn``: the share of trials that do not respond before the row's
-      deadline, what ssms' ``{model}_deadline`` simulators mark
-      ``rt == -999``. Unlike the renormalised LAN label it is not conditional
-      on responding before ``max_t``.
+      deadline. Unlike the renormalised LAN label it is not conditional on
+      responding before ``max_t``.
 
     Parameters
     ----------
