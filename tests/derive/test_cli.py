@@ -10,7 +10,7 @@ from typer.testing import CliRunner
 
 from lanfactory.cli.derive_aux import app
 from lanfactory.derive import MANIFEST_NAME, SourceLAN, derive_aux_corpus
-from tests.derive.conftest import DDM_ONNX
+from tests.derive.conftest import DDM_ONNX, DDM_SHA256, HUB_COMMIT
 
 _ANSI_RE = re.compile(r"\x1b\[[\d;]*m")
 RUN_UUID = "56d99936415e11f0a2bf3cecefb6d5ee"
@@ -33,14 +33,13 @@ def test_derive_aux_is_installed_as_a_console_script():
         assert flag in help_text
 
 
-def test_derive_aux_writes_files_and_manifest(tmp_path, ddm_provenance):
+def test_derive_aux_writes_files_and_manifest(tmp_path):
     """Every option reaches ``derive_aux_corpus``: the CLI output equals the API's.
 
     The pickles omit the source path, so a CLI run and a library call with the
     same arguments are byte-identical file by file.
     """
     out = tmp_path / "opn"
-    hub_commit = ddm_provenance["Hub commit"]
     result = runner.invoke(
         app,
         [
@@ -72,7 +71,7 @@ def test_derive_aux_writes_files_and_manifest(tmp_path, ddm_provenance):
             "--source-hf-repo",
             "franklab/HSSM",
             "--source-hf-revision",
-            hub_commit,
+            HUB_COMMIT,
         ],
     )
     assert result.exit_code == 0, _out(result)
@@ -90,9 +89,9 @@ def test_derive_aux_writes_files_and_manifest(tmp_path, ddm_provenance):
     assert manifest["seed"] == 7
     source = manifest["source"]
     assert source["hf_repo"] == "franklab/HSSM"
-    assert source["hf_revision"] == source["source_lan_hf_commit"] == hub_commit
+    assert source["hf_revision"] == source["source_lan_hf_commit"] == HUB_COMMIT
     assert source["run_uuid"] == source["source_lan_run_uuid"] == RUN_UUID
-    assert source["sha256"] == source["source_lan_sha256"] == ddm_provenance["sha256"]
+    assert source["sha256"] == source["source_lan_sha256"] == DDM_SHA256
 
     library = derive_aux_corpus(
         DDM_ONNX,
@@ -110,7 +109,7 @@ def test_derive_aux_writes_files_and_manifest(tmp_path, ddm_provenance):
             DDM_ONNX,
             run_uuid=RUN_UUID,
             hf_repo="franklab/HSSM",
-            hf_revision=hub_commit,
+            hf_revision=HUB_COMMIT,
         ),
     )
     # The pickles carry the flat provenance (uuid, sha256, Hub commit) but not

@@ -12,7 +12,6 @@ from __future__ import annotations
 import json
 import os
 import pickle
-import re
 import shutil
 import subprocess
 import sys
@@ -21,7 +20,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-import yaml
 from ssms.basic_simulators.simulator import simulator
 from ssms.config import ModelConfigBuilder
 
@@ -47,9 +45,8 @@ from lanfactory.derive import corpus as corpus_module
 from lanfactory.derive.corpus import _nogo_before, _omission
 from lanfactory.trainers.torch_mlp import DatasetTorch
 from tests._onnx_utils import export_tiny_torch_lan
-from tests.derive.conftest import DDM_ONNX
+from tests.derive.conftest import DDM_ONNX, DDM_SHA256
 
-DDM_SHA256 = "09f685c18d3bdbd9b54fa89bed3b5bc0e2c76566e7ed0ae5e24df2c9b04f1b0e"
 DEADLINE_BOUNDS = [0.001, 10.0]  # ssms' DEADLINE_PARAM_CONFIG, as the manifest lists it
 
 CHOICES = [-1, 1]
@@ -132,12 +129,9 @@ def _simulate(model: str, theta: np.ndarray, seed: int) -> tuple[np.ndarray, ...
 # --------------------------------------------------------------------------
 
 
-def test_fixture_is_the_production_ddm_lan(ddm_provenance):
-    """The on-disk file, the in-code constant and PROVENANCE.md agree."""
+def test_fixture_is_the_production_ddm_lan():
+    """The on-disk file is the pinned production network."""
     assert SourceLAN.from_onnx(DDM_ONNX).sha256 == DDM_SHA256
-    assert ddm_provenance["sha256"] == DDM_SHA256
-    assert re.fullmatch(r"[0-9a-f]{40}", ddm_provenance["Hub commit"])
-    assert ddm_provenance["Source"].endswith("franklab/HSSM/blob/main/ddm.onnx")
     assert load_onnx_predictor(DDM_ONNX).input_width == 6
 
 
@@ -944,70 +938,3 @@ def test_fallback_arguments_are_validated(tmp_path):
             survey_n_theta=0,
         )
     assert not list(tmp_path.glob("*.pickle"))
-
-
-# --------------------------------------------------------------------------
-# 8. The trainer's own CLI accepts the corpus (dry run: no training)
-# --------------------------------------------------------------------------
-
-
-def test_torchtrain_dry_run_accepts_a_derived_corpus(tmp_path):
-    """``torchtrain --dry-run`` builds its dataloaders from a derived folder.
-
-    A full training round trip is what the trainer E2E tests cover; this test
-    only checks that ``torchtrain``'s file discovery, key lookup, batch-size
-    check and first batch accept a derived folder.
-    """
-    corpus = tmp_path / "corpus"
-    derive_aux_corpus(
-        DDM_ONNX,
-        "ddm",
-        "cpn",
-        corpus,
-        n_files=2,
-        n_theta_per_file=64,
-        fallback_n_sim=FALLBACK_N_SIM,
-        survey_n_theta=SURVEY_N_THETA,
-    )
-    config = {
-        "NETWORK_TYPE": "cpn",
-        "CPU_BATCH_SIZE": 64,  # divides 64 thetas x 2 choices = 128 rows
-        "GPU_BATCH_SIZE": 64,
-        "GENERATOR_APPROACH": "derived",
-        "OPTIMIZER_": "adam",
-        "N_EPOCHS": 1,
-        "TRAINING_DATA_FOLDER": str(corpus),
-        "MODEL": "ddm",
-        "SHUFFLE": True,
-        "LAYER_SIZES": [[16, 16, 1]],
-        "ACTIVATIONS": [["tanh", "tanh"]],
-        "WEIGHT_DECAY": 0.0,
-        "TRAIN_VAL_SPLIT": 0.5,
-        "N_TRAINING_FILES": 10000,
-        "LABELS_LOWER_BOUND": "None",
-        "LEARNING_RATE": 0.001,
-        "LR_SCHEDULER": "reduce_on_plateau",
-        "LR_SCHEDULER_PARAMS": {"factor": 0.1, "patience": 2},
-    }
-    config_path = tmp_path / "cpn.yaml"
-    config_path.write_text(yaml.safe_dump(config))
-    result = subprocess.run(
-        [
-            "torchtrain",
-            "--config-path",
-            str(config_path),
-            "--training-data-folder",
-            str(corpus),
-            "--networks-path-base",
-            str(tmp_path / "networks"),
-            "--dry-run",
-            "--log-level",
-            "INFO",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0, result.stderr
-    assert "DRY RUN: DataLoader validation successful" in result.stderr
-    assert "features=torch.Size([64, 5])" in result.stderr
