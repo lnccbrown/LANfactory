@@ -18,11 +18,10 @@ refined per parameter vector around ``t`` (32 points on ``[t_min, t−0.05]``,
 matches a 16 000-point uniform grid to ``5e-5`` at ~1160 points. On it,
 over 20 000 uniform draws from the Hub ddm LAN's box, the total mass has
 median ``|total − 1|`` 0.0037, p99 0.080, min 0.877 / max 1.219, with 1.9 %
-of the box beyond 0.05. A uniform 1000-point grid, once :func:`choice_mass`'s
-silent default, carried 15–25 % quadrature error on the same LAN at
-``a < 0.5`` (totals down to 0.66 that are pure grid artefacts) and is gone:
-a model without an onset parameter passes ``onset = 0``, which is at least
-as accurate on a closed-form gamma mixture (max error 7.1e-5 vs the uniform
+of the box beyond 0.05. A uniform 1000-point grid carries 15–25 %
+quadrature error on the same LAN at ``a < 0.5`` (totals down to 0.66 that
+are pure grid artefacts). A model without an onset parameter passes
+``onset = 0``, which is at least as accurate on a closed-form gamma mixture (max error 7.1e-5 vs the uniform
 grid's 9.3e-5). Integrating from ``t`` only was tested and rejected (mean
 error 0.0083 vs 0.0042 against simulation): the LAN leaks mass below ``t``
 (mean 0.0035, p99 0.052 on the same LAN) and that leak is part of what it
@@ -32,8 +31,8 @@ Tail policy
 -----------
 The per-choice masses are **not** renormalised to sum to one; they carry
 whatever density the LAN puts past ``max_t`` and the network's own scale
-error. Note that ssms does not censor a base (non-deadline) model there: an
-un-terminated trial comes back at ``rt ≈ max_t + t`` with its sign-implied
+error. Note that ssms need not censor a base (non-deadline) model there: an
+un-terminated ddm trial comes back at ``rt ≈ max_t + t`` with its sign-implied
 choice, so ssms' own ``choice_p`` sums to one while these masses need not.
 Renormalisation is the corpus's job; :attr:`ChoiceMass.total` is always
 recorded alongside the per-choice masses so the deficit stays visible.
@@ -95,10 +94,10 @@ class OnnxPredictor:
     Build with :func:`load_onnx_predictor`. The ecosystem's ONNX graphs are
     exported with a concrete ``(1, D)`` input (see
     ``lanfactory.onnx.contract``), which onnxruntime enforces: feeding
-    ``(N, D)`` to the file as published raises. This object loads the graph,
-    marks the batch dimension of every input and output symbolic *in the
-    in-memory protobuf only*, and builds the session from that. The artifact
-    on disk is never modified.
+    ``(N, D)`` to the file as published raises. :func:`load_onnx_predictor`
+    loads the graph, marks the batch dimension of every input and output
+    symbolic *in the in-memory protobuf only*, and builds the session this
+    object wraps. The artifact on disk is never modified.
 
     Parameters
     ----------
@@ -631,8 +630,7 @@ def survey(
     integrates the density for each with :func:`choice_mass` (streaming;
     the cdf is not retained) and summarises how far the total mass strays
     from one and where in the box it does so. The output is plain numbers
-    (``json.dumps``-able) — the record a corpus keeps next to the artifact
-    it was derived from.
+    (``json.dumps``-able).
 
     Parameters
     ----------
