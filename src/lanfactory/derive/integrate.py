@@ -294,7 +294,7 @@ class ChoiceMass:
     @property
     def total(self) -> NDArray[np.float64]:
         """``(n_theta,)`` mass on ``[t_min, max_t]``, summed over choices."""
-        return self.cdf[:, -1]
+        return self.cdf[:, -1].copy()  # a view would keep the whole cdf alive
 
     def mass_before(self, deadline: ArrayLike) -> NDArray[np.float64]:
         """Mass accumulated before ``deadline``, linearly interpolated on the grid.
@@ -374,8 +374,8 @@ def choice_mass(
     ------
     ValueError
         If ``predictor.input_width != n_params + 2``, the usual symptom of
-        pairing a parameter set with the wrong LAN, or if ``onset`` does not
-        broadcast to ``(n_theta,)``.
+        pairing a parameter set with the wrong LAN, or if ``onset`` is not
+        finite or does not broadcast to ``(n_theta,)``.
     """
     theta_arr = np.atleast_2d(np.asarray(theta, dtype=np.float32))
     if theta_arr.ndim != 2:
@@ -391,6 +391,8 @@ def choice_mass(
     choice_arr = np.asarray(choices)
     n_choices = choice_arr.shape[0]
     onset_arr = np.broadcast_to(np.asarray(onset, dtype=np.float64), (n_theta,))
+    if not np.all(np.isfinite(onset_arr)):
+        raise ValueError("onset must be finite; pass 0 for a model without one")
     t = grid.for_theta(onset_arr)
     n_points = t.shape[1]
 
