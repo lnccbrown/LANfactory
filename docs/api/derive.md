@@ -77,16 +77,6 @@ read these by name.
 
 ::: lanfactory.derive.derive_aux_corpus
 
-::: lanfactory.derive.sample_theta
-
-::: lanfactory.derive.sample_deadlines
-
-::: lanfactory.derive.cpn_labels
-
-::: lanfactory.derive.opn_labels
-
-::: lanfactory.derive.simulate_labels
-
 ::: lanfactory.derive.NETWORK_TYPES
 
 ::: lanfactory.derive.AUX_CATEGORY

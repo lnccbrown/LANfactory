@@ -28,16 +28,19 @@ from lanfactory.derive import (
     ChoiceMass,
     OnsetGrid,
     choice_mass,
-    cpn_labels,
     derive_aux_corpus,
     load_onnx_predictor,
+)
+from lanfactory.derive import corpus as corpus_module
+from lanfactory.derive.corpus import (
+    _provenance,
+    _sha256,
+    cpn_labels,
     opn_labels,
     sample_deadlines,
     sample_theta,
     simulate_labels,
 )
-from lanfactory.derive import corpus as corpus_module
-from lanfactory.derive.corpus import _provenance, _sha256
 from lanfactory.trainers.torch_mlp import DatasetTorch
 from tests._onnx_utils import export_tiny_torch_lan
 from tests.derive.conftest import DDM_ONNX, DDM_SHA256
@@ -265,18 +268,6 @@ def test_deadline_rows_put_the_deadline_last(ddm_mass):
     assert data.dtype == labels.dtype == np.float32
     np.testing.assert_array_equal(data[:, :-1], THETA)
     np.testing.assert_array_equal(data[:, -1], DEADLINES.astype(np.float32))
-
-
-@pytest.mark.parametrize(
-    "build,extra",
-    [(cpn_labels, CHOICES), (opn_labels, 1.0)],
-    ids=["cpn", "opn"],
-)
-def test_label_functions_reject_bad_theta(ddm_mass, build, extra):
-    with pytest.raises(ValueError, match="parameter vectors"):
-        build(ddm_mass, THETA[:2], extra)
-    with pytest.raises(ValueError, match="theta must be"):
-        build(ddm_mass, THETA[:, :, None], extra)
 
 
 # --------------------------------------------------------------------------

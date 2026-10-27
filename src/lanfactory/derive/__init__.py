@@ -5,12 +5,7 @@ from .corpus import (
     DERIVATION_METHOD,
     MANIFEST_NAME,
     NETWORK_TYPES,
-    cpn_labels,
     derive_aux_corpus,
-    opn_labels,
-    sample_deadlines,
-    sample_theta,
-    simulate_labels,
 )
 from .integrate import (
     ChoiceMass,
@@ -32,12 +27,7 @@ __all__ = [
     "OnsetGrid",
     "Predictor",
     "choice_mass",
-    "cpn_labels",
     "derive_aux_corpus",
     "load_onnx_predictor",
-    "opn_labels",
-    "sample_deadlines",
-    "sample_theta",
-    "simulate_labels",
     "survey",
 ]

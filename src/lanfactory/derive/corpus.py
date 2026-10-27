@@ -60,19 +60,6 @@ from .integrate import (
     load_onnx_predictor,
 )
 
-__all__ = [
-    "AUX_CATEGORY",
-    "DERIVATION_METHOD",
-    "MANIFEST_NAME",
-    "NETWORK_TYPES",
-    "cpn_labels",
-    "derive_aux_corpus",
-    "opn_labels",
-    "sample_deadlines",
-    "sample_theta",
-    "simulate_labels",
-]
-
 NETWORK_TYPES: tuple[str, ...] = ("cpn", "opn")
 """Auxiliary network types a corpus can be derived for."""
 
@@ -182,21 +169,6 @@ def sample_deadlines(
 # --------------------------------------------------------------------------
 
 
-def _as_theta(theta: ArrayLike) -> NDArray[np.float32]:
-    theta_arr = np.atleast_2d(np.asarray(theta, dtype=np.float32))
-    if theta_arr.ndim != 2:
-        raise ValueError(f"theta must be (n_theta, n_params), got {theta_arr.shape}")
-    return theta_arr
-
-
-def _check_rows(mass: ChoiceMass, theta: NDArray) -> None:
-    if mass.cdf.shape[0] != theta.shape[0]:
-        raise ValueError(
-            f"mass has {mass.cdf.shape[0]} parameter vectors but theta has "
-            f"{theta.shape[0]}"
-        )
-
-
 def _labels(values: NDArray) -> NDArray[np.float32]:
     """``(n_rows, 1)`` float32 probabilities, clipped to ``[0, 1]``."""
     return np.clip(values, 0.0, 1.0).astype(np.float32).reshape(-1, 1)
@@ -228,7 +200,7 @@ def _deadline_rows(
 
 
 def cpn_labels(
-    mass: ChoiceMass, theta: ArrayLike, choices: Sequence[float] | NDArray
+    mass: ChoiceMass, theta: NDArray[np.float32], choices: Sequence[float] | NDArray
 ) -> tuple[NDArray[np.float32], NDArray[np.float32]]:
     """CPN rows ``[theta..., choice]`` for every choice, labelled ``mass(choice) / total``.
 
@@ -250,13 +222,11 @@ def cpn_labels(
         ``data`` of shape ``(n_theta * n_choices, n_params + 1)`` and
         ``labels`` of shape ``(n_theta * n_choices, 1)``.
     """
-    theta_arr = _as_theta(theta)
-    _check_rows(mass, theta_arr)
     choice_arr = np.asarray(choices, dtype=np.float32).reshape(-1)
-    n_theta, n_choices = theta_arr.shape[0], choice_arr.shape[0]
+    n_theta, n_choices = theta.shape[0], choice_arr.shape[0]
     data = np.concatenate(
         [
-            np.repeat(theta_arr, n_choices, axis=0),
+            np.repeat(theta, n_choices, axis=0),
             np.tile(choice_arr, n_theta)[:, None],
         ],
         axis=1,
@@ -270,7 +240,7 @@ def cpn_labels(
 
 
 def opn_labels(
-    mass: ChoiceMass, theta: ArrayLike, deadlines: ArrayLike
+    mass: ChoiceMass, theta: NDArray[np.float32], deadlines: ArrayLike
 ) -> tuple[NDArray[np.float32], NDArray[np.float32]]:
     """OPN rows ``[theta..., deadline]`` labelled ``1 - F(deadline) / total``.
 
@@ -293,9 +263,7 @@ def opn_labels(
         ``data`` of shape ``(n_theta, n_params + 1)`` and ``labels`` of shape
         ``(n_theta, 1)``.
     """
-    theta_arr = _as_theta(theta)
-    _check_rows(mass, theta_arr)
-    data, d = _deadline_rows(theta_arr, deadlines)
+    data, d = _deadline_rows(theta, deadlines)
     return data, _labels(1.0 - mass.mass_before(d) / _total(mass))
 
 
@@ -306,7 +274,7 @@ def opn_labels(
 
 def simulate_labels(
     model: str,
-    theta: ArrayLike,
+    theta: NDArray[np.float32],
     network_type: str,
     deadlines: ArrayLike | None,
     n_sim: int,
@@ -370,8 +338,7 @@ def simulate_labels(
         under which no trial responds before ``max_t``.
     """
     _check_network_type(network_type)
-    theta_arr = _as_theta(theta)
-    n_theta = theta_arr.shape[0]
+    n_theta = theta.shape[0]
     if n_theta == 0:
         raise ValueError("theta must hold at least one parameter vector")
     if n_sim < 1:
@@ -382,7 +349,7 @@ def simulate_labels(
     )
 
     base = simulator(
-        theta=theta_arr,
+        theta=theta,
         model=model,
         n_samples=n_sim,
         max_t=max_t,
@@ -411,7 +378,7 @@ def simulate_labels(
         raise ValueError(f"{network_type} labels need deadlines")
     d = np.broadcast_to(np.asarray(deadlines, dtype=np.float32), (n_theta,))
     with_deadline = simulator(
-        theta=np.concatenate([theta_arr, d[:, None]], axis=1),
+        theta=np.concatenate([theta, d[:, None]], axis=1),
         model=f"{model}_deadline",
         n_samples=n_sim,
         max_t=max_t,
