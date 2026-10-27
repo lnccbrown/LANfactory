@@ -1,10 +1,4 @@
-"""Turn a LAN's per-choice masses into cpn / opn / gonogo training corpora.
-
-:mod:`lanfactory.derive.integrate` integrates a trained LAN's density over
-reaction time. This module samples parameter vectors the way ssms samples a
-simulated corpus, asks the LAN for the masses, and writes pickles whose layout
-is what the trainers already read — so an auxiliary network can be derived
-from a production LAN on a laptop in minutes, with the trainer unchanged.
+"""Turn a LAN's per-choice masses into cpn / opn training corpora.
 
 Row layouts
 -----------
@@ -16,41 +10,20 @@ type       training row                           label
 cpn        ``[theta..., choice]`` — one row per   ``mass(choice) / total``
            choice code in ``model_config["choices"]``
 opn        ``[theta..., deadline]``               ``1 - F(deadline) / total``
-gonogo     ``[theta..., deadline]``               ``nogo_before(deadline) / total``
-                                                  ``+ (1 - F(deadline) / total)``
 =========  =====================================  ==============================
 
-with ``total`` the LAN's mass on ``[t_min, max_t]`` summed over choices,
-``F(d) = mass_before(d)`` summed over choices and ``nogo_before(d)`` the
-mass before ``d`` of every choice but the largest code (ssms' own ``nogo_p``:
-a trial is *nogo* when its choice is anything but the largest choice code,
-or when it is omitted).
-
-Labels are renormalised by the network's own total
----------------------------------------------------
-The LAN's total mass is not one: it carries the network's scale error (on the
-Hub ddm LAN, median ``|total − 1|`` 0.0037 but up to 0.22 in the corners of
-the box; see :func:`.integrate.survey`). Against simulation that error is
-mostly *scale* — dividing by the total takes the cpn error from mean 0.035 /
-max 0.17 to 0.004 / 0.033 and the opn error from 0.026 / 0.22 to 0.012 /
-0.18 — so every label is the LAN's mass as a fraction of its own total, and
-the total is recorded in every pickle (``generator_config["derive_stats"]``)
-and in the manifest, never hidden. The ratios lie in ``[0, 1]`` up to
-rounding; the float32 clip in :func:`_labels` is kept as a safety net, and
-the omission term is formed once so that the decomposition
-``gonogo_label == nogo_before(deadline) / total + opn_label`` holds row by
-row in the written corpus. A parameter vector with zero total is rejected.
+with ``total`` the LAN's mass on ``[t_min, max_t]`` summed over choices and
+``F(d) = mass_before(d)`` summed over choices.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
-import logging
 import pickle
 import re
 from collections.abc import Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from pathlib import Path
 
 import numpy as np
@@ -63,35 +36,15 @@ from lanfactory import __version__
 
 from .integrate import (
     ChoiceMass,
-    IntegrationGrid,
     OnsetGrid,
     choice_mass,
     load_onnx_predictor,
-    survey,
 )
 
-logger = logging.getLogger(__name__)
-
-__all__ = [
-    "AUX_CATEGORY",
-    "DERIVATION_METHOD",
-    "MANIFEST_NAME",
-    "NETWORK_TYPES",
-    "SourceLAN",
-    "cpn_labels",
-    "derive_aux_corpus",
-    "gonogo_labels",
-    "grid_description",
-    "opn_labels",
-    "sample_deadlines",
-    "sample_theta",
-    "simulate_labels",
-]
-
-NETWORK_TYPES: tuple[str, ...] = ("cpn", "opn", "gonogo")
+NETWORK_TYPES: tuple[str, ...] = ("cpn", "opn")
 """Auxiliary network types a corpus can be derived for."""
 
-AUX_CATEGORY: dict[str, str] = {"cpn": "choice", "opn": "omission", "gonogo": "nogo"}
+AUX_CATEGORY: dict[str, str] = {"cpn": "choice", "opn": "omission"}
 """What each network type's label is the probability of."""
 
 DERIVATION_METHOD = "derived-from-lan"
@@ -108,34 +61,6 @@ _RUN_UUID = re.compile(r"^[0-9a-f]{32}$")
 # --------------------------------------------------------------------------
 
 
-class _OrderedUniformSampler(UniformParameterSampler):
-    """ssms' uniform sampler drawing the parameters in ``param_space`` order.
-
-    ssms orders the draws by a topological sort over ``set`` objects, so the
-    column that consumes each slice of the generator's stream — and with it
-    every sampled theta — changes with ``PYTHONHASHSEED`` from one process to
-    the next. Insertion order of ``param_space`` (the model's parameter
-    order) is a valid topological order once each parameter is placed after
-    the parameters its bounds name, and it is the same in every process.
-    """
-
-    def _topological_sort(self) -> list[str]:
-        order: list[str] = []
-        pending = list(self.param_space)
-        while pending:
-            for name in pending:
-                needs = {b for b in self.param_space[name] if isinstance(b, str)}
-                if needs.issubset(order):
-                    order.append(name)
-                    pending.remove(name)
-                    break
-            else:
-                raise ValueError(
-                    f"circular parameter dependency among {pending} in param_space"
-                )
-        return order
-
-
 def sample_theta(
     model_config: dict, n: int, rng: np.random.Generator
 ) -> NDArray[np.float32]:
@@ -144,10 +69,9 @@ def sample_theta(
     Uses ssms' ``UniformParameterSampler`` on ``model_config["param_bounds_dict"]``
     with the model's sampling transforms (``ModelConfigBuilder
     .get_sampling_transforms``), which is what ssms' simulation pipeline
-    builds — except that the parameters are drawn in ``model_config["params"]``
-    order rather than ssms' hash-dependent order, so the same ``rng`` state
-    gives the same thetas in every process (ssms' own order varies with
-    ``PYTHONHASHSEED``). Columns follow ``model_config["params"]``.
+    builds. The bounds are declared in ``model_config["params"]`` order, which
+    ssms draws in, so the same ``rng`` state gives the same thetas in every
+    process. Columns follow ``model_config["params"]``.
 
     Parameters
     ----------
@@ -167,7 +91,7 @@ def sample_theta(
     params = list(model_config["params"])
     param_space = {name: bounds[name] for name in params if name in bounds}
     param_space.update({name: b for name, b in bounds.items() if name not in params})
-    sampler = _OrderedUniformSampler(
+    sampler = UniformParameterSampler(
         param_space=param_space,
         constraints=ModelConfigBuilder.get_sampling_transforms(model_config),
     )
@@ -226,57 +150,26 @@ def sample_deadlines(
 # --------------------------------------------------------------------------
 
 
-def _as_theta(theta: ArrayLike) -> NDArray[np.float32]:
-    theta_arr = np.atleast_2d(np.asarray(theta, dtype=np.float32))
-    if theta_arr.ndim != 2:
-        raise ValueError(f"theta must be (n_theta, n_params), got {theta_arr.shape}")
-    return theta_arr
-
-
-def _check_rows(mass: ChoiceMass, theta: NDArray) -> None:
-    if mass.cdf.shape[0] != theta.shape[0]:
-        raise ValueError(
-            f"mass has {mass.cdf.shape[0]} parameter vectors but theta has "
-            f"{theta.shape[0]}"
-        )
-
-
 def _labels(values: NDArray) -> NDArray[np.float32]:
     """``(n_rows, 1)`` float32 probabilities, clipped to ``[0, 1]``."""
     return np.clip(values, 0.0, 1.0).astype(np.float32).reshape(-1, 1)
 
 
-def _total(mass: ChoiceMass) -> NDArray[np.float64]:
-    """The per-theta total the labels are renormalised by; must be positive."""
+def _total(mass: ChoiceMass, flagged: NDArray[np.bool_] | None) -> NDArray[np.float64]:
+    """The per-theta divisor of the labels: the LAN's total, 1 where ``flagged``.
+
+    Flagged rows are relabelled by simulation, so only the others need a
+    positive total; a NaN total is refused like a zero one.
+    """
     total = mass.total
-    if np.any(total <= 0.0):
-        bad = np.flatnonzero(total <= 0.0)
+    trusted = np.ones(total.shape, dtype=bool) if flagged is None else ~flagged
+    bad = np.flatnonzero(trusted & ~(total > 0.0))
+    if bad.size:
         raise ValueError(
             f"total mass must be > 0 to renormalise labels; parameter vectors "
             f"{bad.tolist()} have total {total[bad].tolist()}"
         )
-    return total
-
-
-def _omission(mass: ChoiceMass, deadline: NDArray[np.float64]) -> NDArray[np.float64]:
-    """``P(no response before deadline)`` as a float64 probability.
-
-    ``1 - F(deadline) / total`` with ``F`` the mass before the deadline
-    summed over choices, clipped to ``[0, 1]`` once so that the same term
-    enters :func:`opn_labels` and :func:`gonogo_labels`.
-    """
-    return np.clip(1.0 - mass.mass_before(deadline) / _total(mass), 0.0, 1.0)
-
-
-def _nogo_before(
-    mass: ChoiceMass, deadline: NDArray[np.float64]
-) -> NDArray[np.float64]:
-    """Mass of every non-maximal choice before ``deadline`` (ssms' nogo set)."""
-    go_choice = mass.choices.max()
-    return sum(
-        (mass.mass_before(deadline, c) for c in mass.choices if c != go_choice),
-        np.zeros(mass.cdf.shape[0]),
-    )
+    return np.where(trusted, total, 1.0)
 
 
 def _deadline_rows(
@@ -293,7 +186,10 @@ def _deadline_rows(
 
 
 def cpn_labels(
-    mass: ChoiceMass, theta: ArrayLike, choices: Sequence[float] | NDArray
+    mass: ChoiceMass,
+    theta: NDArray[np.float32],
+    choices: Sequence[float] | NDArray,
+    flagged: NDArray[np.bool_] | None = None,
 ) -> tuple[NDArray[np.float32], NDArray[np.float32]]:
     """CPN rows ``[theta..., choice]`` for every choice, labelled ``mass(choice) / total``.
 
@@ -308,6 +204,9 @@ def cpn_labels(
         ``(n_theta, n_params)``.
     choices
         Choice codes to emit rows for, e.g. ``model_config["choices"]``.
+    flagged
+        ``(n_theta,)``: thetas that fall back to simulation, whose labels are
+        placeholders for the caller to overwrite; ``None`` flags none.
 
     Returns
     -------
@@ -315,13 +214,11 @@ def cpn_labels(
         ``data`` of shape ``(n_theta * n_choices, n_params + 1)`` and
         ``labels`` of shape ``(n_theta * n_choices, 1)``.
     """
-    theta_arr = _as_theta(theta)
-    _check_rows(mass, theta_arr)
     choice_arr = np.asarray(choices, dtype=np.float32).reshape(-1)
-    n_theta, n_choices = theta_arr.shape[0], choice_arr.shape[0]
+    n_theta, n_choices = theta.shape[0], choice_arr.shape[0]
     data = np.concatenate(
         [
-            np.repeat(theta_arr, n_choices, axis=0),
+            np.repeat(theta, n_choices, axis=0),
             np.tile(choice_arr, n_theta)[:, None],
         ],
         axis=1,
@@ -331,11 +228,15 @@ def cpn_labels(
     per_choice = np.stack(
         [mass.mass(float(c)) for c in np.asarray(choices).reshape(-1)], axis=1
     )
-    return data, _labels((per_choice / _total(mass)[:, None]).reshape(-1))
+    total = _total(mass, flagged)
+    return data, _labels((per_choice / total[:, None]).reshape(-1))
 
 
 def opn_labels(
-    mass: ChoiceMass, theta: ArrayLike, deadlines: ArrayLike
+    mass: ChoiceMass,
+    theta: NDArray[np.float32],
+    deadlines: ArrayLike,
+    flagged: NDArray[np.bool_] | None = None,
 ) -> tuple[NDArray[np.float32], NDArray[np.float32]]:
     """OPN rows ``[theta..., deadline]`` labelled ``1 - F(deadline) / total``.
 
@@ -351,6 +252,8 @@ def opn_labels(
         ``(n_theta, n_params)``.
     deadlines
         Scalar or ``(n_theta,)`` deadlines in seconds.
+    flagged
+        As for :func:`cpn_labels`.
 
     Returns
     -------
@@ -358,42 +261,8 @@ def opn_labels(
         ``data`` of shape ``(n_theta, n_params + 1)`` and ``labels`` of shape
         ``(n_theta, 1)``.
     """
-    theta_arr = _as_theta(theta)
-    _check_rows(mass, theta_arr)
-    data, d = _deadline_rows(theta_arr, deadlines)
-    return data, _labels(_omission(mass, d))
-
-
-def gonogo_labels(
-    mass: ChoiceMass, theta: ArrayLike, deadlines: ArrayLike
-) -> tuple[NDArray[np.float32], NDArray[np.float32]]:
-    """Go/no-go rows ``[theta..., deadline]`` labelled with ssms' ``nogo_p``.
-
-    ssms counts a trial as *nogo* when its choice is not the largest choice
-    code **or** it is omitted, so the label is the mass of every non-maximal
-    choice before the deadline plus the omission probability, both as a
-    fraction of the LAN's own total: ``gonogo == nogo_before / total + opn``
-    row by row.
-
-    Parameters
-    ----------
-    mass
-        Masses for ``theta``.
-    theta
-        ``(n_theta, n_params)``.
-    deadlines
-        Scalar or ``(n_theta,)`` deadlines in seconds.
-
-    Returns
-    -------
-    tuple[NDArray[np.float32], NDArray[np.float32]]
-        ``data`` of shape ``(n_theta, n_params + 1)`` and ``labels`` of shape
-        ``(n_theta, 1)``.
-    """
-    theta_arr = _as_theta(theta)
-    _check_rows(mass, theta_arr)
-    data, d = _deadline_rows(theta_arr, deadlines)
-    return data, _labels(_nogo_before(mass, d) / _total(mass) + _omission(mass, d))
+    data, d = _deadline_rows(theta, deadlines)
+    return data, _labels(1.0 - mass.mass_before(d) / _total(mass, flagged))
 
 
 # --------------------------------------------------------------------------
@@ -403,7 +272,7 @@ def gonogo_labels(
 
 def simulate_labels(
     model: str,
-    theta: ArrayLike,
+    theta: NDArray[np.float32],
     network_type: str,
     deadlines: ArrayLike | None,
     n_sim: int,
@@ -417,28 +286,28 @@ def simulate_labels(
     outside the fallback window. The labels estimate the same quantities the
     renormalised LAN labels do:
 
-    * ``cpn``: ``mean(choices == c & rts < max_t) / mean(rts < max_t)`` per
-      choice — the choice frequency conditional on responding within
-      ``max_t``, which is what ``mass(c) / total`` estimates (ssms does not
-      censor a base model at ``max_t``; an un-terminated trial comes back at
-      ``rt ≈ max_t + t`` with a choice).
+    * ``cpn``: ``mean(choices == c & responded) / mean(responded)`` per
+      choice, ``responded = (rts >= 0) & (rts < max_t)`` — the choice
+      frequency conditional on responding within ``max_t``, which is what
+      ``mass(c) / total`` estimates. A trial still running at ``max_t``
+      comes back either at ``rt ≈ max_t + t`` with a choice (ddm) or
+      censored as ``rt == -999`` (racing_diffusion_3, poisson_race, addm);
+      both count as past ``max_t``.
     * ``opn``: ``mean(rts == -999)`` under the ``{model}_deadline`` simulator
       with the row's deadline appended to theta — the omission probability.
-    * ``gonogo``: ``mean(choices != max(choices) | rts == -999)`` under the
-      same simulator — ssms' ``nogo_p``.
 
     Parameters
     ----------
     model
-        ssms base model name, e.g. ``"ddm"``; ``opn`` / ``gonogo`` simulate
+        ssms base model name, e.g. ``"ddm"``; ``opn`` simulates
         ``f"{model}_deadline"``.
     theta
         ``(n_theta, n_params)`` parameter vectors of the base model.
     network_type
         One of :data:`NETWORK_TYPES`.
     deadlines
-        Scalar or ``(n_theta,)`` deadlines in seconds; required for ``opn``
-        and ``gonogo``, ignored for ``cpn``.
+        Scalar or ``(n_theta,)`` deadlines in seconds; required for ``opn``,
+        ignored for ``cpn``.
     n_sim
         Trials simulated per parameter vector.
     rng
@@ -446,8 +315,8 @@ def simulate_labels(
         model, one for the deadline model), so a corpus file stays a
         function of its own seed.
     max_t
-        The base model's ``max_t``; the cpn labels condition on ``rts <
-        max_t`` and ``past_max_t`` counts the trials at or beyond it.
+        The base model's ``max_t``; the cpn labels condition on responding
+        before it and ``past_max_t`` counts the trials that do not.
 
     Returns
     -------
@@ -456,19 +325,18 @@ def simulate_labels(
         order of the model config, so ``labels.reshape(-1)`` is theta-major
         like :func:`cpn_labels`) and ``(n_theta, 1)`` otherwise, and
         ``past_max_t`` of shape ``(n_theta,)``: the share of base-model
-        trials with ``rt >= max_t``, the part of the truth no LAN trained
-        on ``[0, max_t]`` can see.
+        trials that do not respond before ``max_t``, the part of the truth no
+        LAN trained on ``[0, max_t]`` can see.
 
     Raises
     ------
     ValueError
         For an unknown ``network_type``, ``n_sim < 1``, empty ``theta``,
-        missing deadlines for ``opn`` / ``gonogo``, or a parameter vector
+        missing deadlines for ``opn``, or a parameter vector
         under which no trial responds before ``max_t``.
     """
     _check_network_type(network_type)
-    theta_arr = _as_theta(theta)
-    n_theta = theta_arr.shape[0]
+    n_theta = theta.shape[0]
     if n_theta == 0:
         raise ValueError("theta must hold at least one parameter vector")
     if n_sim < 1:
@@ -479,14 +347,14 @@ def simulate_labels(
     )
 
     base = simulator(
-        theta=theta_arr,
+        theta=theta,
         model=model,
         n_samples=n_sim,
         max_t=max_t,
         random_state=seed_base,
     )
     rts = np.asarray(base["rts"]).reshape(n_sim, n_theta)
-    responded = rts < max_t
+    responded = (rts >= 0) & (rts < max_t)
     past_max_t = 1.0 - responded.mean(axis=0)
 
     if network_type == "cpn":
@@ -508,19 +376,14 @@ def simulate_labels(
         raise ValueError(f"{network_type} labels need deadlines")
     d = np.broadcast_to(np.asarray(deadlines, dtype=np.float32), (n_theta,))
     with_deadline = simulator(
-        theta=np.concatenate([theta_arr, d[:, None]], axis=1),
+        theta=np.concatenate([theta, d[:, None]], axis=1),
         model=f"{model}_deadline",
         n_samples=n_sim,
         max_t=max_t,
         random_state=seed_deadline,
     )
     omitted = np.asarray(with_deadline["rts"]).reshape(n_sim, n_theta) == -999.0
-    if network_type == "opn":
-        labels = omitted.mean(axis=0)
-    else:
-        chosen = np.asarray(with_deadline["choices"]).reshape(n_sim, n_theta)
-        labels = ((chosen != choices.max()) | omitted).mean(axis=0)
-    return labels[:, None], past_max_t
+    return omitted.mean(axis=0)[:, None], past_max_t
 
 
 # --------------------------------------------------------------------------
@@ -546,102 +409,30 @@ def _run_uuid_from_name(path: Path) -> str | None:
     return None
 
 
-@dataclass(frozen=True)
-class SourceLAN:
-    """Identity of the LAN a corpus was derived from.
+def _provenance(
+    onnx_path: Path,
+    network_type: str,
+    grid: OnsetGrid,
+    run_uuid: str | None,
+    hf_revision: str | None,
+) -> dict:
+    """The flat provenance record downstream tools read by key.
 
-    Build with :meth:`from_onnx`. Attributes are what a downstream consumer
-    needs to find the exact network again: the file hash always, the
-    trainer's run uuid and the Hub coordinates when known.
-
-    Attributes
-    ----------
-    path : Path
-        The ONNX artifact the masses came from.
-    sha256 : str
-        Hex digest of the file, computed by streaming it.
-    run_uuid : str | None
-        The training run's uuid, parsed from the trainer's filename
-        conventions when present.
-    hf_repo : str | None
-        Hub repository the artifact was downloaded from, if any.
-    hf_revision : str | None
-        Hub revision (commit, tag, or branch) of that download, if any.
+    ``source_lan_run_uuid`` is ``run_uuid``, parsed from the trainer's file
+    name when ``None``; ``integration_grid`` is the number of grid points per
+    parameter vector.
     """
-
-    path: Path
-    sha256: str
-    run_uuid: str | None = None
-    hf_repo: str | None = None
-    hf_revision: str | None = None
-
-    @classmethod
-    def from_onnx(
-        cls,
-        path: str | Path,
-        *,
-        run_uuid: str | None = None,
-        hf_repo: str | None = None,
-        hf_revision: str | None = None,
-    ) -> SourceLAN:
-        """Hash an ONNX file and record where it came from.
-
-        Parameters
-        ----------
-        path
-            The ONNX artifact.
-        run_uuid
-            Training run uuid; parsed from the filename when omitted.
-        hf_repo
-            Hub repository, if the artifact was downloaded.
-        hf_revision
-            Hub revision of that download.
-
-        Returns
-        -------
-        SourceLAN
-        """
-        path = Path(path)
-        return cls(
-            path=path,
-            sha256=_sha256(path),
-            run_uuid=run_uuid if run_uuid is not None else _run_uuid_from_name(path),
-            hf_repo=hf_repo,
-            hf_revision=hf_revision,
-        )
-
-    def provenance(self, network_type: str, grid: IntegrationGrid | OnsetGrid) -> dict:
-        """The flat provenance record other tools read by key.
-
-        Parameters
-        ----------
-        network_type
-            One of :data:`NETWORK_TYPES`; selects ``aux_category``.
-        grid
-            The integration grid the masses were computed on.
-
-        Returns
-        -------
-        dict
-            Exactly the keys ``derivation_method``, ``aux_category``,
-            ``source_lan_run_uuid``, ``source_lan_sha256``,
-            ``source_lan_hf_commit``, ``source_lan_run_id``,
-            ``integration_grid``, ``integration_max_t``. ``source_lan_run_id``
-            (an MLflow run id) is ``None`` here and is filled in by the caller
-            that knows it; ``integration_grid`` is the number of grid points
-            per parameter vector (see :func:`grid_description`).
-        """
-        _check_network_type(network_type)
-        return {
-            "derivation_method": DERIVATION_METHOD,
-            "aux_category": AUX_CATEGORY[network_type],
-            "source_lan_run_uuid": self.run_uuid,
-            "source_lan_sha256": self.sha256,
-            "source_lan_hf_commit": self.hf_revision,
-            "source_lan_run_id": None,
-            "integration_grid": grid.n_points,
-            "integration_max_t": grid.max_t,
-        }
+    return {
+        "derivation_method": DERIVATION_METHOD,
+        "aux_category": AUX_CATEGORY[network_type],
+        "source_lan_run_uuid": (
+            run_uuid if run_uuid is not None else _run_uuid_from_name(onnx_path)
+        ),
+        "source_lan_sha256": _sha256(onnx_path),
+        "source_lan_hf_commit": hf_revision,
+        "integration_grid": grid.n_points,
+        "integration_max_t": grid.max_t,
+    }
 
 
 # --------------------------------------------------------------------------
@@ -673,93 +464,24 @@ def _plain(config: dict) -> dict:
             continue
         try:
             pickle.dumps(value)
-        except Exception:  # noqa: BLE001 - keep provenance, drop the object
+        except Exception:  # keep provenance, drop the object
             out[key] = repr(value)
         else:
             out[key] = value
     return out
 
 
-def grid_description(
-    grid: IntegrationGrid | OnsetGrid, onset_param: str | None
-) -> dict:
-    """The grid as the pickles and the manifest record it.
-
-    Parameters
-    ----------
-    grid
-        The integration grid.
-    onset_param
-        The model's onset parameter when it has one — the :class:`OnsetGrid`
-        is built around it, and the leak statistic is measured at it on that
-        grid; ``None`` when the model has none.
-
-    Returns
-    -------
-    dict
-        ``kind`` (``"onset"`` / ``"uniform"``), ``onset_param``, ``n_points``
-        (points per parameter vector) and the grid's own fields
-        (``max_t``, ``t_min`` and, for an onset grid, its segment sizes).
-    """
-    return {
-        "kind": "onset" if isinstance(grid, OnsetGrid) else "uniform",
-        "onset_param": onset_param,
-        "n_points": grid.n_points,
-        **asdict(grid),
-    }
-
-
-def _resolve_grid(
-    grid: IntegrationGrid | OnsetGrid | None,
-    onset_param: str | None,
-    params: Sequence[str],
-    model: str,
-) -> tuple[IntegrationGrid | OnsetGrid, int | None]:
-    """The grid to integrate on and the column of the onset parameter.
-
-    ``None`` picks :class:`OnsetGrid` when ``onset_param`` names a parameter
-    of the model and falls back to a uniform :class:`IntegrationGrid` (with
-    a warning) otherwise; an explicit :class:`OnsetGrid` requires the onset
-    parameter. The onset column is returned whenever the model has one (the
-    grid record names it on either grid); the leak below it is only measured
-    on an :class:`OnsetGrid`, since a uniform grid's leak is mostly its own
-    quadrature error.
-    """
-    onset_idx = (
-        list(params).index(onset_param)
-        if onset_param is not None and onset_param in params
-        else None
-    )
-    if grid is None:
-        if onset_idx is not None:
-            return OnsetGrid(), onset_idx
-        if onset_param is not None:
-            logger.warning(
-                "model %r has no parameter %r; integrating on the uniform %r",
-                model,
-                onset_param,
-                IntegrationGrid(),
-            )
-        return IntegrationGrid(), onset_idx
-    if isinstance(grid, OnsetGrid) and onset_idx is None:
-        raise ValueError(
-            f"an OnsetGrid needs onset_param to name a parameter of {model!r} "
-            f"({list(params)}), got onset_param={onset_param!r}"
-        )
-    return grid, onset_idx
-
-
 def _derive_stats(
     total: NDArray[np.float64],
     flagged: NDArray[np.bool_],
     past_max_t: NDArray[np.float64] | None,
-    leak: NDArray[np.float64] | None,
+    leak: NDArray[np.float64],
 ) -> dict[str, float | None]:
     """The flat ``derive_stats`` record, for one file or a whole corpus.
 
     ``past_max_t`` is the per-fallback-theta share of base-model trials at or
     beyond ``max_t`` (``None`` or empty when nothing fell back); ``leak`` the
-    per-theta mass below the onset (``None`` without an onset grid).
+    per-theta mass below the onset.
     """
     past = None if past_max_t is None or past_max_t.size == 0 else past_max_t
     return {
@@ -768,20 +490,18 @@ def _derive_stats(
         "derive_total_mass_max": float(total.max()),
         "derive_fallback_frac": float(flagged.mean()),
         "derive_sim_past_max_t_max": None if past is None else float(past.max()),
-        "derive_leak_below_onset_p99": (
-            None if leak is None else float(np.percentile(leak, 99))
-        ),
+        "derive_leak_below_onset_p99": float(np.percentile(leak, 99)),
     }
 
 
 def _flag_totals(
     total: NDArray[np.float64], window: tuple[float, float] | None
 ) -> NDArray[np.bool_]:
-    """Which parameter vectors fall back to simulation."""
+    """Which parameter vectors fall back to simulation; a NaN total does."""
     if window is None:
         return np.zeros(total.shape[0], dtype=bool)
     lo, hi = window
-    return (total < lo) | (total > hi)
+    return ~((total >= lo) & (total <= hi))
 
 
 def derive_aux_corpus(
@@ -792,36 +512,32 @@ def derive_aux_corpus(
     *,
     n_files: int = 100,
     n_theta_per_file: int = 4096,
-    onset_param: str | None = "t",
-    grid: IntegrationGrid | OnsetGrid | None = None,
+    grid: OnsetGrid = OnsetGrid(),  # noqa: B008 - frozen, so never mutated
     deadline_quantile_frac: float = 0.7,
     fallback_window: tuple[float, float] | None = (0.98, 1.03),
     fallback_n_sim: int = 20_000,
-    survey_n_theta: int = 20_000,
     seed: int = 0,
-    source: SourceLAN | None = None,
+    source_run_uuid: str | None = None,
+    source_hf_repo: str | None = None,
+    source_hf_revision: str | None = None,
 ) -> list[Path]:
-    """Write a cpn / opn / gonogo training corpus derived from a LAN.
+    """Write a cpn / opn training corpus derived from a LAN.
 
     Each file holds ``n_theta_per_file`` parameter vectors sampled as ssms
     would (:func:`sample_theta`), their masses under the LAN, and the rows and
-    labels of :func:`cpn_labels`, :func:`opn_labels` or :func:`gonogo_labels`.
+    labels of :func:`cpn_labels` or :func:`opn_labels`.
     The pickles carry ``{type}_data``, ``{type}_labels``, ``generator_config``
     and ``model_config`` — the layout ``DatasetTorch`` and the training CLIs
     read — so the result trains with the trainers unchanged. A
     :data:`MANIFEST_NAME` sidecar lists the files and the provenance.
 
-    Labels are the LAN's masses renormalised by its own total (see the module
-    notes). A parameter vector whose total lies outside ``fallback_window`` is
-    one the LAN gets wrong beyond a scale error, so its labels come from
+    Labels are the LAN's masses renormalised by its own total. A parameter
+    vector whose total lies outside ``fallback_window`` is one the LAN gets
+    wrong beyond a scale error, so its labels come from
     :func:`simulate_labels` on ssms instead; the share that fell back and the
     simulation's own blind spot (trials past ``max_t``) are recorded beside
     the total-mass statistics in every pickle's
     ``generator_config["derive_stats"]`` and in the manifest.
-
-    The manifest also carries :func:`survey` of the LAN over its whole
-    training box (``lan_survey``, ``survey_n_theta`` draws), so every derived
-    corpus records the mass statistics of the network it came from.
 
     File ``i`` is generated from ``np.random.default_rng([seed, i])``, so a
     file's content depends on ``seed`` and its index only — the simulator
@@ -841,42 +557,34 @@ def derive_aux_corpus(
         Number of pickles; at least 2, since the trainers split files into
         train and validation sets.
     n_theta_per_file
-        Parameter vectors per file. Rows per file are this for opn / gonogo
+        Parameter vectors per file. Rows per file are this for opn
         and this times the number of choices for cpn; the trainers require
         the batch size to divide the row count.
-    onset_param
-        Name of the model's non-decision-time parameter. Its column is the
-        onset the :class:`OnsetGrid` is refined around and the edge the leak
-        statistic is measured at (on that grid only). ``None``, or a name the
-        model lacks, means no onset grid.
     grid
-        Integration grid. ``None`` (the default) is an :class:`OnsetGrid`
-        when ``onset_param`` names a parameter of ``model`` and a uniform
-        :class:`IntegrationGrid` otherwise, with a logged warning — the
-        uniform grid under-resolves a LAN's onset (see the grid policy in
-        :mod:`.integrate`). An explicit :class:`OnsetGrid` requires
-        ``onset_param``; an explicit :class:`IntegrationGrid` is used as is.
-        The grid of record is written to ``generator_config["derive"]``
-        (``grid`` = ``"onset"`` / ``"uniform"`` and ``grid_config``) and to
-        the manifest (``grid``).
+        Integration grid, refined per parameter vector around the model's
+        non-decision time ``t``, the edge the leak statistic is measured at.
+        It is recorded as ``grid`` in ``generator_config["derive"]`` and in
+        the manifest.
     deadline_quantile_frac
-        Passed to :func:`sample_deadlines` (opn / gonogo only).
+        Passed to :func:`sample_deadlines` (opn only).
     fallback_window
         ``(lo, hi)``: a theta whose total mass lies outside ``[lo, hi]`` (the
-        endpoints are trusted) is labelled by simulation. The default flags 3.7 % of the ddm box
-        on the Hub LAN and bounds the unflagged error against simulation at
-        0.023 (cpn) / 0.033 (opn). ``None`` disables the fallback.
+        endpoints are trusted), or is NaN, is labelled by simulation. The
+        default flags 3.7 % of the ddm box on the Hub LAN and bounds the
+        unflagged error against simulation at 0.023 (cpn) / 0.033 (opn).
+        ``None`` disables the fallback.
     fallback_n_sim
         Trials simulated per fallback theta.
-    survey_n_theta
-        Parameter vectors :func:`survey` draws for the manifest's
-        ``lan_survey`` (seeded with ``seed``; about five seconds per 20 000
-        on the Hub ddm LAN).
     seed
         Base seed.
-    source
-        Provenance of the LAN; :meth:`SourceLAN.from_onnx` on ``onnx_path``
-        when omitted.
+    source_run_uuid
+        Training run uuid of the LAN; parsed from the trainer's file name
+        conventions when omitted.
+    source_hf_repo
+        Hub repository the LAN was downloaded from, if any.
+    source_hf_revision
+        Hub revision (commit, tag, or branch) of that download, if any;
+        recorded as ``source_lan_hf_commit``.
 
     Returns
     -------
@@ -888,10 +596,10 @@ def derive_aux_corpus(
     ValueError
         For an unknown ``network_type``, ``n_files < 2``,
         ``n_theta_per_file < 1``, a ``fallback_window`` that is not
-        ``0 < lo < hi``, ``fallback_n_sim < 1``, ``survey_n_theta < 1``,
-        an :class:`OnsetGrid`
-        without an onset parameter, a LAN whose input width is not
-        ``n_params + 2`` for ``model``, or a theta with zero total mass.
+        ``0 < lo < hi``, ``fallback_n_sim < 1``,
+        a model without a non-decision time ``t``, a LAN whose input width is
+        not ``n_params + 2`` for ``model``, or, with ``fallback_window=None``,
+        a theta whose total mass is not positive.
     """
     _check_network_type(network_type)
     if n_files < 2:
@@ -910,8 +618,6 @@ def derive_aux_corpus(
         fallback_window = (lo, hi)
     if fallback_n_sim < 1:
         raise ValueError(f"fallback_n_sim must be >= 1, got {fallback_n_sim}")
-    if survey_n_theta < 1:
-        raise ValueError(f"survey_n_theta must be >= 1, got {survey_n_theta}")
 
     onnx_path = Path(onnx_path)
     out_folder = Path(out_folder)
@@ -919,8 +625,13 @@ def derive_aux_corpus(
     params = list(base_config["params"])
     choices = list(base_config["choices"])
     n_params = len(params)
-    grid, onset_idx = _resolve_grid(grid, onset_param, params, model)
-    grid_record = grid_description(grid, onset_param if onset_idx is not None else None)
+    if "t" not in params:
+        raise ValueError(
+            f"model {model!r} has no non-decision time 't' (params {params}); "
+            "the integration grid is refined around it"
+        )
+    onset_idx = params.index("t")
+    grid_record = {"onset_param": "t", "n_points": grid.n_points, **asdict(grid)}
 
     predictor = load_onnx_predictor(onnx_path)
     if predictor.input_width != n_params + 2:
@@ -943,12 +654,11 @@ def derive_aux_corpus(
         deadline_bounds = (float(lo), float(hi))
     model_config["input_columns"] = input_columns
 
-    if source is None:
-        source = SourceLAN.from_onnx(onnx_path)
-    provenance = source.provenance(network_type, grid)
+    provenance = _provenance(
+        onnx_path, network_type, grid, source_run_uuid, source_hf_revision
+    )
     derive_settings = {
-        "grid": grid_record["kind"],
-        "grid_config": grid_record,
+        "grid": grid_record,
         "integration_grid": grid.n_points,
         "integration_max_t": grid.max_t,
         "t_min": grid.t_min,
@@ -958,19 +668,6 @@ def derive_aux_corpus(
         "fallback_n_sim": fallback_n_sim,
         "seed": seed,
     }
-
-    # The whole-box statistics of the source LAN, on the grid of record; a
-    # uniform grid measures no leak (survey pairs the onset with the grid).
-    lan_survey = survey(
-        predictor,
-        base_config["param_bounds_dict"],
-        params,
-        choices,
-        n_theta=survey_n_theta,
-        seed=seed,
-        onset_param=onset_param if isinstance(grid, OnsetGrid) else None,
-        grid=grid,
-    )
 
     out_folder.mkdir(parents=True, exist_ok=True)
     files: list[Path] = []
@@ -982,20 +679,21 @@ def derive_aux_corpus(
     for i in range(n_files):
         rng = np.random.default_rng([seed, i])
         theta = sample_theta(base_config, n_theta_per_file, rng)
-        onset = theta[:, onset_idx] if isinstance(grid, OnsetGrid) else None
+        onset = theta[:, onset_idx]
         mass = choice_mass(predictor, theta, choices, grid=grid, onset=onset)
+        # Flag before renormalising: a theta outside the window (a zero or NaN
+        # total among them) gets placeholder labels, simulated below.
+        flagged = _flag_totals(mass.total, fallback_window)
         deadlines: NDArray[np.float64] | None = None
         if network_type == "cpn":
-            data, labels = cpn_labels(mass, theta, choices)
+            data, labels = cpn_labels(mass, theta, choices, flagged)
         else:
             assert deadline_bounds is not None
             deadlines = sample_deadlines(
                 mass, rng, deadline_quantile_frac, bounds=deadline_bounds
             )
-            build = opn_labels if network_type == "opn" else gonogo_labels
-            data, labels = build(mass, theta, deadlines)
+            data, labels = opn_labels(mass, theta, deadlines, flagged)
 
-        flagged = _flag_totals(mass.total, fallback_window)
         past_max_t = None
         if flagged.any():
             simulated, past_max_t = simulate_labels(
@@ -1015,9 +713,7 @@ def derive_aux_corpus(
             else:
                 rows = np.flatnonzero(flagged)
             labels[rows] = _labels(simulated.reshape(-1))
-        # The leak is a property of the onset grid; a uniform grid's leak is
-        # mostly quadrature error, and the survey records none there either.
-        leak = None if onset is None else mass.leak_below(onset)
+        leak = mass.mass_before(onset)
 
         stats = _derive_stats(mass.total, flagged, past_max_t, leak)
         generator_config = {
@@ -1049,8 +745,7 @@ def derive_aux_corpus(
         flags.append(flagged)
         if past_max_t is not None:
             pasts.append(past_max_t)
-        if leak is not None:
-            leaks.append(leak)
+        leaks.append(leak)
 
     manifest = {
         "lanfactory_version": __version__,
@@ -1068,21 +763,13 @@ def derive_aux_corpus(
         "deadline_bounds": deadline_bounds,
         "fallback_window": fallback_window,
         "fallback_n_sim": fallback_n_sim,
-        "survey_n_theta": survey_n_theta,
-        "source": {
-            **{
-                k: (str(v) if isinstance(v, Path) else v)
-                for k, v in asdict(source).items()
-            },
-            **provenance,
-        },
+        "source": {"path": str(onnx_path), "hf_repo": source_hf_repo, **provenance},
         "derive_stats": _derive_stats(
             np.concatenate(totals),
             np.concatenate(flags),
             np.concatenate(pasts) if pasts else None,
-            np.concatenate(leaks) if leaks else None,
+            np.concatenate(leaks),
         ),
-        "lan_survey": lan_survey,
         "files": file_records,
     }
     with open(out_folder / MANIFEST_NAME, "w", encoding="utf-8") as f:

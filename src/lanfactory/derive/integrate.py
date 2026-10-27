@@ -11,17 +11,22 @@ Grid policy
 The density is integrated with the trapezoid rule over the full support
 ``[t_min, max_t]``: ``max_t = 20`` s is ssms' default ``max_t``, the upper
 edge of the LANs' training support, and nothing is extrapolated past it.
-Two grids are offered. :class:`IntegrationGrid` is uniform and adequate for
-smooth densities; a LAN's density is not smooth — it rises from zero over a
-few milliseconds at the non-decision time ``t`` — and on the Hub ddm LAN a
-uniform 1000-point grid carries 15–25 % quadrature error at ``a < 0.5``
-(totals down to 0.66 that are pure grid artefacts). :class:`OnsetGrid` is
+A LAN's density is not smooth — it rises from zero over a few milliseconds
+at the non-decision time ``t`` — so the one grid, :class:`OnsetGrid`, is
 refined per parameter vector around ``t`` (32 points on ``[t_min, t−0.05]``,
 128 on ``[t−0.05, t]``, 600 on ``[t, t+1]``, 400 on ``[t+1, max_t]``) and
-matches a 16 000-point uniform grid to ``5e-5`` at ~1160 points. Integrating
-from ``t`` only was tested and rejected (mean error 0.0083 vs 0.0042 against
-simulation): the LAN leaks mass below ``t`` (mean 0.0035, p99 0.052 on the
-same LAN) and that leak is part of what it predicts.
+matches a 16 000-point uniform grid to ``5e-5`` at ~1160 points. On it,
+over 20 000 uniform draws from the Hub ddm LAN's box, the total mass has
+median ``|total − 1|`` 0.0037, p99 0.080, min 0.877 / max 1.219, with 1.9 %
+of the box beyond 0.05. A uniform 1000-point grid, once :func:`choice_mass`'s
+silent default, carried 15–25 % quadrature error on the same LAN at
+``a < 0.5`` (totals down to 0.66 that are pure grid artefacts) and is gone:
+a model without an onset parameter passes ``onset = 0``, which is at least
+as accurate on a closed-form gamma mixture (max error 7.1e-5 vs the uniform
+grid's 9.3e-5). Integrating from ``t`` only was tested and rejected (mean
+error 0.0083 vs 0.0042 against simulation): the LAN leaks mass below ``t``
+(mean 0.0035, p99 0.052 on the same LAN) and that leak is part of what it
+predicts.
 
 Tail policy
 -----------
@@ -51,7 +56,6 @@ if TYPE_CHECKING:
 
 __all__ = [
     "ChoiceMass",
-    "IntegrationGrid",
     "OnnxPredictor",
     "OnsetGrid",
     "Predictor",
@@ -169,14 +173,7 @@ def load_onnx_predictor(path: str | Path) -> OnnxPredictor:
     import onnxruntime as ort
 
     model = onnx.load(str(path))
-    # Defensive for foreign producers that list initializers among the graph
-    # inputs (the ecosystem's exporters do not); intentionally untested.
-    initializers = {tensor.name for tensor in model.graph.initializer}
-    io_tensors = [
-        value_info
-        for value_info in (*model.graph.input, *model.graph.output)
-        if value_info.name not in initializers
-    ]
+    io_tensors = [*model.graph.input, *model.graph.output]
     first_dims = io_tensors[0].type.tensor_type.shape.dim
     if len(first_dims) != 2:
         shape = [d.dim_param or d.dim_value for d in first_dims]
@@ -189,43 +186,11 @@ def load_onnx_predictor(path: str | Path) -> OnnxPredictor:
         if len(dims) >= 2:
             # Assigning dim_param clears dim_value (they share a protobuf oneof).
             dims[0].dim_param = "N"
+    # jax2onnx pins intermediate shapes at batch 1; let onnxruntime re-infer
+    # them rather than warn (VerifyOutputSizes) on every batched call.
+    del model.graph.value_info[:]
     session = ort.InferenceSession(model.SerializeToString())
     return OnnxPredictor(session)
-
-
-@dataclass(frozen=True)
-class IntegrationGrid:
-    """Uniform reaction-time grid the density is integrated on.
-
-    Parameters
-    ----------
-    n_points
-        Number of grid points.
-    max_t
-        Upper edge of the grid, in seconds. Defaults to ssms' default
-        ``max_t`` (20 s), the LANs' training support; the density is never
-        evaluated past it.
-    t_min
-        Lower edge, kept strictly positive so ``rt = 0`` is never fed to a
-        network whose training data never contains it.
-    """
-
-    n_points: int = 1000
-    max_t: float = 20.0
-    t_min: float = 1e-4
-
-    def __post_init__(self) -> None:
-        if self.n_points < 2:
-            raise ValueError(f"n_points must be >= 2, got {self.n_points}")
-        if not 0 < self.t_min < self.max_t:
-            raise ValueError(
-                f"need 0 < t_min < max_t, got t_min={self.t_min}, max_t={self.max_t}"
-            )
-
-    @property
-    def t(self) -> NDArray[np.float64]:
-        """The grid, ``np.linspace(t_min, max_t, n_points)``."""
-        return np.linspace(self.t_min, self.max_t, self.n_points)
 
 
 def _segment(
@@ -278,9 +243,12 @@ class OnsetGrid:
     n_tail
         Points on ``[t + onset_window, max_t]``, endpoint included.
     max_t
-        Upper edge of the grid; see :class:`IntegrationGrid`.
+        Upper edge of the grid, in seconds. Defaults to ssms' default
+        ``max_t`` (20 s), the LANs' training support; the density is never
+        evaluated past it.
     t_min
-        Lower edge, kept strictly positive; see :class:`IntegrationGrid`.
+        Lower edge, kept strictly positive so ``rt = 0`` is never fed to a
+        network whose training data never contains it.
 
     Notes
     -----
@@ -378,10 +346,8 @@ class ChoiceMass:
     Attributes
     ----------
     t : NDArray[np.float64]
-        The grid the density was integrated on: ``(n_points,)`` when shared
-        by every parameter vector (:class:`IntegrationGrid`), or
-        ``(n_theta, n_points)`` when refined per parameter vector
-        (:class:`OnsetGrid`).
+        ``(n_theta, n_points)`` grid the density was integrated on, one
+        :class:`OnsetGrid` row per parameter vector.
     choices : NDArray
         ``(n_choices,)`` choice codes, in the order of the ``cdf`` axis.
     cdf : NDArray[np.float64]
@@ -390,11 +356,7 @@ class ChoiceMass:
 
     Notes
     -----
-    Masses are not renormalised. ``total`` differs from one by the density
-    the LAN puts past ``max_t`` plus any approximation error in the network
-    itself (ssms returns such trials at ``rt ≈ max_t + t`` rather than as
-    omissions, so its ``choice_p`` does not share this deficit); record it
-    with the masses.
+    Masses are not renormalised; see the module's tail policy.
     """
 
     t: NDArray[np.float64]
@@ -416,23 +378,13 @@ class ChoiceMass:
             return self.cdf.sum(axis=1)
         return self.cdf[:, self._choice_index(choice), :]
 
-    def _t_rows(self) -> NDArray[np.float64]:
-        """The grid as ``(n_theta, n_points)``, a broadcast view when shared."""
-        n_theta, _, n_points = self.cdf.shape
-        return np.broadcast_to(self.t, (n_theta, n_points))
-
     def _bracket(
         self, d: NDArray[np.float64]
     ) -> tuple[NDArray[np.intp], NDArray[np.intp], NDArray[np.intp]]:
         """Row indices and the grid interval ``[lo, hi]`` holding each ``d``."""
         n_theta, _, n_points = self.cdf.shape
-        if self.t.ndim == 1:
-            lo = np.searchsorted(self.t, d, side="right") - 1
-        else:
-            # Per row ``searchsorted(t_row, d, side="right") - 1``; the
-            # ``(n_theta, n_points)`` comparison is the price of a grid per
-            # row, so the shared grid keeps the O(log n) path above.
-            lo = (self.t <= d[:, None]).sum(axis=1) - 1
+        # Per row ``searchsorted(t_row, d, side="right") - 1``.
+        lo = (self.t <= d[:, None]).sum(axis=1) - 1
         lo = np.clip(lo, 0, n_points - 2)
         return np.arange(n_theta), lo, lo + 1
 
@@ -476,33 +428,12 @@ class ChoiceMass:
             ``(n_theta,)``.
         """
         curve = self._curve(choice)
-        t_rows = self._t_rows()
         d = np.broadcast_to(np.asarray(deadline, dtype=np.float64), (curve.shape[0],))
-        d = np.clip(d, t_rows[:, 0], t_rows[:, -1])
+        d = np.clip(d, self.t[:, 0], self.t[:, -1])
         rows, lo, hi = self._bracket(d)
-        t_lo, t_hi = t_rows[rows, lo], t_rows[rows, hi]
+        t_lo, t_hi = self.t[rows, lo], self.t[rows, hi]
         w = (d - t_lo) / (t_hi - t_lo)
         return curve[rows, lo] * (1.0 - w) + curve[rows, hi] * w
-
-    def leak_below(self, onset: ArrayLike) -> NDArray[np.float64]:
-        """Mass on ``[t_min, onset]`` summed over choices, per parameter vector.
-
-        Under the simulated model no response precedes the non-decision
-        time; a LAN nevertheless puts some density there, and the corpus and
-        :func:`survey` report that leak through this one definition, which
-        is :meth:`mass_before` with ``choice=None``.
-
-        Parameters
-        ----------
-        onset
-            Scalar or ``(n_theta,)`` onset times in seconds.
-
-        Returns
-        -------
-        NDArray[np.float64]
-            ``(n_theta,)``.
-        """
-        return self.mass_before(onset)
 
     def quantile(
         self, u: ArrayLike, choice: float | None = None
@@ -539,8 +470,7 @@ class ChoiceMass:
         w = np.where(
             rise > 0.0, (target - curve[rows, lo]) / np.where(rise > 0, rise, 1), 0.0
         )
-        t_rows = self._t_rows()
-        t_lo, t_hi = t_rows[rows, lo], t_rows[rows, hi]
+        t_lo, t_hi = self.t[rows, lo], self.t[rows, hi]
         return t_lo + w * (t_hi - t_lo)
 
 
@@ -548,10 +478,10 @@ def choice_mass(
     predictor: Predictor,
     theta: ArrayLike,
     choices: Sequence[float] | NDArray,
-    grid: IntegrationGrid | OnsetGrid = IntegrationGrid(),
+    grid: OnsetGrid = OnsetGrid(),  # noqa: B008 - frozen, so never mutated
     chunk_size: int = 512,
     *,
-    onset: ArrayLike | None = None,
+    onset: ArrayLike,
 ) -> ChoiceMass:
     """Integrate a LAN's density over reaction time for every choice.
 
@@ -560,8 +490,8 @@ def choice_mass(
     vectors. Chunking bounds the row buffer handed to the network at
     ``chunk_size * n_choices * n_points * (n_params + 2)`` float32 values;
     the returned ``cdf`` itself costs ``n_theta * n_choices * n_points``
-    float64 values and, with an :class:`OnsetGrid`, the ``(n_theta,
-    n_points)`` grid ``t`` is kept beside it — the only full-size arrays held.
+    float64 values and the ``(n_theta, n_points)`` grid ``t`` is kept beside
+    it — the only full-size arrays held.
 
     Parameters
     ----------
@@ -574,29 +504,26 @@ def choice_mass(
     choices
         The choice codes the LAN was trained on, e.g. ``[-1, 1]``.
     grid
-        Reaction-time grid. A uniform :class:`IntegrationGrid` is shared by
-        every parameter vector; an :class:`OnsetGrid` is built per parameter
-        vector from ``onset`` and is the grid of choice for a LAN (see the
-        module notes on grid policy).
+        Reaction-time grid, built per parameter vector around ``onset`` (see
+        the module notes on grid policy).
     chunk_size
         Number of parameter vectors evaluated per network call.
     onset
-        ``(n_theta,)`` onset (non-decision) times, e.g. ``theta[:, t_idx]``.
-        Required with an :class:`OnsetGrid`, rejected otherwise.
+        ``(n_theta,)`` onset (non-decision) times, e.g. ``theta[:, t_idx]``;
+        zeros for a model without an onset parameter.
 
     Returns
     -------
     ChoiceMass
         Cumulative mass with ``cdf`` of shape ``(n_theta, n_choices, n_points)``
-        and ``t`` of shape ``(n_points,)`` (uniform grid) or
-        ``(n_theta, n_points)`` (onset grid).
+        and ``t`` of shape ``(n_theta, n_points)``.
 
     Raises
     ------
     ValueError
         If ``predictor.input_width != n_params + 2`` — the usual symptom of
-        pairing a parameter set with the wrong LAN — or if ``onset`` and
-        ``grid`` do not go together.
+        pairing a parameter set with the wrong LAN — or if ``onset`` is not
+        ``(n_theta,)``.
     """
     theta_arr = np.atleast_2d(np.asarray(theta, dtype=np.float32))
     if theta_arr.ndim != 2:
@@ -614,25 +541,13 @@ def choice_mass(
 
     choice_arr = np.asarray(choices)
     n_choices = choice_arr.shape[0]
-
-    per_theta = isinstance(grid, OnsetGrid)
-    if per_theta != (onset is not None):
+    onset_arr = np.asarray(onset, dtype=np.float64)
+    if onset_arr.shape != (n_theta,):
         raise ValueError(
-            "an OnsetGrid needs onset=theta[:, t_idx] and a uniform "
-            "IntegrationGrid takes no onset; got "
-            f"grid={type(grid).__name__} with onset={'given' if onset is not None else 'None'}"
+            f"onset must be (n_theta,) = ({n_theta},), got shape {onset_arr.shape}"
         )
-    if per_theta:
-        onset_arr = np.asarray(onset, dtype=np.float64)
-        if onset_arr.shape != (n_theta,):
-            raise ValueError(
-                f"onset must be (n_theta,) = ({n_theta},), got shape {onset_arr.shape}"
-            )
-        n_points = grid.n_points
-        t = np.empty((n_theta, n_points), dtype=np.float64)
-    else:
-        t = grid.t
-        n_points = t.shape[0]
+    n_points = grid.n_points
+    t = np.empty((n_theta, n_points), dtype=np.float64)
 
     cdf = np.empty((n_theta, n_choices, n_points), dtype=np.float64)
     for start in range(0, n_theta, chunk_size):
@@ -645,14 +560,11 @@ def choice_mass(
         # The network sees rt rounded to float32 (~1e-6 s at max_t) while the
         # trapezoid uses the float64 grid; the mismatch is orders of magnitude
         # below the rule's own discretisation error.
-        if per_theta:
-            t_chunk = grid.for_theta(onset_arr[start : start + n_chunk])
-            t[start : start + n_chunk] = t_chunk
-            # ``cumulative_trapezoid`` documents ``x`` as 1-D or the same
-            # shape as ``y``; the broadcast view costs nothing.
-            x = np.broadcast_to(t_chunk[:, None, :], (n_chunk, n_choices, n_points))
-        else:
-            x = t
+        t_chunk = grid.for_theta(onset_arr[start : start + n_chunk])
+        t[start : start + n_chunk] = t_chunk
+        # ``cumulative_trapezoid`` documents ``x`` as 1-D or the same
+        # shape as ``y``; the broadcast view costs nothing.
+        x = np.broadcast_to(t_chunk[:, None, :], (n_chunk, n_choices, n_points))
         rows[..., n_params] = x
         rows[..., n_params + 1] = choice_arr[None, :, None]
         log_density = np.asarray(predictor(rows.reshape(-1, expected_width)))
@@ -664,6 +576,13 @@ def choice_mass(
         )
 
     return ChoiceMass(t=t, choices=choice_arr, cdf=cdf)
+
+
+#: Parameter vectors :func:`survey` integrates per :func:`choice_mass` call;
+#: only that chunk's cdf is held at once.
+_SURVEY_CHUNK = 512
+#: Fraction of each parameter's range trimmed at both ends for ``shrunk_box``.
+_SHRINK = 0.1
 
 
 def _dev_stats(dev: NDArray[np.float64]) -> dict[str, float | None]:
@@ -704,9 +623,7 @@ def survey(
     n_theta: int = 20_000,
     seed: int = 0,
     onset_param: str | None = "t",
-    grid: IntegrationGrid | OnsetGrid | None = None,
-    chunk_size: int = 512,
-    shrink: float = 0.1,
+    grid: OnsetGrid = OnsetGrid(),  # noqa: B008 - frozen, so never mutated
 ) -> dict:
     """Whole-box statistics of a LAN's integrated mass.
 
@@ -735,38 +652,29 @@ def survey(
     onset_param
         Name of the non-decision-time parameter; its column is the onset
         the :class:`OnsetGrid` is built around and the edge
-        ``leak_below_onset`` is measured at. ``None`` integrates on a
-        uniform :class:`IntegrationGrid` and reports no leak.
+        ``leak_below_onset`` is measured at. ``None`` builds the grid
+        around onset 0 and reports no leak.
     grid
-        Explicit grid; defaults to ``OnsetGrid()`` when ``onset_param`` is
-        given and ``IntegrationGrid()`` otherwise.
-    chunk_size
-        Parameter vectors per network call.
-    shrink
-        Fraction of each parameter's range trimmed at both ends for the
-        ``shrunk_box`` statistics (``0.1`` keeps the middle 80 % per axis).
+        Reaction-time grid handed to :func:`choice_mass`.
 
     Returns
     -------
     dict
         ``n_theta``, ``grid`` (its repr), ``seconds`` (wall time),
         ``total`` (mean/min/max of the total and quantiles and exceedance
-        fractions of ``|total - 1|``), ``shrunk_box`` (the same over the
-        interior of the box plus ``frac_of_theta``), ``leak_below_onset``
-        (``mean``/``p99``/``max`` of :meth:`ChoiceMass.leak_below`, or
-        ``None``), ``by_param`` (``{name: [10 bins of lo/hi/mean_dev/
-        max_abs_dev/n]}``; empty bins carry ``None``) and ``worst_cell``
-        (on an 8×8 grid of the two parameters most correlated with the
-        deviation, the cell with the largest ``|mean_dev|``; ``None`` with
-        fewer than two parameters).
+        fractions of ``|total - 1|``), ``shrunk_box`` (the same with 10 % of
+        each axis trimmed at both ends, plus ``frac_of_theta``),
+        ``leak_below_onset`` (``mean``/``p99``/``max`` of
+        :meth:`ChoiceMass.mass_before` at the onset, or ``None``) and
+        ``by_param`` (``{name: [10 bins of lo/hi/mean_dev/max_abs_dev/n]}``;
+        empty bins carry ``None``).
 
     Raises
     ------
     ValueError
         If ``params`` is empty or names a parameter without bounds, if
-        ``onset_param`` is not in ``params``, if ``grid`` and ``onset_param``
-        do not go together, if a bound has ``hi < lo``, or if ``n_theta``,
-        ``chunk_size`` or ``shrink`` is out of range.
+        ``onset_param`` is not in ``params``, if a bound has ``hi < lo``, or
+        if ``n_theta < 1``.
     """
     params = list(params)
     n_params = len(params)
@@ -779,17 +687,6 @@ def survey(
         raise ValueError(f"onset_param {onset_param!r} is not in params {params}")
     if n_theta < 1:
         raise ValueError(f"n_theta must be >= 1, got {n_theta}")
-    if chunk_size < 1:
-        raise ValueError(f"chunk_size must be >= 1, got {chunk_size}")
-    if not 0.0 <= shrink < 0.5:
-        raise ValueError(f"shrink must lie in [0, 0.5), got {shrink}")
-    if grid is None:
-        grid = OnsetGrid() if onset_param is not None else IntegrationGrid()
-    if isinstance(grid, OnsetGrid) != (onset_param is not None):
-        raise ValueError(
-            f"grid {type(grid).__name__} does not go with onset_param={onset_param!r}: "
-            "an OnsetGrid needs an onset parameter and a uniform grid takes none"
-        )
 
     lo = np.array([param_bounds[name][0] for name in params], dtype=np.float64)
     hi = np.array([param_bounds[name][1] for name in params], dtype=np.float64)
@@ -802,22 +699,20 @@ def survey(
     total = np.empty(n_theta, dtype=np.float64)
     leak = np.empty(n_theta, dtype=np.float64) if onset_idx is not None else None
     started = time.perf_counter()
-    for start in range(0, n_theta, chunk_size):
-        chunk = theta[start : start + chunk_size]
+    for start in range(0, n_theta, _SURVEY_CHUNK):
+        chunk = theta[start : start + _SURVEY_CHUNK]
         stop = start + chunk.shape[0]
-        onset = chunk[:, onset_idx] if onset_idx is not None else None
-        mass = choice_mass(
-            predictor, chunk, choices, grid=grid, chunk_size=chunk_size, onset=onset
-        )
+        onset = chunk[:, onset_idx] if onset_idx is not None else np.zeros(len(chunk))
+        mass = choice_mass(predictor, chunk, choices, grid=grid, onset=onset)
         total[start:stop] = mass.total
         if leak is not None:
-            leak[start:stop] = mass.leak_below(onset)
+            leak[start:stop] = mass.mass_before(onset)
     seconds = time.perf_counter() - started
 
     dev = total - 1.0
     span = hi - lo
     inside = np.all(
-        (theta >= lo + shrink * span) & (theta <= hi - shrink * span), axis=1
+        (theta >= lo + _SHRINK * span) & (theta <= hi - _SHRINK * span), axis=1
     )
     shrunk_box = _dev_stats(dev[inside])
     shrunk_box["frac_of_theta"] = float(inside.mean())
@@ -840,35 +735,6 @@ def survey(
             )
         by_param[name] = bins
 
-    worst_cell = None
-    if n_params >= 2 and n_theta >= 2:
-        with np.errstate(divide="ignore", invalid="ignore"):
-            corr = np.array(
-                [np.corrcoef(theta[:, j], dev)[0, 1] for j in range(n_params)]
-            )
-        corr = np.nan_to_num(corr)
-        jx, jy = np.argsort(-np.abs(corr))[:2]
-        ix = _bin_index(theta[:, jx], lo[jx], hi[jx], 8)
-        iy = _bin_index(theta[:, jy], lo[jy], hi[jy], 8)
-        flat = ix * 8 + iy
-        counts = np.bincount(flat, minlength=64)
-        sums = np.bincount(flat, weights=dev, minlength=64)
-        means = np.where(counts > 0, sums / np.maximum(counts, 1), 0.0)
-        cell = int(np.argmax(np.abs(means)))
-        cx, cy = divmod(cell, 8)
-        x_edges = np.linspace(lo[jx], hi[jx], 9)
-        y_edges = np.linspace(lo[jy], hi[jy], 9)
-        worst_cell = {
-            "param_x": params[jx],
-            "param_y": params[jy],
-            "x_lo": float(x_edges[cx]),
-            "x_hi": float(x_edges[cx + 1]),
-            "y_lo": float(y_edges[cy]),
-            "y_hi": float(y_edges[cy + 1]),
-            "mean_dev": float(means[cell]),
-            "n": int(counts[cell]),
-        }
-
     return {
         "n_theta": int(n_theta),
         "grid": repr(grid),
@@ -885,5 +751,4 @@ def survey(
             }
         ),
         "by_param": by_param,
-        "worst_cell": worst_cell,
     }

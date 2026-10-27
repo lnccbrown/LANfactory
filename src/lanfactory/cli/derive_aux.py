@@ -1,31 +1,21 @@
-#!/usr/bin/env python
 """Command-line interface for deriving auxiliary-network corpora from a LAN.
 
-Integrates a trained LAN's density over reaction time and writes a cpn, opn or
-gonogo training corpus in the layout ``torchtrain`` / ``jaxtrain`` consume.
+Integrates a trained LAN's density over reaction time and writes a cpn or opn
+training corpus in the layout ``torchtrain`` / ``jaxtrain`` consume.
 
 Usage:
     derive-aux --from-onnx ddm.onnx --network-type cpn --model-name ddm \\
         --output-folder data/cpn/ddm
 
 The option names follow the Hub CLIs (``--network-type``, ``--model-name``,
-``--output-folder``); ``--type``, ``--model`` and ``--out`` are accepted as
-short aliases.
+``--output-folder``).
 """
 
 from pathlib import Path
 
 import typer
-from ssms.config import ModelConfigBuilder
 
-from lanfactory.derive import (
-    MANIFEST_NAME,
-    NETWORK_TYPES,
-    IntegrationGrid,
-    OnsetGrid,
-    SourceLAN,
-    derive_aux_corpus,
-)
+from lanfactory.derive import MANIFEST_NAME, NETWORK_TYPES, derive_aux_corpus
 
 app = typer.Typer()
 
@@ -43,19 +33,16 @@ def main(
     network_type: str = typer.Option(
         ...,
         "--network-type",
-        "--type",
         help=f"Auxiliary network type to derive: one of {', '.join(NETWORK_TYPES)}.",
     ),
     model_name: str = typer.Option(
         ...,
         "--model-name",
-        "--model",
         help="ssms model name the LAN was trained for (e.g., ddm, angle).",
     ),
     output_folder: Path = typer.Option(
         ...,
         "--output-folder",
-        "--out",
         help="Destination folder for the pickles and the manifest.",
         file_okay=False,
         resolve_path=True,
@@ -66,51 +53,14 @@ def main(
     n_theta_per_file: int = typer.Option(
         4096,
         "--n-theta-per-file",
-        help="Parameter vectors per file (rows per file for opn/gonogo; "
+        help="Parameter vectors per file (rows per file for opn; "
         "times the number of choices for cpn).",
-    ),
-    onset_param: str = typer.Option(
-        "t",
-        "--onset-param",
-        help="Non-decision-time parameter the integration grid is refined around. "
-        "Pass an empty string to integrate on a uniform grid instead.",
-    ),
-    grid_points: int = typer.Option(
-        1000,
-        "--grid-points",
-        help="Points of the uniform grid; used only when no onset grid applies "
-        "(--onset-param '' or a model without that parameter).",
-    ),
-    max_t: float = typer.Option(
-        20.0, "--max-t", help="Upper edge of the integration grid in seconds."
     ),
     deadline_quantile_frac: float = typer.Option(
         0.7,
         "--deadline-quantile-frac",
-        help="Share of opn/gonogo deadlines drawn from the LAN's own RT quantiles; "
+        help="Share of opn deadlines drawn from the LAN's own RT quantiles; "
         "the rest are uniform on the deadline bounds.",
-    ),
-    fallback_window: tuple[float, float] = typer.Option(
-        (0.98, 1.03),
-        "--fallback-window",
-        help="LO HI: a parameter vector whose total LAN mass is outside [LO, HI] "
-        "is labelled by ssms simulation instead of the LAN.",
-    ),
-    fallback_n_sim: int = typer.Option(
-        20_000,
-        "--fallback-n-sim",
-        help="Trials simulated per parameter vector that falls back.",
-    ),
-    no_fallback: bool = typer.Option(
-        False,
-        "--no-fallback",
-        help="Label every parameter vector from the LAN, whatever its total.",
-    ),
-    survey_n_theta: int = typer.Option(
-        20_000,
-        "--survey-n-theta",
-        help="Parameter vectors drawn for the manifest's whole-box mass survey "
-        "of the LAN (lan_survey).",
     ),
     seed: int = typer.Option(0, "--seed", help="Base random seed."),
     source_run_uuid: str = typer.Option(
@@ -127,7 +77,7 @@ def main(
         help="Hub revision (commit, tag, or branch) of that download.",
     ),
 ):
-    """Derive a cpn / opn / gonogo training corpus from a trained LAN.
+    """Derive a cpn / opn training corpus from a trained LAN.
 
     Writes ``--n-files`` pickles plus ``derive_manifest.json`` to
     ``--output-folder`` and prints the manifest path. Train on the folder with
@@ -138,35 +88,6 @@ def main(
         derive-aux --from-onnx ddm.onnx --network-type cpn --model-name ddm
         --output-folder data/cpn/ddm
     """
-    if network_type not in NETWORK_TYPES:
-        raise typer.BadParameter(
-            f"--network-type must be one of {list(NETWORK_TYPES)}, got: {network_type}"
-        )
-    try:
-        params = list(ModelConfigBuilder.from_model(model_name)["params"])
-    except Exception as e:  # noqa: BLE001 - ssms raises several types here
-        raise typer.BadParameter(f"--model-name {model_name!r}: {e}") from e
-    onset = onset_param or None
-    try:
-        if onset is not None and onset in params:
-            grid: IntegrationGrid | OnsetGrid = OnsetGrid(max_t=max_t)
-        else:
-            if onset is not None:
-                typer.echo(
-                    f"Warning: model {model_name!r} has no parameter {onset!r}; "
-                    f"integrating on a uniform {grid_points}-point grid.",
-                    err=True,
-                )
-            grid = IntegrationGrid(n_points=grid_points, max_t=max_t)
-    except ValueError as e:
-        raise typer.BadParameter(str(e)) from e
-
-    source = SourceLAN.from_onnx(
-        from_onnx,
-        run_uuid=source_run_uuid,
-        hf_repo=source_hf_repo,
-        hf_revision=source_hf_revision,
-    )
     try:
         files = derive_aux_corpus(
             from_onnx,
@@ -175,14 +96,11 @@ def main(
             output_folder,
             n_files=n_files,
             n_theta_per_file=n_theta_per_file,
-            onset_param=onset,
-            grid=grid,
             deadline_quantile_frac=deadline_quantile_frac,
-            fallback_window=None if no_fallback else fallback_window,
-            fallback_n_sim=fallback_n_sim,
-            survey_n_theta=survey_n_theta,
             seed=seed,
-            source=source,
+            source_run_uuid=source_run_uuid,
+            source_hf_repo=source_hf_repo,
+            source_hf_revision=source_hf_revision,
         )
     except ValueError as e:
         raise typer.BadParameter(str(e)) from e
