@@ -453,7 +453,8 @@ class ChoiceMass:
         Returns
         -------
         NDArray[np.float64]
-            ``(n_theta,)`` times in seconds.
+            ``(n_theta,)`` times in seconds; NaN where the curve has no mass
+            to invert (a zero or NaN total).
         """
         curve = self._curve(choice)
         n_theta, n_points = curve.shape
@@ -470,7 +471,7 @@ class ChoiceMass:
             rise > 0.0, (target - curve[rows, lo]) / np.where(rise > 0, rise, 1), 0.0
         )
         t_lo, t_hi = self.t[rows, lo], self.t[rows, hi]
-        return t_lo + w * (t_hi - t_lo)
+        return np.where(curve[:, -1] > 0.0, t_lo + w * (t_hi - t_lo), np.nan)
 
 
 def choice_mass(

@@ -240,6 +240,17 @@ def test_quantile_rejects_u_outside_open_unit_interval(gamma_mass):
             gamma_mass.quantile(u, 1)
 
 
+def test_quantile_is_nan_without_mass():
+    # Row 0 has mass on choice -1 only, row 1 none, row 2 a NaN total.
+    cdf = np.zeros((3, 2, 3))
+    cdf[0, 0] = [0.0, 0.5, 1.0]
+    cdf[2] = np.nan
+    mass = ChoiceMass(t=np.tile([0.1, 0.2, 0.3], (3, 1)), choices=CHOICES, cdf=cdf)
+    q = mass.quantile(0.5)
+    assert q[0] == pytest.approx(0.2) and np.isnan(q[1:]).all()
+    assert np.isnan(mass.quantile(0.5, 1)).all()
+
+
 def test_chunk_size_validation():
     with pytest.raises(ValueError, match="chunk_size"):
         choice_mass(GammaMixturePredictor(), THETA, CHOICES, chunk_size=0, onset=ZEROS)
