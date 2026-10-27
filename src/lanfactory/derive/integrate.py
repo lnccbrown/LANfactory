@@ -11,9 +11,10 @@ The density is integrated with the trapezoid rule over the LANs' training
 support ``[t_min, max_t]`` (``max_t = 20`` s, ssms' default) and is never
 evaluated past it. It rises from zero within milliseconds of the
 non-decision time ``t``, so the one grid, :class:`OnsetGrid`, is refined per
-parameter vector around ``t``: on the Hub ddm LAN its 1160 points match a
-16 000-point uniform grid to ``5e-5``, where a uniform 1000-point grid is off
-by 15–25 % at ``a < 0.5``. The grid starts at ``t_min``, not at ``t``: the
+parameter vector around ``t``: on the Hub ddm LAN its 1160 points agree with a
+16 000-point uniform grid to ``1e-3`` (p99; ``3.5e-3`` at worst), where a
+uniform 1000-point grid is off by up to 25 % at ``a < 0.5``. The grid starts
+at ``t_min``, not at ``t``: the
 mass a LAN leaks below ``t`` is part of what it predicts. A model without an
 onset parameter passes ``onset = 0``.
 
@@ -173,8 +174,9 @@ class OnsetGrid:
     ``t``: ``[t_min, knee)``, ``[knee, t)``, ``[t, t + onset_window)`` and
     ``[t + onset_window, max_t]``. The points concentrate where the density
     moves while the whole support is still integrated. Every row has
-    :attr:`n_points` points, is strictly increasing, and contains ``t_min``,
-    ``t`` and ``max_t`` exactly.
+    :attr:`n_points` points and contains ``t_min``, ``t`` and ``max_t``
+    exactly; it is strictly increasing as long as every segment has positive
+    length, as with the defaults.
 
     Parameters
     ----------
@@ -250,10 +252,11 @@ class OnsetGrid:
 def _interp_rows(
     x: ArrayLike, xp: NDArray[np.float64], fp: NDArray[np.float64]
 ) -> NDArray[np.float64]:
-    """Row-wise ``np.interp(x[i], xp[i], fp[i])`` for non-decreasing ``xp`` rows.
+    """Row-wise linear interpolation, like ``np.interp(x[i], xp[i], fp[i])``.
 
-    ``x`` is a scalar or ``(n_rows,)``; outside a row's range the result is
-    clamped to that row's first or last ``fp``.
+    ``xp`` rows are non-decreasing; where an ``xp`` value repeats, the first
+    ``xp >= x`` is taken. ``x`` is a scalar or ``(n_rows,)``; outside a row's
+    range the result is clamped to that row's first or last ``fp``.
     """
     n_rows, n_points = xp.shape
     x = np.broadcast_to(np.asarray(x, dtype=np.float64), (n_rows,))
@@ -294,7 +297,7 @@ class ChoiceMass:
     @property
     def total(self) -> NDArray[np.float64]:
         """``(n_theta,)`` mass on ``[t_min, max_t]``, summed over choices."""
-        return self.cdf[:, -1]
+        return self.cdf[:, -1].copy()  # a view would keep the whole cdf alive
 
     def mass_before(self, deadline: ArrayLike) -> NDArray[np.float64]:
         """Mass accumulated before ``deadline``, linearly interpolated on the grid.
@@ -374,8 +377,8 @@ def choice_mass(
     ------
     ValueError
         If ``predictor.input_width != n_params + 2``, the usual symptom of
-        pairing a parameter set with the wrong LAN, or if ``onset`` does not
-        broadcast to ``(n_theta,)``.
+        pairing a parameter set with the wrong LAN, or if ``onset`` is not
+        finite or does not broadcast to ``(n_theta,)``.
     """
     theta_arr = np.atleast_2d(np.asarray(theta, dtype=np.float32))
     if theta_arr.ndim != 2:
@@ -391,6 +394,8 @@ def choice_mass(
     choice_arr = np.asarray(choices)
     n_choices = choice_arr.shape[0]
     onset_arr = np.broadcast_to(np.asarray(onset, dtype=np.float64), (n_theta,))
+    if not np.all(np.isfinite(onset_arr)):
+        raise ValueError("onset must be finite; pass 0 for a model without one")
     t = grid.for_theta(onset_arr)
     n_points = t.shape[1]
 

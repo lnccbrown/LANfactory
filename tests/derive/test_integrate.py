@@ -183,6 +183,8 @@ def test_inputs_of_the_wrong_shape_are_rejected():
         choice_mass(GammaMixturePredictor(), np.zeros((1, 2, 2)), CHOICES, 0.0)
     with pytest.raises(ValueError, match="broadcast"):
         choice_mass(GammaMixturePredictor(), THETA, CHOICES, np.zeros(2))
+    with pytest.raises(ValueError, match="onset must be finite"):
+        choice_mass(GammaMixturePredictor(), THETA, CHOICES, None)
     with pytest.raises(ValueError, match=r"\(n_theta,\)"):
         OnsetGrid().for_theta(np.zeros((2, 2)))
 
@@ -305,6 +307,8 @@ def test_result_carries_a_grid_per_theta_and_a_monotone_cdf(peak_mass):
     np.testing.assert_array_equal(peak_mass.t, grid.for_theta(ONSETS[:, 0]))
     assert np.all(peak_mass.cdf[:, 0] == 0.0)
     assert np.all(np.diff(peak_mass.cdf, axis=-1) >= 0.0)
+    # A kept total must not keep the (n_theta, n_points) cdf alive.
+    assert not np.shares_memory(peak_mass.total, peak_mass.cdf)
     for j, c in enumerate(CHOICES):
         expected = expected_mass(c, ONSETS[:, 0], PEAK_SHAPE, PEAK_SCALE)
         assert np.abs(peak_mass.by_choice[:, j] - expected).max() < 1e-3

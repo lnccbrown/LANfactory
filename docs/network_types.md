@@ -184,8 +184,7 @@ outside the window `[0.98, 1.03]` (endpoints trusted; 3.7 % of the ddm box),
 or is not a number, is labelled by **ssms simulation** instead, from 20 000
 trials: the CPN label is the choice frequency among trials that respond
 before `max_t`, the OPN label the share that does not respond before the
-row's deadline (what ssms' `{model}_deadline` simulators mark as omitted),
-both from one base-model run. That bounds the unflagged residual against
+row's deadline, both from one base-model run. That bounds the unflagged residual against
 simulation at 0.023 (CPN) / 0.033 (OPN). `derive_fallback_frac` records the
 share that fell back and `derive_sim_past_max_t_max` the simulation's own
 blind spot: the largest share of base-model trials still running at `max_t`,
