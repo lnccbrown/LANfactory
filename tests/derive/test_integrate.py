@@ -604,6 +604,22 @@ def test_survey_without_an_onset_builds_the_grid_around_zero():
     assert r["total"]["frac_gt_0.10"] == pytest.approx(PLANTED_SHARE, abs=0.08)
 
 
+class NaNPredictor(ScaledPredictor):
+    """:class:`ScaledPredictor`, but NaN where that one scales (a > 2)."""
+
+    def __call__(self, batch: np.ndarray) -> np.ndarray:
+        return np.where(batch[:, 0] > 2.0, np.nan, super().__call__(batch))
+
+
+def test_survey_counts_a_nan_total_as_failed():
+    r = survey(NaNPredictor(), SURVEY_BOUNDS, SURVEY_PARAMS, CHOICES, n_theta=300)
+    json.dumps(r)
+    total = r["total"]
+    assert total["frac_gt_0.02"] == pytest.approx(PLANTED_SHARE, abs=0.08)
+    assert total["p99_abs_dev"] == np.inf
+    assert total["p50_abs_dev"] < 1e-3
+
+
 def test_survey_validation():
     pred = ScaledPredictor()
     with pytest.raises(ValueError, match="onset_param 'tau'"):

@@ -593,8 +593,10 @@ def _dev_stats(dev: NDArray[np.float64]) -> dict[str, float | None]:
             "frac_gt_0.02", "frac_gt_0.05", "frac_gt_0.10",
         )  # fmt: skip
         return dict.fromkeys(keys)
-    abs_dev = np.abs(dev)
-    p50, p90, p99 = np.percentile(abs_dev, [50, 90, 99])
+    # A NaN total is a failed integral: infinitely far from one. "higher" takes
+    # an order statistic, so an infinite percentile stays inf, not NaN.
+    abs_dev = np.where(np.isnan(dev), np.inf, np.abs(dev))
+    p50, p90, p99 = np.percentile(abs_dev, [50, 90, 99], method="higher")
     return {
         "mean": float(1.0 + dev.mean()),
         "p50_abs_dev": float(p50),
@@ -666,7 +668,8 @@ def survey(
         ``leak_below_onset`` (``mean``/``p99``/``max`` of
         :meth:`ChoiceMass.mass_before` at the onset, or ``None``) and
         ``by_param`` (``{name: [10 bins of lo/hi/mean_dev/max_abs_dev/n]}``;
-        empty bins carry ``None``).
+        empty bins carry ``None``). A NaN total counts as an infinite
+        deviation in the quantiles and exceedance fractions.
 
     Raises
     ------
