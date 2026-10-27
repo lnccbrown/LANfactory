@@ -10,19 +10,6 @@ import lanfactory
 
 logger = logging.getLogger(__name__)
 
-# The provenance keys a derived corpus always carries on its training run
-# (``SourceLAN.provenance`` minus ``source_lan_run_id``, which is logged only
-# when known). LAN_pipeline_minimal's publisher reads them by name.
-_DERIVED_PROVENANCE_PARAMS: tuple[str, ...] = (
-    "derivation_method",
-    "aux_category",
-    "source_lan_run_uuid",
-    "source_lan_sha256",
-    "source_lan_hf_commit",
-    "integration_grid",
-    "integration_max_t",
-)
-
 
 # def non_negative_int(value):
 #     """Convert string value to non-negative integer.
@@ -241,32 +228,10 @@ def log_training_run_identity(
     is the configured *cap*, and reusing that param key with the effective
     value would make MLflow reject the trainer's entire param batch.
 
-    **Derived corpora.** When the training data was written by
-    ``lanfactory.derive.derive_aux_corpus`` (the pickles'
-    ``generator_config["generator_approach"] == "derived"``), the LAN the
-    corpus came from is provenance of *this* network too, so the run carries
-    ``generator_config["source"]`` (``SourceLAN.provenance``) as params under
-    exactly those names — ``derivation_method``, ``aux_category``,
-    ``source_lan_run_uuid``, ``source_lan_sha256``, ``source_lan_hf_commit``,
-    ``integration_grid``, ``integration_max_t`` always, ``source_lan_run_id``
-    when it is not ``None`` — plus the tag ``data_origin=derived`` and every
-    key of ``generator_config["derive_stats"]`` as a tag: the per-file
-    total-mass statistics ``derive_total_mass_{mean,min,max}``, the share of
-    parameter vectors labelled by simulation ``derive_fallback_frac``, the
-    simulation's blind spot ``derive_sim_past_max_t_max`` and the mass below
-    the onset ``derive_leak_below_onset_p99`` (they describe the first file
-    the dataset read, which a resume may change). MLflow params and tags are
-    strings, so a value the corpus lacks is logged as the empty string
-    ``""``: the run uuid and Hub commit of a LAN that has none (a bare
-    ``ddm.onnx``, a local file), and a ``None`` statistic (no theta fell
-    back, no onset grid) — never as ``"None"``. Every derived run thus
-    carries the same key set; the derived/simulated discriminator is the
-    ``data_origin`` tag, not whether a key exists. An empty value is not a
-    publishable one:
-    LAN_pipeline_minimal's publisher treats ``""`` (like ``"None"``) as
-    missing and refuses the run, since it will not write a model card
-    without the source LAN's Hub revision. Any other corpus is tagged
-    ``data_origin=simulated`` and gets none of the provenance keys.
+    **Derived corpora.** Every run is tagged ``data_origin`` (``derived`` or
+    ``simulated``); a ``derive-aux`` corpus adds its ``generator_config``'s
+    ``source`` as params and its ``derive_stats`` as tags, ``None`` as ``""``.
+    See *Derived corpora* in ``docs/using_mlflow.md``.
 
     Best-effort: failures are logged, never raised — training must not die on
     a tracking hiccup. No-op when no MLflow run is active.
@@ -310,21 +275,17 @@ def log_training_run_identity(
                     ).hexdigest()
 
         # A derived corpus (lanfactory.derive) names the LAN it was integrated
-        # from; that is provenance of this network too. See the docstring for
-        # the key set and the "" convention.
+        # from; that is provenance of this network too. The isinstance guard:
+        # DatasetTorch's default data_generator_config is the string "None".
         generator_config = getattr(dataset, "data_generator_config", None)
-        derive_tags: dict[str, str] = {"data_origin": "simulated"}
-        if (
+        derived = (
             isinstance(generator_config, dict)
             and generator_config.get("generator_approach") == "derived"
-        ):
-            derive_tags["data_origin"] = "derived"
-            source = generator_config.get("source", {})
-            for key in _DERIVED_PROVENANCE_PARAMS:
-                value = source.get(key)
+        )
+        derive_tags = {"data_origin": "derived" if derived else "simulated"}
+        if derived:
+            for key, value in generator_config["source"].items():
                 params[key] = "" if value is None else value
-            if source.get("source_lan_run_id") is not None:
-                params["source_lan_run_id"] = source["source_lan_run_id"]
             for key, value in generator_config.get("derive_stats", {}).items():
                 derive_tags[key] = "" if value is None else str(value)
 

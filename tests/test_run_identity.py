@@ -20,7 +20,7 @@ import numpy as np
 import pytest
 
 import lanfactory
-from lanfactory.cli.utils import _DERIVED_PROVENANCE_PARAMS, log_training_run_identity
+from lanfactory.cli.utils import log_training_run_identity
 from lanfactory.derive import OnsetGrid
 from lanfactory.derive.corpus import _derive_stats, _provenance
 from tests.derive.conftest import DDM_ONNX, DDM_SHA256
@@ -238,9 +238,6 @@ class TestLogTrainingRunIdentity:
         )
         p, t = run.data.params, run.data.tags
 
-        # The logger's own key list is pinned to the producer's, so a rename
-        # on either side fails here rather than only in the round trip.
-        assert set(_DERIVED_PROVENANCE_PARAMS) == DERIVED_PARAM_KEYS
         assert set(p) == DERIVED_PARAM_KEYS | {
             "model",
             "network_type",
@@ -294,23 +291,6 @@ class TestLogTrainingRunIdentity:
         p = run.data.params
         assert p["source_lan_run_id"] == "0123456789abcdef"
         assert p["source_lan_run_uuid"] == "56d99936415e11f0a2bf3cecefb6d5ee"
-
-    def test_partial_derived_corpus_keeps_the_key_set(self, tmp_tracking, tmp_path):
-        """A derived corpus without ``source`` / ``derive_stats`` blocks (an
-        older or hand-edited one) still carries every required key, empty."""
-        dataset = SimpleNamespace(
-            input_dim=5,
-            data_model_config=MODEL_CONFIG,
-            data_generator_config={"generator_approach": "derived"},
-        )
-        run = self._log_and_fetch(tmp_tracking, tmp_path, dataset=dataset)
-        p, t = run.data.params, run.data.tags
-        assert {k: p[k] for k in DERIVED_PARAM_KEYS} == dict.fromkeys(
-            DERIVED_PARAM_KEYS, ""
-        )
-        assert "source_lan_run_id" not in p
-        assert t["data_origin"] == "derived"
-        assert not DERIVED_TAG_KEYS & set(t)
 
     def test_simulated_corpus_has_no_provenance(self, tmp_tracking, tmp_path):
         """An ssms corpus: ``data_origin=simulated`` and none of the derive keys."""
