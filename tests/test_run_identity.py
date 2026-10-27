@@ -21,9 +21,6 @@ import pytest
 
 import lanfactory
 from lanfactory.cli.utils import log_training_run_identity
-from lanfactory.derive import MANIFEST_NAME, OnsetGrid
-from lanfactory.derive.corpus import _provenance
-from tests._onnx_utils import DDM_ONNX, DDM_SHA256
 
 mlflow = pytest.importorskip("mlflow")
 
@@ -194,51 +191,16 @@ class TestLogTrainingRunIdentity:
         assert p["input_dim"] == "6"
         assert "param_bounds_json" not in p
 
-    def test_derived_corpus_provenance(self, tmp_tracking, tmp_path):
-        """A derived corpus logs its source block as params and its manifest's
-        derive_stats as tags, None as ""."""
-        source = _provenance(DDM_ONNX, "opn", OnsetGrid(), None, None)
-        dataset = SimpleNamespace(
-            data_generator_config={"generator_approach": "derived", "source": source}
-        )
-        stats = {"derive_fallback_frac": 0.037, "derive_sim_past_max_t_max": None}
-        (tmp_path / "data").mkdir()
-        (tmp_path / "data" / MANIFEST_NAME).write_text(
-            json.dumps({"derive_stats": stats})
-        )
-        run = self._log_and_fetch(
-            tmp_tracking, tmp_path, network_type="opn", dataset=dataset
-        )
-        # A bare file name has no run uuid and no Hub commit.
-        assert run.data.params == {
-            "model": "ddm",
-            "network_type": "opn",
-            "backend": "jax",
-            "derivation_method": "derived-from-lan",
-            "aux_category": "omission",
-            "source_lan_run_uuid": "",
-            "source_lan_sha256": DDM_SHA256,
-            "source_lan_hf_commit": "",
-            "integration_grid": str(OnsetGrid().n_points),
-            "integration_max_t": "20.0",
-        }
-        tags = run.data.tags
-        assert tags["data_origin"] == "derived"
-        assert {key: tags[key] for key in stats} == {
-            "derive_fallback_frac": "0.037",
-            "derive_sim_past_max_t_max": "",
-        }
-
     @pytest.mark.parametrize("no_folder", [False, True], ids=["no-manifest", "none"])
     def test_derived_corpus_without_manifest(self, tmp_tracking, tmp_path, no_folder):
         """Pickles copied without their manifest still name the source LAN."""
-        source = _provenance(DDM_ONNX, "opn", OnsetGrid(), None, None)
+        source = {"source_lan_sha256": "abc"}
         dataset = SimpleNamespace(
             data_generator_config={"generator_approach": "derived", "source": source}
         )
         overrides = {"training_data_folder": None} if no_folder else {}
         run = self._log_and_fetch(tmp_tracking, tmp_path, dataset=dataset, **overrides)
-        assert run.data.params["source_lan_sha256"] == DDM_SHA256
+        assert run.data.params["source_lan_sha256"] == "abc"
         assert run.data.tags["data_origin"] == "derived"
         assert not any(key.startswith("derive_") for key in run.data.tags)
 

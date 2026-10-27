@@ -47,7 +47,7 @@ mlflow ui
 Every training run is tagged `data_origin` (`simulated` or `derived`); a run
 on a [`derive-aux`](api/derive.md#derived-corpora) corpus also carries the
 corpus's `source` block as params and its manifest's `derive_stats` as
-`derive_*` tags, a `None` value logged as `""`.
+`derive_*` tags; MLflow stores every value as text, `None` as `"None"`.
 
 | kind | keys |
 | --- | --- |

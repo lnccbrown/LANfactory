@@ -147,7 +147,7 @@ def test_derive_train_export_round_trip(tmp_path, network_type):
         assert np.isfinite(log_prob) and log_prob <= 0.0, log_prob
 
     # The run: the corpus's source block as params and its manifest's
-    # corpus-wide derive_stats as tags, None as "".
+    # corpus-wide derive_stats as tags, each as MLflow's str() of it.
     client = mlflow.MlflowClient(tracking_uri=tracking_uri)
     experiment = client.get_experiment_by_name("derive-roundtrip")
     (run,) = client.search_runs([experiment.experiment_id])
@@ -158,5 +158,5 @@ def test_derive_train_export_round_trip(tmp_path, network_type):
     expected = {**pickled["generator_config"]["source"], **manifest["derive_stats"]}
     logged = {**params, **tags}
     assert {key: logged[key] for key in expected} == {
-        key: "" if value is None else str(value) for key, value in expected.items()
+        key: str(value) for key, value in expected.items()
     }

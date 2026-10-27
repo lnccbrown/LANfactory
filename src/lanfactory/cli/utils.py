@@ -230,8 +230,8 @@ def log_training_run_identity(
 
     **Derived corpora.** Every run is tagged ``data_origin`` (``derived`` or
     ``simulated``); a ``derive-aux`` corpus adds ``generator_config["source"]``
-    as params and its manifest's corpus-wide ``derive_stats`` as tags, ``None``
-    as ``""``. See *Derived corpora* in ``docs/using_mlflow.md``.
+    as params and its manifest's corpus-wide ``derive_stats`` as tags. See
+    *Derived corpora* in ``docs/using_mlflow.md``.
 
     Best-effort: failures are logged, never raised — training must not die on
     a tracking hiccup. No-op when no MLflow run is active.
@@ -286,16 +286,13 @@ def log_training_run_identity(
         if derived:
             from lanfactory.derive import MANIFEST_NAME
 
-            for key, value in generator_config["source"].items():
-                params[key] = "" if value is None else value
-            # The manifest's statistics cover the whole corpus; a pickle's
-            # cover only that file, and the trainer reads the files shuffled.
+            params.update(generator_config["source"])
+            # The corpus-wide statistics live in the manifest beside the pickles.
             if training_data_folder is not None:
                 manifest = Path(training_data_folder) / MANIFEST_NAME
                 if manifest.is_file():
                     stats = json.loads(manifest.read_text(encoding="utf-8"))
-                    for key, value in stats["derive_stats"].items():
-                        derive_tags[key] = "" if value is None else str(value)
+                    derive_tags.update(stats["derive_stats"])
 
         mlflow.log_params(params)
 
