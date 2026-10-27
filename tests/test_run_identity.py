@@ -23,7 +23,6 @@ import lanfactory
 from lanfactory.cli.utils import _DERIVED_PROVENANCE_PARAMS, log_training_run_identity
 from lanfactory.derive import IntegrationGrid, SourceLAN
 from lanfactory.derive.corpus import _derive_stats
-from tests.utils import HISTORY_WRITE_SKIP_REASON, history_write_is_broken
 
 mlflow = pytest.importorskip("mlflow")
 
@@ -395,10 +394,6 @@ class TestDataDetailsCarriesModelConfig:
         assert details["valid_data_model_config"] == MODEL_CONFIG
 
 
-@pytest.mark.skipif(
-    history_write_is_broken(lanfactory.trainers.ModelTrainerJaxMLP.train_and_evaluate),
-    reason=HISTORY_WRITE_SKIP_REASON,
-)
 class TestJaxNetworkTypePassthrough:
     def _train_tiny(self, tmp_path, network_type_arg):
         """One-epoch micro-training run; returns the produced filenames."""

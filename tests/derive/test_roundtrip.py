@@ -29,9 +29,7 @@ from lanfactory.derive import (
     derive_aux_corpus,
 )
 from lanfactory.onnx.contract import assert_single_trial_contract
-from lanfactory.trainers.torch_mlp import ModelTrainerTorchMLP
 from tests.derive.conftest import DDM_ONNX
-from tests.utils import HISTORY_WRITE_SKIP_REASON, history_write_is_broken
 
 mlflow = pytest.importorskip("mlflow")
 
@@ -45,12 +43,6 @@ ROWS_PER_FILE = {"cpn": 2 * N_THETA, "opn": N_THETA, "gonogo": N_THETA}
 # seconds — the round trip checks what the trainer reads, not the labels.
 FALLBACK_N_SIM = 500
 SURVEY_N_THETA = 200
-
-pytestmark = pytest.mark.skipif(
-    history_write_is_broken(ModelTrainerTorchMLP.train_and_evaluate),
-    reason=HISTORY_WRITE_SKIP_REASON,
-)
-
 
 @pytest.fixture(autouse=True)
 def cleanup_mlflow():
