@@ -1,41 +1,27 @@
 """Integrate a trained LAN's density over reaction time.
 
-A LAN approximates ``log p(rt, choice | theta)`` on the support it was trained
-on. Integrating that density over ``rt`` for each choice gives the choice
-probability and the probability of responding before a deadline — the
-quantities auxiliary networks (CPNs, OPNs) are trained on, obtained here from
-the LAN instead of from a fresh simulation.
+A LAN approximates ``log p(rt, choice | theta)``. Integrating the density over
+``rt`` gives each choice's probability and the probability of responding
+before a deadline: the labels of the auxiliary networks (CPNs, OPNs), here
+obtained from the LAN instead of from a fresh simulation.
 
 Grid policy
 -----------
-The density is integrated with the trapezoid rule over the full support
-``[t_min, max_t]``: ``max_t = 20`` s is ssms' default ``max_t``, the upper
-edge of the LANs' training support, and nothing is extrapolated past it.
-A LAN's density is not smooth — it rises from zero over a few milliseconds
-at the non-decision time ``t`` — so the one grid, :class:`OnsetGrid`, is
-refined per parameter vector around ``t`` (32 points on ``[t_min, t−0.05]``,
-128 on ``[t−0.05, t]``, 600 on ``[t, t+1]``, 400 on ``[t+1, max_t]``) and
-matches a 16 000-point uniform grid to ``5e-5`` at ~1160 points. On it,
-over 20 000 uniform draws from the Hub ddm LAN's box, the total mass has
-median ``|total − 1|`` 0.0037, p99 0.080, min 0.877 / max 1.219, with 1.9 %
-of the box beyond 0.05. A uniform 1000-point grid carries 15–25 %
-quadrature error on the same LAN at ``a < 0.5`` (totals down to 0.66 that
-are pure grid artefacts). A model without an onset parameter passes
-``onset = 0``, which is at least as accurate on a closed-form gamma mixture (max error 7.1e-5 vs the uniform
-grid's 9.3e-5). Integrating from ``t`` only was tested and rejected (mean
-error 0.0083 vs 0.0042 against simulation): the LAN leaks mass below ``t``
-(mean 0.0035, p99 0.052 on the same LAN) and that leak is part of what it
-predicts.
+The density is integrated with the trapezoid rule over the LANs' training
+support ``[t_min, max_t]`` (``max_t = 20`` s, ssms' default) and is never
+evaluated past it. It rises from zero within milliseconds of the
+non-decision time ``t``, so the one grid, :class:`OnsetGrid`, is refined per
+parameter vector around ``t``: on the Hub ddm LAN its 1160 points match a
+16 000-point uniform grid to ``5e-5``, where a uniform 1000-point grid is off
+by 15–25 % at ``a < 0.5``. The grid starts at ``t_min``, not at ``t``: the
+mass a LAN leaks below ``t`` is part of what it predicts. A model without an
+onset parameter passes ``onset = 0``.
 
 Tail policy
 -----------
-The per-choice masses are **not** renormalised to sum to one; they carry
-whatever density the LAN puts past ``max_t`` and the network's own scale
-error. Note that ssms need not censor a base (non-deadline) model there: an
-un-terminated ddm trial comes back at ``rt ≈ max_t + t`` with its sign-implied
-choice, so ssms' own ``choice_p`` sums to one while these masses need not.
-Renormalisation is the corpus's job; :attr:`ChoiceMass.total` is always
-recorded alongside the per-choice masses so the deficit stays visible.
+Masses are **not** renormalised: they keep the LAN's own scale error and
+whatever density it puts past ``max_t``. :attr:`ChoiceMass.total` exposes the
+deficit; renormalising is the corpus's job.
 """
 
 from __future__ import annotations
@@ -44,7 +30,7 @@ import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
@@ -63,54 +49,31 @@ __all__ = [
     "survey",
 ]
 
+#: Parameter vectors per network call: bounds the row buffer of
+#: :func:`choice_mass` and the cdf :func:`survey` holds at once.
+_CHUNK = 512
+
 
 class Predictor(Protocol):
-    """Anything that maps ``(N, D)`` float32 rows to ``(N,)`` log-densities."""
+    """Maps ``(N, input_width)`` float32 rows to ``(N,)`` log-densities."""
 
-    @property
-    def input_width(self) -> int:
-        """Row width ``D`` the predictor expects."""
-        ...
+    input_width: int
 
-    def __call__(self, batch: NDArray[np.float32]) -> NDArray[np.floating]:
-        """Evaluate the network on a batch of rows.
-
-        Parameters
-        ----------
-        batch
-            ``(N, D)`` float32 rows laid out as the network was trained on.
-
-        Returns
-        -------
-        NDArray[np.floating]
-            ``(N,)`` log-densities.
-        """
-        ...
+    def __call__(self, batch: NDArray[np.float32]) -> NDArray[np.floating]: ...
 
 
 class OnnxPredictor:
-    """A published single-trial LAN, re-declared with a batch axis in memory.
+    """A ``(1, D)`` ONNX network callable on ``(N, D)`` batches.
 
-    Build with :func:`load_onnx_predictor`. The ecosystem's ONNX graphs are
-    exported with a concrete ``(1, D)`` input (see
-    ``lanfactory.onnx.contract``), which onnxruntime enforces: feeding
-    ``(N, D)`` to the file as published raises. :func:`load_onnx_predictor`
-    loads the graph, marks the batch dimension of every input and output
-    symbolic *in the in-memory protobuf only*, and builds the session this
-    object wraps. The artifact on disk is never modified.
-
-    Parameters
-    ----------
-    session
-        An ``onnxruntime.InferenceSession`` whose first input is ``(N, D)``.
+    Build with :func:`load_onnx_predictor`.
 
     Attributes
     ----------
     input_name : str
         Name of the graph input fed by :meth:`__call__`.
     input_width : int
-        ``D``: the per-row width the graph expects (parameters + rt + choice
-        for a LAN).
+        ``D``, the row width the graph expects (parameters + rt + choice for
+        a LAN).
     """
 
     def __init__(self, session: ort.InferenceSession) -> None:
@@ -120,17 +83,12 @@ class OnnxPredictor:
         self.input_width: int = int(first_input.shape[-1])
 
     def __call__(self, batch: NDArray[np.float32]) -> NDArray[np.float32]:
-        """Evaluate the network on a batch of rows.
-
-        Parameters
-        ----------
-        batch
-            ``(N, D)`` array; cast to float32 if needed.
+        """Evaluate the network on ``(N, D)`` rows (cast to float32).
 
         Returns
         -------
         NDArray[np.float32]
-            ``(N,)`` network outputs (the trailing ``1`` axis squeezed).
+            ``(N,)`` network outputs.
         """
         rows = np.ascontiguousarray(batch, dtype=np.float32)
         if rows.ndim != 2 or rows.shape[1] != self.input_width:
@@ -144,10 +102,11 @@ class OnnxPredictor:
 def load_onnx_predictor(path: str | Path) -> OnnxPredictor:
     """Load a ``(1, D)`` ONNX network as a batched :class:`OnnxPredictor`.
 
-    The graph's batch dimension (dim 0 of every graph input and output) is set
-    to the symbolic ``"N"`` on the in-memory protobuf, and the session is
-    built from the serialized copy. The file on disk keeps its concrete
-    ``dim_value == 1`` — it is read, never written — so the single-trial
+    The ecosystem's ONNX graphs are exported with a concrete ``(1, D)`` input
+    (see ``lanfactory.onnx.contract``), which onnxruntime enforces. The graph's
+    batch dimension (dim 0 of every graph input and output) is set to the
+    symbolic ``"N"`` on the in-memory protobuf, and the session is built from
+    that copy. The file on disk is read, never written, so the single-trial
     contract the artifact was published under is untouched.
 
     Parameters
@@ -164,9 +123,8 @@ def load_onnx_predictor(path: str | Path) -> OnnxPredictor:
     ------
     ValueError
         If the graph's first input is not rank 2. The sbi and bayesflow
-        exporters trace rank-1 ``(D,)`` graphs (see
-        ``lanfactory.onnx.contract``); those have no batch axis to widen, and
-        this loader does not wrap them.
+        exporters trace rank-1 ``(D,)`` graphs; those have no batch axis to
+        widen, and this loader does not wrap them.
     """
     import onnx
     import onnxruntime as ort
@@ -211,49 +169,32 @@ def _segment(
 class OnsetGrid:
     """Reaction-time grid refined, per parameter vector, around the onset.
 
-    A LAN's density is essentially zero below the non-decision time ``t``
-    and rises steeply just above it; a uniform grid either wastes points on
-    the flat regions or under-resolves the onset. This grid concatenates
-    four ``linspace`` segments per ``t`` — ``[t_min, t − knee]``,
-    ``[t − knee, t]``, ``[t, t + onset_window]`` and
-    ``[t + onset_window, max_t]`` — so the whole support is still integrated
-    (the LAN leaks mass below ``t``, and that leak is part of what it
-    predicts) while the points concentrate where the density moves. Every
-    row has the same number of points, is strictly increasing, and contains
-    ``t_min``, ``t`` and ``max_t`` exactly.
+    Each row concatenates four ``linspace`` segments around its own onset
+    ``t``: ``[t_min, knee)``, ``[knee, t)``, ``[t, t + onset_window)`` and
+    ``[t + onset_window, max_t]``. The points concentrate where the density
+    moves while the whole support is still integrated. Every row has
+    :attr:`n_points` points, is strictly increasing, and contains ``t_min``,
+    ``t`` and ``max_t`` exactly.
 
     Parameters
     ----------
-    n_pre
-        Points on ``[t_min, t − knee]`` (endpoint excluded).
-    n_knee
-        Points on ``[t − knee, t]`` (endpoint excluded): the LAN blurs the
-        onset over a few milliseconds below ``t``, and this segment resolves
-        the blur.
+    n_pre, n_knee, n_onset, n_tail
+        Points per segment, in that order; only the tail includes its
+        endpoint.
     knee
-        Width of the knee segment, in seconds. The knee starts at
-        ``max(t − knee, (t_min + t) / 2)``: ``knee`` wide unless that would
-        leave the pre segment shorter than the knee, in which case the two
-        split ``[t_min, t]`` evenly.
-    n_onset
-        Points on ``[t, t + onset_window]`` (endpoint excluded).
+        Width in seconds of the segment just below ``t``, where the LAN blurs
+        the onset; half of ``[t_min, t]`` instead when that is shorter.
     onset_window
-        Width of the onset segment, in seconds.
-    n_tail
-        Points on ``[t + onset_window, max_t]``, endpoint included.
+        Width in seconds of the segment just above ``t``.
     max_t
-        Upper edge of the grid, in seconds. Defaults to ssms' default
-        ``max_t`` (20 s), the LANs' training support; the density is never
-        evaluated past it.
+        Upper edge in seconds: the LANs' training support.
     t_min
-        Lower edge, kept strictly positive so ``rt = 0`` is never fed to a
-        network whose training data never contains it.
+        Lower edge in seconds, positive so no network is fed ``rt = 0``.
 
     Notes
     -----
-    ``t`` is clipped to ``[t_min + 1e-3, max_t − onset_window − 1e-3]`` so
-    that every segment has positive length; the density is still evaluated
-    over the full ``[t_min, max_t]`` for such rows.
+    Onsets are clipped to ``[t_min + 1e-3, max_t - onset_window - 1e-3]`` so
+    that every segment has positive length.
     """
 
     n_pre: int = 32
@@ -265,39 +206,10 @@ class OnsetGrid:
     max_t: float = 20.0
     t_min: float = 1e-4
 
-    #: Margin keeping the outer segments non-degenerate at the box edges.
-    margin: ClassVar[float] = 1e-3
-
-    def __post_init__(self) -> None:
-        for name in ("n_pre", "n_knee", "n_onset"):
-            if getattr(self, name) < 1:
-                raise ValueError(f"{name} must be >= 1, got {getattr(self, name)}")
-        if self.n_tail < 2:
-            raise ValueError(f"n_tail must be >= 2, got {self.n_tail}")
-        if self.knee <= 0.0 or self.onset_window <= 0.0:
-            raise ValueError(
-                f"knee and onset_window must be > 0, got knee={self.knee}, "
-                f"onset_window={self.onset_window}"
-            )
-        if self.t_min <= 0.0 or self.onset_bounds[0] >= self.onset_bounds[1]:
-            raise ValueError(
-                f"need 0 < t_min and t_min + {self.margin} < max_t - onset_window "
-                f"- {self.margin}, got t_min={self.t_min}, max_t={self.max_t}, "
-                f"onset_window={self.onset_window}"
-            )
-
     @property
     def n_points(self) -> int:
         """Points per row: ``n_pre + n_knee + n_onset + n_tail``."""
         return self.n_pre + self.n_knee + self.n_onset + self.n_tail
-
-    @property
-    def onset_bounds(self) -> tuple[float, float]:
-        """The interval onsets are clipped to before the row is built."""
-        return (
-            self.t_min + self.margin,
-            self.max_t - self.onset_window - self.margin,
-        )
 
     def for_theta(self, onset: ArrayLike) -> NDArray[np.float64]:
         """Build one grid row per onset time.
@@ -305,7 +217,7 @@ class OnsetGrid:
         Parameters
         ----------
         onset
-            ``(n_theta,)`` onset times in seconds, e.g. ``theta[:, t_idx]``.
+            ``(n_theta,)`` onset times in seconds.
 
         Returns
         -------
@@ -315,14 +227,11 @@ class OnsetGrid:
         t = np.asarray(onset, dtype=np.float64)
         if t.ndim != 1:
             raise ValueError(f"onset must be (n_theta,), got shape {t.shape}")
-        t = np.clip(t, *self.onset_bounds)
+        t = np.clip(t, self.t_min + 1e-3, self.max_t - self.onset_window - 1e-3)
         t_min = np.full_like(t, self.t_min)
-        # The knee is ``knee`` wide or half of ``[t_min, t]``, whichever is
-        # shorter, so the pre segment is never thinner than ``margin / 2``
-        # and its width varies continuously in ``t`` (a threshold rule at
-        # ``t_min + knee`` would cram ``n_pre`` points into a vanishing
-        # interval just above it: distinct in float64, duplicates in the
-        # float32 rows the network sees).
+        # max(), not a threshold at t_min + knee: the pre segment's width stays
+        # continuous in t, so its points never crowd into a sliver that the
+        # float32 rows the network sees would collapse.
         knee = np.maximum(t - self.knee, 0.5 * (t_min + t))
         window_end = t + self.onset_window
         return np.concatenate(
@@ -338,20 +247,40 @@ class OnsetGrid:
         )
 
 
-@dataclass
+def _interp_rows(
+    x: ArrayLike, xp: NDArray[np.float64], fp: NDArray[np.float64]
+) -> NDArray[np.float64]:
+    """Row-wise ``np.interp(x[i], xp[i], fp[i])`` for non-decreasing ``xp`` rows.
+
+    ``x`` is a scalar or ``(n_rows,)``; outside a row's range the result is
+    clamped to that row's first or last ``fp``.
+    """
+    n_rows, n_points = xp.shape
+    x = np.broadcast_to(np.asarray(x, dtype=np.float64), (n_rows,))
+    hi = np.clip((xp < x[:, None]).sum(axis=1), 1, n_points - 1)
+    rows = np.arange(n_rows)
+    x_lo, x_hi = xp[rows, hi - 1], xp[rows, hi]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        w = np.clip((x - x_lo) / (x_hi - x_lo), 0.0, 1.0)
+    f_lo, f_hi = fp[rows, hi - 1], fp[rows, hi]
+    return f_lo + w * (f_hi - f_lo)
+
+
+@dataclass(frozen=True)
 class ChoiceMass:
-    """Cumulative per-choice mass of a LAN's density on a reaction-time grid.
+    """A LAN's density integrated over reaction time, per parameter vector.
 
     Attributes
     ----------
     t : NDArray[np.float64]
-        ``(n_theta, n_points)`` grid the density was integrated on, one
-        :class:`OnsetGrid` row per parameter vector.
-    choices : NDArray
-        ``(n_choices,)`` choice codes, in the order of the ``cdf`` axis.
+        ``(n_theta, n_points)`` grid, one :class:`OnsetGrid` row per
+        parameter vector.
     cdf : NDArray[np.float64]
-        ``(n_theta, n_choices, n_points)`` cumulative trapezoid integral of
-        the density along ``t``; ``cdf[..., 0] == 0``.
+        ``(n_theta, n_points)`` cumulative mass along ``t``, summed over
+        choices; ``cdf[:, 0] == 0``.
+    by_choice : NDArray[np.float64]
+        ``(n_theta, n_choices)`` each choice's mass on ``[t_min, max_t]``, in
+        the order of the ``choices`` given to :func:`choice_mass`.
 
     Notes
     -----
@@ -359,240 +288,135 @@ class ChoiceMass:
     """
 
     t: NDArray[np.float64]
-    choices: NDArray
     cdf: NDArray[np.float64]
-
-    def _choice_index(self, choice: float) -> int:
-        matches = np.flatnonzero(self.choices == choice)
-        if matches.size == 0:
-            raise ValueError(
-                f"unknown choice code {choice!r}; known choices: "
-                f"{self.choices.tolist()}"
-            )
-        return int(matches[0])
-
-    def _curve(self, choice: float | None) -> NDArray[np.float64]:
-        """``(n_theta, n_points)`` cumulative mass for one choice or all summed."""
-        if choice is None:
-            return self.cdf.sum(axis=1)
-        return self.cdf[:, self._choice_index(choice), :]
-
-    def _bracket(
-        self, d: NDArray[np.float64]
-    ) -> tuple[NDArray[np.intp], NDArray[np.intp], NDArray[np.intp]]:
-        """Row indices and the grid interval ``[lo, hi]`` holding each ``d``."""
-        n_theta, _, n_points = self.cdf.shape
-        # Per row ``searchsorted(t_row, d, side="right") - 1``.
-        lo = (self.t <= d[:, None]).sum(axis=1) - 1
-        lo = np.clip(lo, 0, n_points - 2)
-        return np.arange(n_theta), lo, lo + 1
-
-    def mass(self, choice: float) -> NDArray[np.float64]:
-        """Mass of one choice on ``[t_min, max_t]``.
-
-        Parameters
-        ----------
-        choice
-            A choice code from :attr:`choices`.
-
-        Returns
-        -------
-        NDArray[np.float64]
-            ``(n_theta,)``.
-        """
-        return self.cdf[:, self._choice_index(choice), -1]
+    by_choice: NDArray[np.float64]
 
     @property
     def total(self) -> NDArray[np.float64]:
-        """Mass summed over choices, shape ``(n_theta,)``."""
-        return self.cdf[:, :, -1].sum(axis=1)
+        """``(n_theta,)`` mass on ``[t_min, max_t]``, summed over choices."""
+        return self.cdf[:, -1]
 
-    def mass_before(
-        self, deadline: ArrayLike, choice: float | None = None
-    ) -> NDArray[np.float64]:
+    def mass_before(self, deadline: ArrayLike) -> NDArray[np.float64]:
         """Mass accumulated before ``deadline``, linearly interpolated on the grid.
 
         Parameters
         ----------
         deadline
-            Scalar, or ``(n_theta,)`` per-parameter-vector deadlines, in
-            seconds. Values below ``t_min`` give 0; values above ``max_t``
-            give the mass at ``max_t`` (no extrapolation).
-        choice
-            A choice code, or ``None`` to sum over choices.
+            Scalar or ``(n_theta,)`` deadlines in seconds. Values below
+            ``t_min`` give 0 and values above ``max_t`` give :attr:`total`.
 
         Returns
         -------
         NDArray[np.float64]
             ``(n_theta,)``.
         """
-        curve = self._curve(choice)
-        d = np.broadcast_to(np.asarray(deadline, dtype=np.float64), (curve.shape[0],))
-        d = np.clip(d, self.t[:, 0], self.t[:, -1])
-        rows, lo, hi = self._bracket(d)
-        t_lo, t_hi = self.t[rows, lo], self.t[rows, hi]
-        w = (d - t_lo) / (t_hi - t_lo)
-        return curve[rows, lo] * (1.0 - w) + curve[rows, hi] * w
+        return _interp_rows(deadline, self.t, self.cdf)
 
-    def quantile(
-        self, u: ArrayLike, choice: float | None = None
-    ) -> NDArray[np.float64]:
-        """Time at which the cumulative mass reaches ``u`` of its own total.
+    def quantile(self, u: ArrayLike) -> NDArray[np.float64]:
+        """Time at which the mass reaches ``u`` of :attr:`total`.
 
-        The inverse of :meth:`mass_before` on the same piecewise-linear curve,
-        with the target expressed as a fraction of the (per-theta, per-choice)
-        mass on ``[t_min, max_t]`` rather than of one.
+        The inverse of :meth:`mass_before`, the same interpolation with the
+        axes swapped: ``mass_before(quantile(u))`` is ``u * total``.
 
         Parameters
         ----------
         u
             Fraction in ``(0, 1)``; scalar or ``(n_theta,)``.
-        choice
-            A choice code, or ``None`` for the mass summed over choices.
 
         Returns
         -------
         NDArray[np.float64]
-            ``(n_theta,)`` times in seconds; NaN where the curve has no mass
-            to invert (a zero or NaN total).
+            ``(n_theta,)`` times in seconds; NaN where there is no mass to
+            invert (a zero or non-finite total).
         """
-        curve = self._curve(choice)
-        n_theta, n_points = curve.shape
-        u_arr = np.broadcast_to(np.asarray(u, dtype=np.float64), (n_theta,))
+        u_arr = np.asarray(u, dtype=np.float64)
         if np.any((u_arr <= 0.0) | (u_arr >= 1.0)):
             raise ValueError(f"u must lie in the open interval (0, 1), got {u!r}")
-        target = u_arr * curve[:, -1]
-        # First grid index where the (non-decreasing) curve reaches the target.
-        hi = np.clip((curve < target[:, None]).sum(axis=1), 1, n_points - 1)
-        lo = hi - 1
-        rows = np.arange(n_theta)
-        rise = curve[rows, hi] - curve[rows, lo]
-        w = np.where(
-            rise > 0.0, (target - curve[rows, lo]) / np.where(rise > 0, rise, 1), 0.0
-        )
-        t_lo, t_hi = self.t[rows, lo], self.t[rows, hi]
-        return np.where(curve[:, -1] > 0.0, t_lo + w * (t_hi - t_lo), np.nan)
+        total = self.total
+        q = _interp_rows(u_arr * total, self.cdf, self.t)
+        return np.where(total > 0.0, q, np.nan)
 
 
 def choice_mass(
     predictor: Predictor,
     theta: ArrayLike,
     choices: Sequence[float] | NDArray,
-    grid: OnsetGrid = OnsetGrid(),  # noqa: B008 - frozen, so never mutated
-    chunk_size: int = 512,
-    *,
     onset: ArrayLike,
+    grid: OnsetGrid = OnsetGrid(),  # noqa: B008 - frozen, so never mutated
 ) -> ChoiceMass:
     """Integrate a LAN's density over reaction time for every choice.
 
-    Rows are laid out as ``[theta..., rt, choice]`` — the input layout the
-    LANs are trained on — and evaluated in chunks of ``chunk_size`` parameter
-    vectors. Chunking bounds the row buffer handed to the network at
-    ``chunk_size * n_choices * n_points * (n_params + 2)`` float32 values;
-    the returned ``cdf`` itself costs ``n_theta * n_choices * n_points``
-    float64 values and the ``(n_theta, n_points)`` grid ``t`` is kept beside
-    it — the only full-size arrays held.
+    Rows are laid out as ``[theta..., rt, choice]``, the input layout the LANs
+    are trained on, and evaluated 512 parameter vectors at a time, which
+    bounds the row buffer handed to the network.
 
     Parameters
     ----------
     predictor
-        Maps ``(N, n_params + 2)`` rows to ``(N,)`` log-densities;
-        typically an :class:`OnnxPredictor`.
+        Maps ``(N, n_params + 2)`` rows to ``(N,)`` log-densities; typically
+        an :class:`OnnxPredictor`.
     theta
-        ``(n_theta, n_params)`` parameter vectors (a single ``(n_params,)``
-        vector is promoted).
+        ``(n_theta, n_params)`` parameter vectors (a single vector is
+        promoted).
     choices
         The choice codes the LAN was trained on, e.g. ``[-1, 1]``.
-    grid
-        Reaction-time grid, built per parameter vector around ``onset`` (see
-        the module notes on grid policy).
-    chunk_size
-        Number of parameter vectors evaluated per network call.
     onset
-        ``(n_theta,)`` onset (non-decision) times, e.g. ``theta[:, t_idx]``;
-        zeros for a model without an onset parameter.
+        Scalar or ``(n_theta,)`` onset (non-decision) times the grid is built
+        around, e.g. ``theta[:, t_idx]``; 0 for a model without one.
+    grid
+        Reaction-time grid (see the module's grid policy).
 
     Returns
     -------
     ChoiceMass
-        Cumulative mass with ``cdf`` of shape ``(n_theta, n_choices, n_points)``
-        and ``t`` of shape ``(n_theta, n_points)``.
 
     Raises
     ------
     ValueError
-        If ``predictor.input_width != n_params + 2`` — the usual symptom of
-        pairing a parameter set with the wrong LAN — or if ``onset`` is not
-        ``(n_theta,)``.
+        If ``predictor.input_width != n_params + 2``, the usual symptom of
+        pairing a parameter set with the wrong LAN, or if ``onset`` does not
+        broadcast to ``(n_theta,)``.
     """
     theta_arr = np.atleast_2d(np.asarray(theta, dtype=np.float32))
     if theta_arr.ndim != 2:
         raise ValueError(f"theta must be (n_theta, n_params), got {theta_arr.shape}")
     n_theta, n_params = theta_arr.shape
-    expected_width = n_params + 2
-    if predictor.input_width != expected_width:
+    width = n_params + 2
+    if predictor.input_width != width:
         raise ValueError(
             f"predictor expects rows of width {predictor.input_width}, but theta "
             f"has {n_params} parameters so rows [theta..., rt, choice] are "
-            f"{expected_width} wide; is this the right LAN for these parameters?"
+            f"{width} wide; is this the right LAN for these parameters?"
         )
-    if chunk_size < 1:
-        raise ValueError(f"chunk_size must be >= 1, got {chunk_size}")
-
     choice_arr = np.asarray(choices)
     n_choices = choice_arr.shape[0]
-    onset_arr = np.asarray(onset, dtype=np.float64)
-    if onset_arr.shape != (n_theta,):
-        raise ValueError(
-            f"onset must be (n_theta,) = ({n_theta},), got shape {onset_arr.shape}"
-        )
-    n_points = grid.n_points
-    t = np.empty((n_theta, n_points), dtype=np.float64)
+    onset_arr = np.broadcast_to(np.asarray(onset, dtype=np.float64), (n_theta,))
+    t = grid.for_theta(onset_arr)
+    n_points = t.shape[1]
 
-    cdf = np.empty((n_theta, n_choices, n_points), dtype=np.float64)
-    for start in range(0, n_theta, chunk_size):
-        chunk = theta_arr[start : start + chunk_size]
-        n_chunk = chunk.shape[0]
-        rows = np.empty(
-            (n_chunk, n_choices, n_points, expected_width), dtype=np.float32
-        )
-        rows[..., :n_params] = chunk[:, None, None, :]
+    by_choice = np.empty((n_theta, n_choices))
+    cdf = np.empty((n_theta, n_points))
+    for start in range(0, n_theta, _CHUNK):
+        stop = min(start + _CHUNK, n_theta)
+        t_chunk = t[start:stop, None, :]
+        rows = np.empty((stop - start, n_choices, n_points, width), dtype=np.float32)
+        rows[..., :n_params] = theta_arr[start:stop, None, None, :]
         # The network sees rt rounded to float32 (~1e-6 s at max_t) while the
-        # trapezoid uses the float64 grid; the mismatch is orders of magnitude
-        # below the rule's own discretisation error.
-        t_chunk = grid.for_theta(onset_arr[start : start + n_chunk])
-        t[start : start + n_chunk] = t_chunk
-        # ``cumulative_trapezoid`` documents ``x`` as 1-D or the same
-        # shape as ``y``; the broadcast view costs nothing.
-        x = np.broadcast_to(t_chunk[:, None, :], (n_chunk, n_choices, n_points))
-        rows[..., n_params] = x
+        # trapezoid uses the float64 grid: far below the rule's own error.
+        rows[..., n_params] = t_chunk
         rows[..., n_params + 1] = choice_arr[None, :, None]
-        log_density = np.asarray(predictor(rows.reshape(-1, expected_width)))
-        density = np.exp(
-            log_density.reshape(n_chunk, n_choices, n_points).astype(np.float64)
-        )
-        cdf[start : start + n_chunk] = cumulative_trapezoid(
-            density, x, axis=-1, initial=0.0
-        )
-
-    return ChoiceMass(t=t, choices=choice_arr, cdf=cdf)
-
-
-#: Parameter vectors :func:`survey` integrates per :func:`choice_mass` call;
-#: only that chunk's cdf is held at once.
-_SURVEY_CHUNK = 512
-#: Fraction of each parameter's range trimmed at both ends for ``shrunk_box``.
-_SHRINK = 0.1
+        log_density = np.asarray(predictor(rows.reshape(-1, width)), dtype=np.float64)
+        density = np.exp(log_density).reshape(rows.shape[:3])
+        # cumulative_trapezoid wants x shaped like the density; a view is free.
+        x = np.broadcast_to(t_chunk, density.shape)
+        per_choice = cumulative_trapezoid(density, x, axis=-1, initial=0.0)
+        by_choice[start:stop] = per_choice[..., -1]
+        cdf[start:stop] = per_choice.sum(axis=1)
+    return ChoiceMass(t=t, cdf=cdf, by_choice=by_choice)
 
 
-def _dev_stats(dev: NDArray[np.float64]) -> dict[str, float | None]:
-    """Summary of ``total - 1`` over a set of parameter vectors."""
-    if dev.size == 0:
-        keys = (
-            "mean", "p50_abs_dev", "p90_abs_dev", "p99_abs_dev", "min", "max",
-            "frac_gt_0.02", "frac_gt_0.05", "frac_gt_0.10",
-        )  # fmt: skip
-        return dict.fromkeys(keys)
+def _dev_stats(dev: NDArray[np.float64]) -> dict[str, float]:
+    """Summary of ``total - 1`` over the surveyed parameter vectors."""
     # A NaN total is a failed integral: infinitely far from one. "higher" takes
     # an order statistic, so an infinite percentile stays inf, not NaN.
     abs_dev = np.where(np.isnan(dev), np.inf, np.abs(dev))
@@ -625,15 +449,13 @@ def survey(
     n_theta: int = 20_000,
     seed: int = 0,
     onset_param: str | None = "t",
-    grid: OnsetGrid = OnsetGrid(),  # noqa: B008 - frozen, so never mutated
 ) -> dict:
     """Whole-box statistics of a LAN's integrated mass.
 
     Draws ``n_theta`` parameter vectors uniformly inside ``param_bounds``,
-    integrates the density for each with :func:`choice_mass` (streaming;
-    the cdf is not retained) and summarises how far the total mass strays
-    from one and where in the box it does so. The output is plain numbers
-    (``json.dumps``-able).
+    integrates each with :func:`choice_mass` (streaming: only the totals are
+    kept) and summarises how far the total mass strays from one and where in
+    the box it does so. The output is plain numbers (``json.dumps``-able).
 
     Parameters
     ----------
@@ -651,25 +473,20 @@ def survey(
     seed
         Seed of the ``numpy.random.default_rng`` draw.
     onset_param
-        Name of the non-decision-time parameter; its column is the onset
-        the :class:`OnsetGrid` is built around and the edge
-        ``leak_below_onset`` is measured at. ``None`` builds the grid
-        around onset 0 and reports no leak.
-    grid
-        Reaction-time grid handed to :func:`choice_mass`.
+        Name of the non-decision-time parameter: the onset the grid is built
+        around and the edge ``leak_below_onset`` is measured at. ``None``
+        builds the grid around onset 0 and reports no leak.
 
     Returns
     -------
     dict
         ``n_theta``, ``grid`` (its repr), ``seconds`` (wall time),
         ``total`` (mean/min/max of the total and quantiles and exceedance
-        fractions of ``|total - 1|``), ``shrunk_box`` (the same with 10 % of
-        each axis trimmed at both ends, plus ``frac_of_theta``),
-        ``leak_below_onset`` (``mean``/``p99``/``max`` of
+        fractions of ``|total - 1|``; a NaN total counts as an infinite
+        deviation), ``leak_below_onset`` (``mean``/``p99``/``max`` of
         :meth:`ChoiceMass.mass_before` at the onset, or ``None``) and
         ``by_param`` (``{name: [10 bins of lo/hi/mean_dev/max_abs_dev/n]}``;
-        empty bins carry ``None``). A NaN total counts as an infinite
-        deviation in the quantiles and exceedance fractions.
+        empty bins carry ``None``).
 
     Raises
     ------
@@ -698,27 +515,20 @@ def survey(
     theta = rng.uniform(lo, hi, size=(n_theta, n_params))
     onset_idx = params.index(onset_param) if onset_param is not None else None
 
-    total = np.empty(n_theta, dtype=np.float64)
-    leak = np.empty(n_theta, dtype=np.float64) if onset_idx is not None else None
+    total = np.empty(n_theta)
+    leak = np.empty(n_theta) if onset_idx is not None else None
     started = time.perf_counter()
-    for start in range(0, n_theta, _SURVEY_CHUNK):
-        chunk = theta[start : start + _SURVEY_CHUNK]
-        stop = start + chunk.shape[0]
-        onset = chunk[:, onset_idx] if onset_idx is not None else np.zeros(len(chunk))
-        mass = choice_mass(predictor, chunk, choices, grid=grid, onset=onset)
+    for start in range(0, n_theta, _CHUNK):
+        chunk = theta[start : start + _CHUNK]
+        stop = start + len(chunk)
+        onset = chunk[:, onset_idx] if onset_idx is not None else 0.0
+        mass = choice_mass(predictor, chunk, choices, onset)
         total[start:stop] = mass.total
         if leak is not None:
             leak[start:stop] = mass.mass_before(onset)
     seconds = time.perf_counter() - started
 
     dev = total - 1.0
-    span = hi - lo
-    inside = np.all(
-        (theta >= lo + _SHRINK * span) & (theta <= hi - _SHRINK * span), axis=1
-    )
-    shrunk_box = _dev_stats(dev[inside])
-    shrunk_box["frac_of_theta"] = float(inside.mean())
-
     by_param: dict[str, list[dict[str, float | int | None]]] = {}
     for j, name in enumerate(params):
         edges = np.linspace(lo[j], hi[j], 11)
@@ -739,10 +549,9 @@ def survey(
 
     return {
         "n_theta": int(n_theta),
-        "grid": repr(grid),
+        "grid": repr(OnsetGrid()),
         "seconds": float(seconds),
         "total": _dev_stats(dev),
-        "shrunk_box": shrunk_box,
         "leak_below_onset": (
             None
             if leak is None
