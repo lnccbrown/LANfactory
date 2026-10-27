@@ -639,11 +639,3 @@ def test_survey_validation():
         survey(pred, {"a": (0.3, 2.5)}, SURVEY_PARAMS, CHOICES)
     with pytest.raises(ValueError, match="n_theta"):
         survey(pred, SURVEY_BOUNDS, SURVEY_PARAMS, CHOICES, n_theta=0)
-    # Without the check a non-positive chunk_size skips the loop and returns
-    # statistics of an uninitialised buffer.
-    with pytest.raises(ValueError, match="chunk_size"):
-        survey(pred, SURVEY_BOUNDS, SURVEY_PARAMS, CHOICES, n_theta=50, chunk_size=-1)
-    with pytest.raises(ValueError, match="chunk_size"):
-        survey(pred, SURVEY_BOUNDS, SURVEY_PARAMS, CHOICES, n_theta=50, chunk_size=0)
-    with pytest.raises(ValueError, match="shrink"):
-        survey(pred, SURVEY_BOUNDS, SURVEY_PARAMS, CHOICES, shrink=0.5)

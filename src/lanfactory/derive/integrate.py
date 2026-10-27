@@ -583,6 +583,13 @@ def choice_mass(
     return ChoiceMass(t=t, choices=choice_arr, cdf=cdf)
 
 
+#: Parameter vectors :func:`survey` integrates per :func:`choice_mass` call;
+#: only that chunk's cdf is held at once.
+_SURVEY_CHUNK = 512
+#: Fraction of each parameter's range trimmed at both ends for ``shrunk_box``.
+_SHRINK = 0.1
+
+
 def _dev_stats(dev: NDArray[np.float64]) -> dict[str, float | None]:
     """Summary of ``total - 1`` over a set of parameter vectors."""
     if dev.size == 0:
@@ -622,8 +629,6 @@ def survey(
     seed: int = 0,
     onset_param: str | None = "t",
     grid: OnsetGrid = OnsetGrid(),  # noqa: B008 - frozen, so never mutated
-    chunk_size: int = 512,
-    shrink: float = 0.1,
 ) -> dict:
     """Whole-box statistics of a LAN's integrated mass.
 
@@ -656,29 +661,25 @@ def survey(
         around onset 0 and reports no leak.
     grid
         Reaction-time grid handed to :func:`choice_mass`.
-    chunk_size
-        Parameter vectors per network call.
-    shrink
-        Fraction of each parameter's range trimmed at both ends for the
-        ``shrunk_box`` statistics (``0.1`` keeps the middle 80 % per axis).
 
     Returns
     -------
     dict
         ``n_theta``, ``grid`` (its repr), ``seconds`` (wall time),
         ``total`` (mean/min/max of the total and quantiles and exceedance
-        fractions of ``|total - 1|``), ``shrunk_box`` (the same over the
-        interior of the box plus ``frac_of_theta``), ``leak_below_onset``
-        (``mean``/``p99``/``max`` of :meth:`ChoiceMass.mass_before` at the
-        onset, or ``None``) and ``by_param`` (``{name: [10 bins of lo/hi/mean_dev/
-        max_abs_dev/n]}``; empty bins carry ``None``).
+        fractions of ``|total - 1|``), ``shrunk_box`` (the same with 10 % of
+        each axis trimmed at both ends, plus ``frac_of_theta``),
+        ``leak_below_onset`` (``mean``/``p99``/``max`` of
+        :meth:`ChoiceMass.mass_before` at the onset, or ``None``) and
+        ``by_param`` (``{name: [10 bins of lo/hi/mean_dev/max_abs_dev/n]}``;
+        empty bins carry ``None``).
 
     Raises
     ------
     ValueError
         If ``params`` is empty or names a parameter without bounds, if
         ``onset_param`` is not in ``params``, if a bound has ``hi < lo``, or
-        if ``n_theta``, ``chunk_size`` or ``shrink`` is out of range.
+        if ``n_theta < 1``.
     """
     params = list(params)
     n_params = len(params)
@@ -691,10 +692,6 @@ def survey(
         raise ValueError(f"onset_param {onset_param!r} is not in params {params}")
     if n_theta < 1:
         raise ValueError(f"n_theta must be >= 1, got {n_theta}")
-    if chunk_size < 1:
-        raise ValueError(f"chunk_size must be >= 1, got {chunk_size}")
-    if not 0.0 <= shrink < 0.5:
-        raise ValueError(f"shrink must lie in [0, 0.5), got {shrink}")
 
     lo = np.array([param_bounds[name][0] for name in params], dtype=np.float64)
     hi = np.array([param_bounds[name][1] for name in params], dtype=np.float64)
@@ -707,13 +704,11 @@ def survey(
     total = np.empty(n_theta, dtype=np.float64)
     leak = np.empty(n_theta, dtype=np.float64) if onset_idx is not None else None
     started = time.perf_counter()
-    for start in range(0, n_theta, chunk_size):
-        chunk = theta[start : start + chunk_size]
+    for start in range(0, n_theta, _SURVEY_CHUNK):
+        chunk = theta[start : start + _SURVEY_CHUNK]
         stop = start + chunk.shape[0]
         onset = chunk[:, onset_idx] if onset_idx is not None else np.zeros(len(chunk))
-        mass = choice_mass(
-            predictor, chunk, choices, grid=grid, chunk_size=chunk_size, onset=onset
-        )
+        mass = choice_mass(predictor, chunk, choices, grid=grid, onset=onset)
         total[start:stop] = mass.total
         if leak is not None:
             leak[start:stop] = mass.mass_before(onset)
@@ -722,7 +717,7 @@ def survey(
     dev = total - 1.0
     span = hi - lo
     inside = np.all(
-        (theta >= lo + shrink * span) & (theta <= hi - shrink * span), axis=1
+        (theta >= lo + _SHRINK * span) & (theta <= hi - _SHRINK * span), axis=1
     )
     shrunk_box = _dev_stats(dev[inside])
     shrunk_box["frac_of_theta"] = float(inside.mean())
