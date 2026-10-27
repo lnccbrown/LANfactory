@@ -170,14 +170,7 @@ def load_onnx_predictor(path: str | Path) -> OnnxPredictor:
     import onnxruntime as ort
 
     model = onnx.load(str(path))
-    # Defensive for foreign producers that list initializers among the graph
-    # inputs (the ecosystem's exporters do not); intentionally untested.
-    initializers = {tensor.name for tensor in model.graph.initializer}
-    io_tensors = [
-        value_info
-        for value_info in (*model.graph.input, *model.graph.output)
-        if value_info.name not in initializers
-    ]
+    io_tensors = [*model.graph.input, *model.graph.output]
     first_dims = io_tensors[0].type.tensor_type.shape.dim
     if len(first_dims) != 2:
         shape = [d.dim_param or d.dim_value for d in first_dims]
