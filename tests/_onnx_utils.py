@@ -5,6 +5,9 @@ from pathlib import Path
 
 import onnx
 
+# franklab/HSSM's root ddm.onnx, copied unchanged (see fixtures/onnx/PROVENANCE.md).
+DDM_ONNX = Path(__file__).parent / "fixtures" / "onnx" / "ddm.onnx"
+
 TINY_LAN_CONFIG = {
     "layer_sizes": [16, 16, 1],
     "activations": ["tanh", "tanh", "linear"],
