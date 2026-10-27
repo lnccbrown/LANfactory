@@ -125,7 +125,7 @@ def test_fixture_is_the_production_ddm_lan():
 
 @pytest.mark.parametrize("choice", CHOICES)
 def test_cpn_label_matches_simulated_choice_frequency(ddm_mass, choice):
-    """Contract B: one label per choice code, no category assumed.
+    """One label per choice code, no category assumed.
 
     The label is ``mass(c) / total``, which estimates the choice frequency
     *conditional on responding within max_t*: ``mean(choices == c & responded)
@@ -318,8 +318,6 @@ def test_sample_deadlines_covers_the_box_and_concentrates(box_mass):
         sample_deadlines(box_mass, np.random.default_rng(3)),
         sample_deadlines(box_mass, np.random.default_rng(3)),
     )
-    with pytest.raises(ValueError, match="deadline_quantile_frac"):
-        sample_deadlines(box_mass, rng, 1.5)
     with pytest.raises(ValueError, match="bounds"):
         sample_deadlines(box_mass, rng, bounds=(2.0, 1.0))
 
@@ -433,9 +431,6 @@ def test_pickle_carries_the_contract_keys(derived):
     assert derive["fallback_window"] == (0.98, 1.03)
     assert derive["fallback_n_sim"] == FALLBACK_N_SIM
     assert derive["grid"] == GRID_RECORD
-    assert derive["integration_grid"] == OnsetGrid().n_points == 1160
-    assert derive["integration_max_t"] == 20.0
-    assert derive["t_min"] == 1e-4
     assert derive["deadline_quantile_frac"] == 0.7
     assert derive["seed"] == 0
     if network_type == "cpn":
@@ -548,6 +543,12 @@ def test_corpus_rejects_bad_arguments(tmp_path):
         derive_aux_corpus(DDM_ONNX, "ddm", "lan", tmp_path)
     with pytest.raises(ValueError, match="n_theta_per_file"):
         derive_aux_corpus(DDM_ONNX, "ddm", "cpn", tmp_path, n_theta_per_file=0)
+    # Checked for cpn too, so a manifest never records an impossible fraction.
+    with pytest.raises(ValueError, match="deadline_quantile_frac"):
+        derive_aux_corpus(
+            DDM_ONNX, "ddm", "cpn", tmp_path / "frac", deadline_quantile_frac=1.5
+        )
+    assert not (tmp_path / "frac").exists()
     # A LAN of the wrong width: angle has 5 parameters, so its LAN takes 7.
     _, wrong = export_tiny_torch_lan(tmp_path, 7)
     with pytest.raises(ValueError, match=r"width 7.*width 6.*right LAN"):
@@ -732,6 +733,8 @@ def test_zero_and_nan_totals_fall_back_instead_of_failing(
     rows_per_theta = len(CHOICES) if network_type == "cpn" else 1
     assert np.all(labels[: 2 * rows_per_theta] == 0.5)  # thetas 0 and 1
     assert not np.isnan(labels).any()
+    stats = _manifest(tmp_path)["derive_stats"]
+    assert all(np.isfinite(v) for v in stats.values() if v is not None)
 
 
 def test_no_fallback_never_simulates(tmp_path, monkeypatch):

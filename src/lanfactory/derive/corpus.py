@@ -131,10 +131,6 @@ def sample_deadlines(
     NDArray[np.float64]
         ``(n_theta,)`` deadlines in seconds.
     """
-    if not 0.0 <= deadline_quantile_frac <= 1.0:
-        raise ValueError(
-            f"deadline_quantile_frac must lie in [0, 1], got {deadline_quantile_frac}"
-        )
     lower, upper = bounds
     if not lower < upper:
         raise ValueError(f"bounds must satisfy lower < upper, got {bounds}")
@@ -480,17 +476,18 @@ def _derive_stats(
     """The flat ``derive_stats`` record, for one file or a whole corpus.
 
     ``past_max_t`` is the per-fallback-theta share of base-model trials at or
-    beyond ``max_t`` (``None`` or empty when nothing fell back); ``leak`` the
-    per-theta mass below the onset.
+    beyond ``max_t`` (``None`` when nothing fell back); ``leak`` the
+    per-theta mass below the onset. A NaN total, which always falls back, is
+    left out of the mass statistics so the record stays valid JSON.
     """
-    past = None if past_max_t is None or past_max_t.size == 0 else past_max_t
+    past = None if past_max_t is None else float(past_max_t.max())
     return {
-        "derive_total_mass_mean": float(total.mean()),
-        "derive_total_mass_min": float(total.min()),
-        "derive_total_mass_max": float(total.max()),
+        "derive_total_mass_mean": float(np.nanmean(total)),
+        "derive_total_mass_min": float(np.nanmin(total)),
+        "derive_total_mass_max": float(np.nanmax(total)),
         "derive_fallback_frac": float(flagged.mean()),
-        "derive_sim_past_max_t_max": None if past is None else float(past.max()),
-        "derive_leak_below_onset_p99": float(np.percentile(leak, 99)),
+        "derive_sim_past_max_t_max": past,
+        "derive_leak_below_onset_p99": float(np.nanpercentile(leak, 99)),
     }
 
 
@@ -596,8 +593,8 @@ def derive_aux_corpus(
     ValueError
         For an unknown ``network_type``, ``n_files < 2``,
         ``n_theta_per_file < 1``, a ``fallback_window`` that is not
-        ``0 < lo < hi``, ``fallback_n_sim < 1``,
-        a model without a non-decision time ``t``, a LAN whose input width is
+        ``0 < lo < hi``, ``fallback_n_sim < 1``, a ``deadline_quantile_frac``
+        outside ``[0, 1]``, a model without a non-decision time ``t``, a LAN whose input width is
         not ``n_params + 2`` for ``model``, or, with ``fallback_window=None``,
         a theta whose total mass is not positive.
     """
@@ -618,6 +615,10 @@ def derive_aux_corpus(
         fallback_window = (lo, hi)
     if fallback_n_sim < 1:
         raise ValueError(f"fallback_n_sim must be >= 1, got {fallback_n_sim}")
+    if not 0.0 <= deadline_quantile_frac <= 1.0:
+        raise ValueError(
+            f"deadline_quantile_frac must lie in [0, 1], got {deadline_quantile_frac}"
+        )
 
     onnx_path = Path(onnx_path)
     out_folder = Path(out_folder)
@@ -659,9 +660,6 @@ def derive_aux_corpus(
     )
     derive_settings = {
         "grid": grid_record,
-        "integration_grid": grid.n_points,
-        "integration_max_t": grid.max_t,
-        "t_min": grid.t_min,
         "deadline_quantile_frac": deadline_quantile_frac,
         "deadline_bounds": deadline_bounds,
         "fallback_window": fallback_window,
