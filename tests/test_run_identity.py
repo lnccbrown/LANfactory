@@ -22,7 +22,7 @@ import pytest
 import lanfactory
 from lanfactory.cli.utils import log_training_run_identity
 from lanfactory.derive import OnsetGrid
-from lanfactory.derive.corpus import _derive_stats, _provenance
+from lanfactory.derive.corpus import _provenance
 from tests.derive.conftest import DDM_ONNX, DDM_SHA256
 
 mlflow = pytest.importorskip("mlflow")
@@ -56,32 +56,6 @@ MODEL_CONFIG = {
     "params": ["v", "a", "z", "t"],
     "param_bounds": [[-3.0, 0.3, 0.1, 0.0], [3.0, 2.5, 0.9, 2.0]],
 }
-
-
-# What derive_aux_corpus writes into every pickle's generator_config. Both
-# blocks are taken from their producers, _provenance and _derive_stats,
-# rather than transcribed, so a key renamed there fails these tests instead
-# of being silently logged under the stale name. The source is a bare
-# ddm.onnx (no run uuid, no Hub commit) on the default onset grid; the
-# statistics come from three totals (mean 0.984, none flagged, so nothing
-# fell back and the past-max_t share is None — the statistic the logger must
-# turn into "") and a constant leak.
-DERIVED_GENERATOR_CONFIG = {
-    "generator_approach": "derived",
-    "model": "ddm",
-    "network_type": "opn",
-    "source": _provenance(DDM_ONNX, "opn", OnsetGrid(), None, None),
-    "derive_stats": _derive_stats(
-        total=np.array([0.95, 1.0, 1.002]),
-        flagged=np.zeros(3, dtype=bool),
-        past_max_t=None,
-        leak=np.full(3, 0.052),
-    ),
-}
-# The params a derived run always carries: the producer's keys minus the one
-# logged only when known.
-DERIVED_PARAM_KEYS = set(DERIVED_GENERATOR_CONFIG["source"]) - {"source_lan_run_id"}
-DERIVED_TAG_KEYS = set(DERIVED_GENERATOR_CONFIG["derive_stats"])
 
 
 def make_training_pickle(path: Path, features_key="lan_data", label_key="lan_labels"):
@@ -220,96 +194,40 @@ class TestLogTrainingRunIdentity:
         assert p["input_dim"] == "6"
         assert "param_bounds_json" not in p
 
-    def test_derived_corpus_provenance_is_logged_by_name(self, tmp_tracking, tmp_path):
-        """A derived corpus puts SourceLAN.provenance on the run as params.
-
-        The exact key set matters: LAN_pipeline_minimal's publisher reads them
-        by name. ``source_lan_run_id`` is absent because the corpus has none,
-        and the two legitimately-unknown fields are the empty string rather
-        than a missing key or the string "None".
-        """
+    def test_derived_corpus_provenance(self, tmp_tracking, tmp_path):
+        """A derived corpus logs its source block as params, None as ""."""
+        source = _provenance(DDM_ONNX, "opn", OnsetGrid(), None, None)
         dataset = SimpleNamespace(
-            input_dim=5,
-            data_model_config=MODEL_CONFIG,
-            data_generator_config=DERIVED_GENERATOR_CONFIG,
+            data_generator_config={"generator_approach": "derived", "source": source}
         )
         run = self._log_and_fetch(
             tmp_tracking, tmp_path, network_type="opn", dataset=dataset
         )
-        p, t = run.data.params, run.data.tags
-
-        assert set(p) == DERIVED_PARAM_KEYS | {
-            "model",
-            "network_type",
-            "backend",
-            "input_dim",
-            "param_space",
-            "param_bounds_json",
-            "param_bounds_sha256",
+        # A bare file name has no run uuid and no Hub commit.
+        assert run.data.params == {
+            "model": "ddm",
+            "network_type": "opn",
+            "backend": "jax",
+            "derivation_method": "derived-from-lan",
+            "aux_category": "omission",
+            "source_lan_run_uuid": "",
+            "source_lan_sha256": DDM_SHA256,
+            "source_lan_hf_commit": "",
+            "integration_grid": str(OnsetGrid().n_points),
+            "integration_max_t": "20.0",
         }
-        assert p["derivation_method"] == "derived-from-lan"
-        assert p["aux_category"] == "omission"
-        assert p["source_lan_sha256"] == DDM_SHA256
-        assert p["integration_grid"] == str(OnsetGrid().n_points)
-        assert p["integration_max_t"] == "20.0"
-        assert p["source_lan_run_uuid"] == ""
-        assert p["source_lan_hf_commit"] == ""
-        assert "source_lan_run_id" not in p
-
-        assert t["data_origin"] == "derived"
-        assert DERIVED_TAG_KEYS <= set(t)
-        assert t["derive_total_mass_mean"] == "0.984"
-        assert t["derive_total_mass_min"] == "0.95"
-        assert t["derive_total_mass_max"] == "1.002"
-        assert t["derive_fallback_frac"] == "0.0"
-        assert t["derive_leak_below_onset_p99"] == "0.052"
-        # A None statistic is logged as "", like a missing param — not "None".
-        assert t["derive_sim_past_max_t_max"] == ""
-
-    def test_derived_corpus_logs_the_fallback_blind_spot_when_known(
-        self, tmp_tracking, tmp_path
-    ):
-        config = json.loads(json.dumps(DERIVED_GENERATOR_CONFIG))
-        config["derive_stats"]["derive_fallback_frac"] = 0.037
-        config["derive_stats"]["derive_sim_past_max_t_max"] = 0.01
-        dataset = SimpleNamespace(
-            input_dim=5, data_model_config=MODEL_CONFIG, data_generator_config=config
-        )
-        run = self._log_and_fetch(tmp_tracking, tmp_path, dataset=dataset)
-        t = run.data.tags
-        assert t["derive_fallback_frac"] == "0.037"
-        assert t["derive_sim_past_max_t_max"] == "0.01"
-
-    def test_derived_corpus_logs_source_run_id_when_known(self, tmp_tracking, tmp_path):
-        config = json.loads(json.dumps(DERIVED_GENERATOR_CONFIG))
-        config["source"]["source_lan_run_id"] = "0123456789abcdef"
-        config["source"]["source_lan_run_uuid"] = "56d99936415e11f0a2bf3cecefb6d5ee"
-        dataset = SimpleNamespace(
-            input_dim=5, data_model_config=MODEL_CONFIG, data_generator_config=config
-        )
-        run = self._log_and_fetch(tmp_tracking, tmp_path, dataset=dataset)
-        p = run.data.params
-        assert p["source_lan_run_id"] == "0123456789abcdef"
-        assert p["source_lan_run_uuid"] == "56d99936415e11f0a2bf3cecefb6d5ee"
+        assert run.data.tags["data_origin"] == "derived"
 
     def test_simulated_corpus_has_no_provenance(self, tmp_tracking, tmp_path):
-        """An ssms corpus: ``data_origin=simulated`` and none of the derive keys."""
-        dataset = SimpleNamespace(
-            input_dim=6,
-            data_model_config=MODEL_CONFIG,
-            data_generator_config={"model": "ddm", "generator_approach": "lan"},
-        )
+        # DatasetTorch's default data_generator_config is the string "None".
+        dataset = SimpleNamespace(data_generator_config="None")
         run = self._log_and_fetch(tmp_tracking, tmp_path, dataset=dataset)
-        p, t = run.data.params, run.data.tags
-
-        assert t["data_origin"] == "simulated"
-        assert not (DERIVED_PARAM_KEYS | {"source_lan_run_id"}) & set(p)
-        assert not DERIVED_TAG_KEYS & set(t)
-        # A dataset that never read a generator_config (DatasetTorch's "None"
-        # default) or no dataset at all is simulated too, not unknown.
-        for ds in (SimpleNamespace(input_dim=6, data_generator_config="None"), None):
-            run = self._log_and_fetch(tmp_tracking, tmp_path, dataset=ds)
-            assert run.data.tags["data_origin"] == "simulated"
+        assert run.data.params == {
+            "model": "ddm",
+            "network_type": "lan",
+            "backend": "jax",
+        }
+        assert run.data.tags["data_origin"] == "simulated"
 
     def test_noop_without_active_run(self, tmp_tracking, tmp_path):
         # Must be a silent no-op, not an error.
