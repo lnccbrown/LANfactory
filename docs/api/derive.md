@@ -44,14 +44,7 @@ per file: `n_theta_per_file` rows for `opn`, `n_theta_per_file
 × n_choices` for `cpn`. With the default 4096 thetas that is 4096 and 8192
 rows for a two-choice model; `512` divides both.
 
-When `torchtrain` or `jaxtrain` trains on a derived corpus with MLflow
-tracking on, the training run carries those keys as params —
-`source_lan_run_id` only when known, the run uuid and Hub commit as `""`
-when unknown — the `derive_stats` as tags (a `None` statistic as `""`),
-and the tag `data_origin=derived`; see
-[Derived corpora](../using_mlflow.md#derived-corpora) under *Track training
-runs with MLflow* for the exact set and what an empty value means
-downstream.
+A run trained on a derived corpus logs its provenance to MLflow: see [Derived corpora](../using_mlflow.md#derived-corpora).
 
 ::: lanfactory.derive.derive_aux_corpus
 
