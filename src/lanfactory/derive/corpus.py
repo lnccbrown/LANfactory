@@ -32,7 +32,8 @@ max 0.17 to 0.004 / 0.033 and the opn error from 0.026 / 0.22 to 0.012 /
 the total is recorded in every pickle (``generator_config["derive_stats"]``)
 and in the manifest, never hidden. The ratios lie in ``[0, 1]`` up to
 rounding; the float32 clip in :func:`_labels` is kept as a safety net. A
-parameter vector with zero total is rejected.
+parameter vector whose total is not positive is rejected unless it falls back
+to simulation.
 """
 
 from __future__ import annotations
@@ -174,16 +175,21 @@ def _labels(values: NDArray) -> NDArray[np.float32]:
     return np.clip(values, 0.0, 1.0).astype(np.float32).reshape(-1, 1)
 
 
-def _total(mass: ChoiceMass) -> NDArray[np.float64]:
-    """The per-theta total the labels are renormalised by; must be positive."""
+def _total(mass: ChoiceMass, flagged: NDArray[np.bool_] | None) -> NDArray[np.float64]:
+    """The per-theta divisor of the labels: the LAN's total, 1 where ``flagged``.
+
+    Flagged rows are relabelled by simulation, so only the others need a
+    positive total; a NaN total is refused like a zero one.
+    """
     total = mass.total
-    if np.any(total <= 0.0):
-        bad = np.flatnonzero(total <= 0.0)
+    trusted = np.ones(total.shape, dtype=bool) if flagged is None else ~flagged
+    bad = np.flatnonzero(trusted & ~(total > 0.0))
+    if bad.size:
         raise ValueError(
             f"total mass must be > 0 to renormalise labels; parameter vectors "
             f"{bad.tolist()} have total {total[bad].tolist()}"
         )
-    return total
+    return np.where(trusted, total, 1.0)
 
 
 def _deadline_rows(
@@ -200,7 +206,10 @@ def _deadline_rows(
 
 
 def cpn_labels(
-    mass: ChoiceMass, theta: NDArray[np.float32], choices: Sequence[float] | NDArray
+    mass: ChoiceMass,
+    theta: NDArray[np.float32],
+    choices: Sequence[float] | NDArray,
+    flagged: NDArray[np.bool_] | None = None,
 ) -> tuple[NDArray[np.float32], NDArray[np.float32]]:
     """CPN rows ``[theta..., choice]`` for every choice, labelled ``mass(choice) / total``.
 
@@ -215,6 +224,9 @@ def cpn_labels(
         ``(n_theta, n_params)``.
     choices
         Choice codes to emit rows for, e.g. ``model_config["choices"]``.
+    flagged
+        ``(n_theta,)``: thetas that fall back to simulation, whose labels are
+        placeholders for the caller to overwrite; ``None`` flags none.
 
     Returns
     -------
@@ -236,11 +248,15 @@ def cpn_labels(
     per_choice = np.stack(
         [mass.mass(float(c)) for c in np.asarray(choices).reshape(-1)], axis=1
     )
-    return data, _labels((per_choice / _total(mass)[:, None]).reshape(-1))
+    total = _total(mass, flagged)
+    return data, _labels((per_choice / total[:, None]).reshape(-1))
 
 
 def opn_labels(
-    mass: ChoiceMass, theta: NDArray[np.float32], deadlines: ArrayLike
+    mass: ChoiceMass,
+    theta: NDArray[np.float32],
+    deadlines: ArrayLike,
+    flagged: NDArray[np.bool_] | None = None,
 ) -> tuple[NDArray[np.float32], NDArray[np.float32]]:
     """OPN rows ``[theta..., deadline]`` labelled ``1 - F(deadline) / total``.
 
@@ -256,6 +272,8 @@ def opn_labels(
         ``(n_theta, n_params)``.
     deadlines
         Scalar or ``(n_theta,)`` deadlines in seconds.
+    flagged
+        As for :func:`cpn_labels`.
 
     Returns
     -------
@@ -264,7 +282,7 @@ def opn_labels(
         ``(n_theta, 1)``.
     """
     data, d = _deadline_rows(theta, deadlines)
-    return data, _labels(1.0 - mass.mass_before(d) / _total(mass))
+    return data, _labels(1.0 - mass.mass_before(d) / _total(mass, flagged))
 
 
 # --------------------------------------------------------------------------
@@ -499,11 +517,11 @@ def _derive_stats(
 def _flag_totals(
     total: NDArray[np.float64], window: tuple[float, float] | None
 ) -> NDArray[np.bool_]:
-    """Which parameter vectors fall back to simulation."""
+    """Which parameter vectors fall back to simulation; a NaN total does."""
     if window is None:
         return np.zeros(total.shape[0], dtype=bool)
     lo, hi = window
-    return (total < lo) | (total > hi)
+    return ~((total >= lo) & (total <= hi))
 
 
 def derive_aux_corpus(
@@ -599,7 +617,8 @@ def derive_aux_corpus(
         ``n_theta_per_file < 1``, a ``fallback_window`` that is not
         ``0 < lo < hi``, ``fallback_n_sim < 1``,
         a model without a non-decision time ``t``, a LAN whose input width is
-        not ``n_params + 2`` for ``model``, or a theta with zero total mass.
+        not ``n_params + 2`` for ``model``, or, with ``fallback_window=None``,
+        a theta whose total mass is not positive.
     """
     _check_network_type(network_type)
     if n_files < 2:
@@ -681,17 +700,19 @@ def derive_aux_corpus(
         theta = sample_theta(base_config, n_theta_per_file, rng)
         onset = theta[:, onset_idx]
         mass = choice_mass(predictor, theta, choices, grid=grid, onset=onset)
+        # Flag before renormalising: a theta outside the window (a zero or NaN
+        # total among them) gets placeholder labels, simulated below.
+        flagged = _flag_totals(mass.total, fallback_window)
         deadlines: NDArray[np.float64] | None = None
         if network_type == "cpn":
-            data, labels = cpn_labels(mass, theta, choices)
+            data, labels = cpn_labels(mass, theta, choices, flagged)
         else:
             assert deadline_bounds is not None
             deadlines = sample_deadlines(
                 mass, rng, deadline_quantile_frac, bounds=deadline_bounds
             )
-            data, labels = opn_labels(mass, theta, deadlines)
+            data, labels = opn_labels(mass, theta, deadlines, flagged)
 
-        flagged = _flag_totals(mass.total, fallback_window)
         past_max_t = None
         if flagged.any():
             simulated, past_max_t = simulate_labels(

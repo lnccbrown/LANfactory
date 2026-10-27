@@ -595,12 +595,13 @@ def test_simulate_labels_estimate_what_the_lan_labels_do():
 
 
 class _ScaledPredictor:
-    """Multiplies the LAN's density by ``factor`` for one parameter vector."""
+    """Multiplies the LAN's density by ``factor`` (0 or NaN too) for one theta."""
 
     def __init__(self, inner, planted: np.ndarray, factor: float) -> None:
         self.inner = inner
         self.planted = planted.astype(np.float32)
-        self.log_factor = np.log(factor)
+        with np.errstate(divide="ignore"):  # log(0) = -inf is the point
+            self.log_factor = np.log(factor)
 
     @property
     def input_width(self) -> int:
@@ -609,7 +610,7 @@ class _ScaledPredictor:
     def __call__(self, batch: np.ndarray) -> np.ndarray:
         n = self.planted.shape[0]
         hit = np.all(batch[:, :n] == self.planted, axis=1)
-        return np.asarray(self.inner(batch)) + self.log_factor * hit
+        return np.asarray(self.inner(batch)) + np.where(hit, self.log_factor, 0.0)
 
 
 def _planted_theta(file_index: int, n_theta: int, row: int) -> np.ndarray:
@@ -702,6 +703,35 @@ def test_thetas_outside_the_window_are_labelled_by_simulation(
     manifest = _manifest(out)
     assert manifest["derive_stats"]["derive_sim_past_max_t_max"] == pytest.approx(0.01)
     assert manifest["derive_stats"]["derive_fallback_frac"] > 0.0
+
+
+@pytest.mark.parametrize("network_type", NETWORK_TYPES)
+def test_zero_and_nan_totals_fall_back_instead_of_failing(
+    tmp_path, monkeypatch, network_type
+):
+    """A theta whose LAN total is 0 or NaN is simulated, not refused or NaN.
+
+    The window is applied before the labels are renormalised, and a NaN total
+    lies outside it; ``simulate_labels`` is a sentinel returning 0.5.
+    """
+    zero, nan = _planted_theta(0, 8, 0), _planted_theta(0, 8, 1)
+    real = load_onnx_predictor(DDM_ONNX)
+    broken = _ScaledPredictor(_ScaledPredictor(real, zero, 0.0), nan, np.nan)
+    monkeypatch.setattr(corpus_module, "load_onnx_predictor", lambda path: broken)
+
+    def sentinel(model, theta, kind, deadlines, n_sim, rng, *, max_t):
+        n_labels = len(CHOICES) if kind == "cpn" else 1
+        return np.full((len(theta), n_labels), 0.5), np.zeros(len(theta))
+
+    monkeypatch.setattr(corpus_module, "simulate_labels", sentinel)
+    files = derive_aux_corpus(
+        DDM_ONNX, "ddm", network_type, tmp_path, n_files=2, n_theta_per_file=8
+    )
+    with open(files[0], "rb") as f:
+        labels = pickle.load(f)[f"{network_type}_labels"][:, 0]
+    rows_per_theta = len(CHOICES) if network_type == "cpn" else 1
+    assert np.all(labels[: 2 * rows_per_theta] == 0.5)  # thetas 0 and 1
+    assert not np.isnan(labels).any()
 
 
 def test_no_fallback_never_simulates(tmp_path, monkeypatch):
