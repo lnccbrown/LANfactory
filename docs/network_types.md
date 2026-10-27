@@ -195,10 +195,10 @@ label comes from the `{model}_deadline` simulator with the row's deadline. With 
 ≤ 0.023 (CPN) / ≤ 0.033 (OPN). `--no-fallback` labels everything from the
 LAN. Every file and the manifest record the share that fell back
 (`derive_fallback_frac`) and the simulation's own blind spot,
-`derive_sim_past_max_t_max` — the largest share of base-model trials at or
-beyond `max_t` among the fallback thetas (ssms returns those with a choice,
-which no label conditioned on `[0, max_t]` can carry; `None` when nothing fell
-back). Note that ssms at `Δt = 10⁻³` is itself biased at `a < 0.5` (about
+`derive_sim_past_max_t_max` — the largest share of base-model trials still
+running at `max_t` among the fallback thetas (ssms returns those with a choice
+or censored as `rt = −999`, and no label conditioned on `[0, max_t]` can
+carry them; `None` when nothing fell back). Note that ssms at `Δt = 10⁻³` is itself biased at `a < 0.5` (about
 0.02 in `P(choice = 1)`), so a simulated label is a reference, not ground
 truth.
 

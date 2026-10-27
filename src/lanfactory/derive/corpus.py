@@ -322,11 +322,13 @@ def simulate_labels(
     outside the fallback window. The labels estimate the same quantities the
     renormalised LAN labels do:
 
-    * ``cpn``: ``mean(choices == c & rts < max_t) / mean(rts < max_t)`` per
-      choice — the choice frequency conditional on responding within
-      ``max_t``, which is what ``mass(c) / total`` estimates (ssms does not
-      censor a base model at ``max_t``; an un-terminated trial comes back at
-      ``rt ≈ max_t + t`` with a choice).
+    * ``cpn``: ``mean(choices == c & responded) / mean(responded)`` per
+      choice, ``responded = (rts >= 0) & (rts < max_t)`` — the choice
+      frequency conditional on responding within ``max_t``, which is what
+      ``mass(c) / total`` estimates. A trial still running at ``max_t``
+      comes back either at ``rt ≈ max_t + t`` with a choice (ddm) or
+      censored as ``rt == -999`` (racing_diffusion_3, poisson_race, addm);
+      both count as past ``max_t``.
     * ``opn``: ``mean(rts == -999)`` under the ``{model}_deadline`` simulator
       with the row's deadline appended to theta — the omission probability.
 
@@ -349,8 +351,8 @@ def simulate_labels(
         model, one for the deadline model), so a corpus file stays a
         function of its own seed.
     max_t
-        The base model's ``max_t``; the cpn labels condition on ``rts <
-        max_t`` and ``past_max_t`` counts the trials at or beyond it.
+        The base model's ``max_t``; the cpn labels condition on responding
+        before it and ``past_max_t`` counts the trials that do not.
 
     Returns
     -------
@@ -359,8 +361,8 @@ def simulate_labels(
         order of the model config, so ``labels.reshape(-1)`` is theta-major
         like :func:`cpn_labels`) and ``(n_theta, 1)`` otherwise, and
         ``past_max_t`` of shape ``(n_theta,)``: the share of base-model
-        trials with ``rt >= max_t``, the part of the truth no LAN trained
-        on ``[0, max_t]`` can see.
+        trials that do not respond before ``max_t``, the part of the truth no
+        LAN trained on ``[0, max_t]`` can see.
 
     Raises
     ------
@@ -389,7 +391,7 @@ def simulate_labels(
         random_state=seed_base,
     )
     rts = np.asarray(base["rts"]).reshape(n_sim, n_theta)
-    responded = rts < max_t
+    responded = (rts >= 0) & (rts < max_t)
     past_max_t = 1.0 - responded.mean(axis=0)
 
     if network_type == "cpn":

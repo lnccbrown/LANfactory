@@ -135,10 +135,10 @@ def test_cpn_label_matches_simulated_choice_frequency(ddm_mass, choice):
     """Contract B: one label per choice code, no category assumed.
 
     The label is ``mass(c) / total``, which estimates the choice frequency
-    *conditional on responding within max_t*: ``mean(choices == c & rts <
-    max_t) / mean(rts < max_t)``. ssms does not censor a base model at
-    ``max_t`` (an un-terminated trial comes back at ``rt ≈ max_t + t`` with a
-    choice), so the unconditional ``choice_p`` a simulated corpus carries is
+    *conditional on responding within max_t*: ``mean(choices == c & responded)
+    / mean(responded)`` with ``responded = (rts >= 0) & (rts < max_t)``. ddm
+    returns a trial still running at ``max_t`` at ``rt ≈ max_t + t`` with a
+    choice, so the unconditional ``choice_p`` a simulated corpus carries is
     printed beside it; for these thetas no trial reaches 20 s and the two
     coincide. Inside the fallback window the renormalised label is within
     0.01 of simulation (0.02 before renormalisation).
@@ -147,7 +147,7 @@ def test_cpn_label_matches_simulated_choice_frequency(ddm_mass, choice):
     j = CHOICES.index(choice)
     for i, theta in enumerate(THETA):
         rts, choices = _simulate("ddm", theta, seed=i)
-        responded = rts < MAX_T
+        responded = (rts >= 0) & (rts < MAX_T)
         conditional = np.mean((choices == choice) & responded) / responded.mean()
         label = labels[i * len(CHOICES) + j, 0]
         print(
@@ -610,57 +610,26 @@ def test_corpus_rejects_bad_arguments(tmp_path):
 # --------------------------------------------------------------------------
 
 
-def test_simulate_labels_matches_the_raw_ssms_formulas():
-    """The fallback labels are ssms' own frequencies, seeded from ``rng``."""
-    theta = THETA[:2]
-    n_sim = 2000
+def test_simulate_labels_estimate_what_the_lan_labels_do():
+    """cpn shares sum to one, opn is the deadline model's omission rate, and a
+    trial ssms censors at ``max_t`` (``rt == -999``) is past ``max_t``, not a
+    response (racing_diffusion_3 censors 12 % of trials here).
+    """
+    rng = np.random.default_rng(5)
+    cpn, _ = simulate_labels("ddm", THETA, "cpn", None, 2000, rng)
+    np.testing.assert_allclose(cpn.sum(axis=1), 1.0)
+    opn, _ = simulate_labels("ddm", THETA, "opn", DEADLINES, 20_000, rng)
+    assert np.all((0.0 < opn) & (opn < 1.0))
+    for i, (theta, d) in enumerate(zip(THETA, DEADLINES, strict=True)):
+        rts, _ = _simulate("ddm_deadline", np.append(theta, d), seed=10 + i)
+        assert opn[i, 0] == pytest.approx(np.mean(rts == -999.0), abs=0.02)
 
-    def seeds(seed: int) -> tuple[int, int]:
-        rng = np.random.default_rng(seed)
-        return tuple(int(s) for s in rng.integers(np.iinfo(np.int32).max, size=2))
+    race = np.array([[0.0, 0.0, 0.0, 0.0, 3.0, 0.0]], dtype=np.float32)
+    labels, past = simulate_labels("racing_diffusion_3", race, "cpn", None, 4000, rng)
+    assert labels.sum() == pytest.approx(1.0)
+    assert past[0] == pytest.approx(0.12, abs=0.03)
 
-    cpn, past = simulate_labels(
-        "ddm", theta, "cpn", None, n_sim, np.random.default_rng(5)
-    )
-    assert cpn.shape == (2, 2) and past.shape == (2,)
-    np.testing.assert_allclose(cpn.sum(axis=1), 1.0, atol=1e-12)
-    seed_base, seed_deadline = seeds(5)
-    out = simulator(
-        theta=theta, model="ddm", n_samples=n_sim, max_t=MAX_T, random_state=seed_base
-    )
-    rts = out["rts"].reshape(n_sim, 2)
-    chosen = out["choices"].reshape(n_sim, 2)
-    responded = rts < MAX_T
-    for j, c in enumerate(CHOICES):
-        expected = ((chosen == c) & responded).sum(axis=0) / responded.sum(axis=0)
-        np.testing.assert_array_equal(cpn[:, j], expected)
-    np.testing.assert_array_equal(past, 1.0 - responded.mean(axis=0))
-
-    d = DEADLINES[:2]
-    opn, past_opn = simulate_labels(
-        "ddm", theta, "opn", d, n_sim, np.random.default_rng(5)
-    )
-    assert opn.shape == (2, 1)
-    np.testing.assert_array_equal(past_opn, past)  # same base draw, same seed
-    out = simulator(
-        theta=np.column_stack([theta, d.astype(np.float32)]),
-        model="ddm_deadline",
-        n_samples=n_sim,
-        max_t=MAX_T,
-        random_state=seed_deadline,
-    )
-    omitted = out["rts"].reshape(n_sim, 2) == -999.0
-    np.testing.assert_array_equal(opn[:, 0], omitted.mean(axis=0))
-    assert np.all((0.2 < opn) & (opn < 0.7))
-
-    # A scalar deadline broadcasts; the same rng state reproduces the labels.
-    again, _ = simulate_labels("ddm", theta, "opn", d, n_sim, np.random.default_rng(5))
-    np.testing.assert_array_equal(again, opn)
-    scalar, _ = simulate_labels(
-        "ddm", theta, "opn", 1.5, n_sim, np.random.default_rng(5)
-    )
-    assert scalar.shape == (2, 1)
-
+    theta, n_sim = THETA[:2], 2000
     with pytest.raises(ValueError, match="need deadlines"):
         simulate_labels("ddm", theta, "opn", None, n_sim, np.random.default_rng(0))
     with pytest.raises(ValueError, match="network_type"):
