@@ -1,11 +1,5 @@
 """Turn a LAN's per-choice masses into cpn / opn training corpora.
 
-:mod:`lanfactory.derive.integrate` integrates a trained LAN's density over
-reaction time. This module samples parameter vectors the way ssms samples a
-simulated corpus, asks the LAN for the masses, and writes pickles whose layout
-is what the trainers already read — so an auxiliary network can be derived
-from a production LAN on a laptop in minutes, with the trainer unchanged.
-
 Row layouts
 -----------
 Every corpus has ``n_params + 1`` input columns, in ssms parameter order:
@@ -20,20 +14,6 @@ opn        ``[theta..., deadline]``               ``1 - F(deadline) / total``
 
 with ``total`` the LAN's mass on ``[t_min, max_t]`` summed over choices and
 ``F(d) = mass_before(d)`` summed over choices.
-
-Labels are renormalised by the network's own total
----------------------------------------------------
-The LAN's total mass is not one: it carries the network's scale error (on the
-Hub ddm LAN, median ``|total − 1|`` 0.0037 but up to 0.22 in the corners of
-the box; see :func:`.integrate.survey`). Against simulation that error is
-mostly *scale* — dividing by the total takes the cpn error from mean 0.035 /
-max 0.17 to 0.004 / 0.033 and the opn error from 0.026 / 0.22 to 0.012 /
-0.18 — so every label is the LAN's mass as a fraction of its own total, and
-the total is recorded in every pickle (``generator_config["derive_stats"]``)
-and in the manifest, never hidden. The ratios lie in ``[0, 1]`` up to
-rounding; the float32 clip in :func:`_labels` is kept as a safety net. A
-parameter vector whose total is not positive is rejected unless it falls back
-to simulation.
 """
 
 from __future__ import annotations
@@ -551,9 +531,9 @@ def derive_aux_corpus(
     read — so the result trains with the trainers unchanged. A
     :data:`MANIFEST_NAME` sidecar lists the files and the provenance.
 
-    Labels are the LAN's masses renormalised by its own total (see the module
-    notes). A parameter vector whose total lies outside ``fallback_window`` is
-    one the LAN gets wrong beyond a scale error, so its labels come from
+    Labels are the LAN's masses renormalised by its own total. A parameter
+    vector whose total lies outside ``fallback_window`` is one the LAN gets
+    wrong beyond a scale error, so its labels come from
     :func:`simulate_labels` on ssms instead; the share that fell back and the
     simulation's own blind spot (trials past ``max_t``) are recorded beside
     the total-mass statistics in every pickle's
@@ -589,9 +569,10 @@ def derive_aux_corpus(
         Passed to :func:`sample_deadlines` (opn only).
     fallback_window
         ``(lo, hi)``: a theta whose total mass lies outside ``[lo, hi]`` (the
-        endpoints are trusted) is labelled by simulation. The default flags 3.7 % of the ddm box
-        on the Hub LAN and bounds the unflagged error against simulation at
-        0.023 (cpn) / 0.033 (opn). ``None`` disables the fallback.
+        endpoints are trusted), or is NaN, is labelled by simulation. The
+        default flags 3.7 % of the ddm box on the Hub LAN and bounds the
+        unflagged error against simulation at 0.023 (cpn) / 0.033 (opn).
+        ``None`` disables the fallback.
     fallback_n_sim
         Trials simulated per fallback theta.
     seed

@@ -108,15 +108,20 @@ the LAN of the same model: the choice probability is the LAN's density
 integrated over reaction time for one choice, and the omission probability
 under a deadline is one minus the density integrated up to that deadline.
 `lanfactory.derive` computes those integrals from a trained LAN and writes a
-training corpus for the auxiliary network, so the corpus takes minutes on a
-laptop instead of a fresh cluster simulation — and the trainers consume it
-unchanged.
+training corpus for the auxiliary network on one laptop core in one to two
+hours (see *Cost* below) instead of a fresh cluster simulation — and the
+trainers consume it unchanged.
 
 **From which LAN.** Any `(1, n_params + 2)` LAN for the model — a production
 network from the Hub (`download-hf --network-type lan --model-name ddm`) or
-your own `torchtrain` / `jaxtrain` export. The LAN's file hash, training run
-uuid (parsed from the trainer's filename when present) and Hub revision are
-recorded in every pickle and in `derive_manifest.json`.
+your own `torchtrain` / `jaxtrain` export. Its identity is recorded in every
+pickle's `generator_config["source"]` under the keys downstream tools read by
+name — `derivation_method` (`"derived-from-lan"`), `aux_category` (`choice` /
+`omission`), `source_lan_run_uuid` (`--source-run-uuid`, else parsed from the
+trainer's file name), `source_lan_sha256`, `source_lan_hf_commit`
+(`--source-hf-revision`), `integration_grid` and `integration_max_t` — and,
+with the LAN's `path` and `hf_repo`, in the `source` of
+`derive_manifest.json`.
 
 **Grid.** The density is integrated with the trapezoid rule over
 `[t_min, max_t]` with `max_t = 20` s, ssms' default and the LANs' training
@@ -165,59 +170,52 @@ torchtrain --config-path cpn.yaml --training-data-folder data/cpn/ddm \
 `cpn.yaml` is the CPN config from above with `NETWORK_TYPE: "cpn"` and a batch
 size that divides the rows per file: with the default `--n-theta-per-file
 4096` a file holds 4096 rows for `opn` and `4096 × n_choices` for `cpn`
-(8192 for a two-choice model), so `CPU_BATCH_SIZE: 512` works for both. The Python entry point is `lanfactory.derive.derive_aux_corpus`; see the
-[API reference](api/derive.md#derived-corpora) for the pickle contract and the
-provenance keys.
+(8192 for a two-choice model), so `CPU_BATCH_SIZE: 512` works for both. The
+Python entry point is `lanfactory.derive.derive_aux_corpus`; see the
+[API reference](api/derive.md#derived-corpora) for the label formulas and the
+pickle contract.
 
 ### Renormalisation, the window and the fallback
 
-A LAN's integrated mass is not one. Over 20 000 uniform draws from the ddm box
-the Hub ddm LAN's total has median `|total − 1|` 0.0037 and p99 0.080, with
-min 0.877 / max 1.219 and 1.9 % of the box beyond 0.05; two regions carry the
-error — `a > 2.2 & |v| < 0.5` over-estimates the tail (+0.07 mean, +0.22 max)
-and `v > 2.5, z > 0.8, a > 2.2` halves the early peak (−0.06). Against
-simulation that error is mostly *scale*: labelling a CPN with the raw
-`mass(c)` gives a mean error of 0.035 (max 0.17) while `mass(c) / total`
-gives 0.004 (max 0.033); for an OPN `1 − F(d)` gives 0.026 / 0.22 and
-`1 − F(d) / F(max_t)` 0.012 / 0.18. So **labels are renormalised by the
-network's own total; the total is recorded, never hidden** — per file in
-`generator_config["derive_stats"]` (`derive_total_mass_{mean,min,max}`) and
-per corpus in the manifest.
+A LAN's integrated mass is not one: over 20 000 draws from the ddm box the
+Hub ddm LAN's total has median `|total − 1|` 0.0037 (p99 0.080, range
+0.877–1.219). Against simulation that error is mostly *scale* — dividing by
+the total takes the CPN label error from 0.035 mean / 0.17 max to
+0.004 / 0.033 and the OPN error from 0.026 / 0.22 to 0.012 / 0.18 — so
+**labels are renormalised by the network's own total, and the total is
+recorded, never hidden**: `derive_total_mass_{mean,min,max}` in every
+pickle's `generator_config["derive_stats"]` and in the manifest.
 
-What remains after renormalising sits where the total is off. A parameter
-vector whose total lies outside the fallback window (the open interval
-`0.98 1.03`, which flags 3.7 % of the ddm box) is therefore labelled by
-**ssms simulation** instead of the LAN (20 000 trials): the CPN label is the
-choice frequency conditional on responding within `max_t` — what the
-renormalised LAN label estimates — and the OPN label comes from the
-`{model}_deadline` simulator with the row's deadline. With the fallback on,
-the unflagged residual against simulation is ≤ 0.023 (CPN) / ≤ 0.033 (OPN).
-Every file and the manifest record the share that fell back
-(`derive_fallback_frac`) and the simulation's own blind spot,
-`derive_sim_past_max_t_max` — the largest share of base-model trials still
-running at `max_t` among the fallback thetas (ssms returns those with a choice
-or censored as `rt = −999`, and no label conditioned on `[0, max_t]` can
-carry them; `None` when nothing fell back). Note that ssms at `Δt = 10⁻³` is itself biased at `a < 0.5` (about
+What remains sits where the total is off. A parameter vector whose total lies
+outside the window `[0.98, 1.03]` (endpoints trusted; 3.7 % of the ddm box),
+or is not a number, is labelled by **ssms simulation** instead, from 20 000
+trials: the CPN label is the choice frequency among trials that respond
+before `max_t`, the OPN label the omission rate of the `{model}_deadline`
+simulator at the row's deadline. That bounds the unflagged residual against
+simulation at 0.023 (CPN) / 0.033 (OPN). `derive_fallback_frac` records the
+share that fell back and `derive_sim_past_max_t_max` the simulation's own
+blind spot: the largest share of base-model trials still running at `max_t`,
+which ssms returns with a choice or censors as `rt = −999` (`None` when
+nothing fell back). ssms at `Δt = 10⁻³` is itself biased at `a < 0.5` (about
 0.02 in `P(choice = 1)`), so a simulated label is a reference, not ground
 truth.
 
 **Cost.** Measured on the Hub ddm LAN with `n_files = 2`, `n_theta_per_file
-= 4096`, `seed = 0` and the defaults (laptop, single-threaded ssms). Which
-thetas fall back depends only on the sampled thetas and the grid, so the
-fraction is the same for every network type — 3.86 % of the 8192 thetas
-(3.71 % in file 0, 4.00 % in file 1) — and reproduces across processes.
-The types differ only in what the fallback costs to simulate:
+= 4096`, `seed = 0` and the defaults, on one laptop core. Which thetas fall
+back depends only on the sampled thetas and the grid, so the fraction is the
+same for every network type — 3.86 % of the 8192 thetas (3.71 % in file 0,
+4.00 % in file 1) — and reproduces across processes. The types differ in what
+the fallback costs to simulate:
 
-| type | seconds per file | share of file time in simulation | 100 files (extrapolated) |
-| --- | --- | --- | --- |
-| `cpn` | 39 | 97 % | ≈ 65 min |
-| `opn` | 61 | 98 % | ≈ 102 min |
+| type | seconds per file | 100 files of 4096 θ (extrapolated) |
+| --- | --- | --- |
+| `cpn` | 43 | ≈ 72 min |
+| `opn` | ≈ 61 | ≈ 102 min |
 
 Integrating a file takes about a second; the rest is the fallback, whose
 thetas are the slow ones to simulate (large `a`, small `|v|`: long reaction
-times). `opn` simulates each fallback theta twice — the base model
-for `derive_sim_past_max_t_max` and the deadline model for the label — but
-the deadline run stops at the deadline and is cheap.
+times). `opn` simulates each fallback theta twice: the base model for
+`derive_sim_past_max_t_max` and the deadline model for the label.
 
 ## Where the variants came from
 
