@@ -85,19 +85,8 @@ STATS_KEYS = {
 }
 # The grid of record, as the pickles and the manifest carry it.
 GRID_RECORD = {"onset_param": "t", "n_points": 1160, **asdict(OnsetGrid())}
-# Simulation and survey sizes for the corpus tests: small enough to keep
-# them fast (the survey is a manifest record, not a label input).
+# Trials per fallback theta in the corpus tests: small enough to keep them fast.
 FALLBACK_N_SIM = 500
-SURVEY_N_THETA = 200
-SURVEY_KEYS = {
-    "n_theta",
-    "grid",
-    "seconds",
-    "total",
-    "shrunk_box",
-    "leak_below_onset",
-    "by_param",
-}
 
 
 @pytest.fixture(scope="module")
@@ -401,7 +390,6 @@ def derived(request, tmp_path_factory) -> tuple[str, Path, list[Path]]:
         n_files=2,
         n_theta_per_file=N_THETA,
         fallback_n_sim=FALLBACK_N_SIM,
-        survey_n_theta=SURVEY_N_THETA,
     )
     return network_type, out, files
 
@@ -507,15 +495,6 @@ def test_manifest_lists_the_files(derived):
     assert 0.9 < manifest["derive_stats"]["derive_total_mass_mean"] < 1.1
     assert manifest["fallback_window"] == [0.98, 1.03]  # JSON has no tuples
     assert manifest["fallback_n_sim"] == FALLBACK_N_SIM
-    # The source LAN's whole-box survey rides along, on the grid of record.
-    assert manifest["survey_n_theta"] == SURVEY_N_THETA
-    lan_survey = manifest["lan_survey"]
-    assert set(lan_survey) == SURVEY_KEYS
-    assert lan_survey["n_theta"] == SURVEY_N_THETA
-    assert lan_survey["grid"] == repr(OnsetGrid())
-    assert 0.9 < lan_survey["total"]["mean"] < 1.1
-    assert lan_survey["leak_below_onset"]["p99"] >= 0.0
-    assert set(lan_survey["by_param"]) == {"v", "a", "z", "t"}
     # Corpus-level stats aggregate the files: the fraction is the mean over
     # thetas (equal-sized files), the past-max_t share the max over files.
     per_file = manifest["files"]
@@ -558,12 +537,7 @@ def _arrays(path: Path) -> tuple[np.ndarray, np.ndarray]:
 
 
 def test_corpus_is_reproducible_per_file(tmp_path):
-    kwargs = {
-        "n_files": 2,
-        "n_theta_per_file": 8,
-        "fallback_n_sim": FALLBACK_N_SIM,
-        "survey_n_theta": SURVEY_N_THETA,
-    }
+    kwargs = {"n_files": 2, "n_theta_per_file": 8, "fallback_n_sim": FALLBACK_N_SIM}
     a = derive_aux_corpus(DDM_ONNX, "ddm", "opn", tmp_path / "a", **kwargs)
     # Same arguments: byte-identical files.
     again = derive_aux_corpus(DDM_ONNX, "ddm", "opn", tmp_path / "again", **kwargs)
@@ -578,7 +552,6 @@ def test_corpus_is_reproducible_per_file(tmp_path):
         n_files=3,
         n_theta_per_file=8,
         fallback_n_sim=FALLBACK_N_SIM,
-        survey_n_theta=SURVEY_N_THETA,
     )
     for x, y in zip(a, b[:2], strict=True):
         for got, expected in zip(_arrays(x), _arrays(y), strict=True):
@@ -708,7 +681,6 @@ def test_thetas_outside_the_window_are_labelled_by_simulation(
         n_files=2,
         n_theta_per_file=n_theta,
         fallback_n_sim=123,
-        survey_n_theta=SURVEY_N_THETA,
     )
 
     config = ModelConfigBuilder.from_model("ddm")
@@ -764,7 +736,6 @@ def test_no_fallback_never_simulates(tmp_path, monkeypatch):
         n_files=2,
         n_theta_per_file=256,
         fallback_window=None,
-        survey_n_theta=SURVEY_N_THETA,
     )
     for path in files:
         with open(path, "rb") as f:
@@ -782,7 +753,7 @@ def test_no_fallback_never_simulates(tmp_path, monkeypatch):
 
 
 def test_fallback_arguments_are_validated(tmp_path):
-    kwargs = {"n_files": 2, "n_theta_per_file": 4, "survey_n_theta": SURVEY_N_THETA}
+    kwargs = {"n_files": 2, "n_theta_per_file": 4}
     with pytest.raises(ValueError, match="fallback_window"):
         derive_aux_corpus(
             DDM_ONNX, "ddm", "cpn", tmp_path, fallback_window=(1.03, 0.98), **kwargs
@@ -793,14 +764,4 @@ def test_fallback_arguments_are_validated(tmp_path):
         )
     with pytest.raises(ValueError, match="fallback_n_sim"):
         derive_aux_corpus(DDM_ONNX, "ddm", "cpn", tmp_path, fallback_n_sim=0, **kwargs)
-    with pytest.raises(ValueError, match="survey_n_theta"):
-        derive_aux_corpus(
-            DDM_ONNX,
-            "ddm",
-            "cpn",
-            tmp_path,
-            n_files=2,
-            n_theta_per_file=4,
-            survey_n_theta=0,
-        )
     assert not list(tmp_path.glob("*.pickle"))

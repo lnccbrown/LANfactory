@@ -181,9 +181,8 @@ simulation that error is mostly *scale*: labelling a CPN with the raw
 gives 0.004 (max 0.033); for an OPN `1 − F(d)` gives 0.026 / 0.22 and
 `1 − F(d) / F(max_t)` 0.012 / 0.18. So **labels are renormalised by the
 network's own total; the total is recorded, never hidden** — per file in
-`generator_config["derive_stats"]` (`derive_total_mass_{mean,min,max}`), per
-corpus in the manifest, and the source LAN's whole-box `survey` rides in the
-manifest under `lan_survey`.
+`generator_config["derive_stats"]` (`derive_total_mass_{mean,min,max}`) and
+per corpus in the manifest.
 
 What remains after renormalising sits where the total is off. A parameter
 vector whose total lies outside `--fallback-window` (default the open
@@ -214,7 +213,6 @@ The types differ only in what the fallback costs to simulate:
 | `cpn` | 39 | 97 % | ≈ 65 min |
 | `opn` | 61 | 98 % | ≈ 102 min |
 
-The one-off survey of the LAN (20 000 θ) adds about 5 s per corpus.
 Integrating a file takes about a second; the rest is the fallback, whose
 thetas are the slow ones to simulate (large `a`, small `|v|`: long reaction
 times). `opn` simulates each fallback theta twice — the base model

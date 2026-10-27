@@ -63,9 +63,7 @@ than by the LAN; `fallback_window=None` disables it. Each pickle's
 `generator_config["derive_stats"]` and the manifest's `derive_stats` carry the
 flat keys `derive_total_mass_mean`, `derive_total_mass_min`,
 `derive_total_mass_max`, `derive_fallback_frac`, `derive_sim_past_max_t_max`
-(`None` when nothing fell back) and `derive_leak_below_onset_p99`; the
-manifest also carries the source LAN's
-whole-box `survey` under `lan_survey`. The
+(`None` when nothing fell back) and `derive_leak_below_onset_p99`. The
 [network types](../network_types.md#renormalisation-the-window-and-the-fallback)
 page gives the measurements behind the policy.
 

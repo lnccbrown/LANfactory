@@ -58,7 +58,6 @@ from .integrate import (
     OnsetGrid,
     choice_mass,
     load_onnx_predictor,
-    survey,
 )
 
 __all__ = [
@@ -625,7 +624,6 @@ def derive_aux_corpus(
     deadline_quantile_frac: float = 0.7,
     fallback_window: tuple[float, float] | None = (0.98, 1.03),
     fallback_n_sim: int = 20_000,
-    survey_n_theta: int = 20_000,
     seed: int = 0,
     source: SourceLAN | None = None,
 ) -> list[Path]:
@@ -646,10 +644,6 @@ def derive_aux_corpus(
     simulation's own blind spot (trials past ``max_t``) are recorded beside
     the total-mass statistics in every pickle's
     ``generator_config["derive_stats"]`` and in the manifest.
-
-    The manifest also carries :func:`survey` of the LAN over its whole
-    training box (``lan_survey``, ``survey_n_theta`` draws), so every derived
-    corpus records the mass statistics of the network it came from.
 
     File ``i`` is generated from ``np.random.default_rng([seed, i])``, so a
     file's content depends on ``seed`` and its index only — the simulator
@@ -686,10 +680,6 @@ def derive_aux_corpus(
         0.023 (cpn) / 0.033 (opn). ``None`` disables the fallback.
     fallback_n_sim
         Trials simulated per fallback theta.
-    survey_n_theta
-        Parameter vectors :func:`survey` draws for the manifest's
-        ``lan_survey`` (seeded with ``seed``; about five seconds per 20 000
-        on the Hub ddm LAN).
     seed
         Base seed.
     source
@@ -706,7 +696,7 @@ def derive_aux_corpus(
     ValueError
         For an unknown ``network_type``, ``n_files < 2``,
         ``n_theta_per_file < 1``, a ``fallback_window`` that is not
-        ``0 < lo < hi``, ``fallback_n_sim < 1``, ``survey_n_theta < 1``,
+        ``0 < lo < hi``, ``fallback_n_sim < 1``,
         a model without a non-decision time ``t``, a LAN whose input width is
         not ``n_params + 2`` for ``model``, or a theta with zero total mass.
     """
@@ -727,8 +717,6 @@ def derive_aux_corpus(
         fallback_window = (lo, hi)
     if fallback_n_sim < 1:
         raise ValueError(f"fallback_n_sim must be >= 1, got {fallback_n_sim}")
-    if survey_n_theta < 1:
-        raise ValueError(f"survey_n_theta must be >= 1, got {survey_n_theta}")
 
     onnx_path = Path(onnx_path)
     out_folder = Path(out_folder)
@@ -779,17 +767,6 @@ def derive_aux_corpus(
         "fallback_n_sim": fallback_n_sim,
         "seed": seed,
     }
-
-    # The whole-box statistics of the source LAN, on the grid of record.
-    lan_survey = survey(
-        predictor,
-        base_config["param_bounds_dict"],
-        params,
-        choices,
-        n_theta=survey_n_theta,
-        seed=seed,
-        grid=grid,
-    )
 
     out_folder.mkdir(parents=True, exist_ok=True)
     files: list[Path] = []
@@ -883,7 +860,6 @@ def derive_aux_corpus(
         "deadline_bounds": deadline_bounds,
         "fallback_window": fallback_window,
         "fallback_n_sim": fallback_n_sim,
-        "survey_n_theta": survey_n_theta,
         "source": {
             **{
                 k: (str(v) if isinstance(v, Path) else v)
@@ -897,7 +873,6 @@ def derive_aux_corpus(
             np.concatenate(pasts) if pasts else None,
             np.concatenate(leaks),
         ),
-        "lan_survey": lan_survey,
         "files": file_records,
     }
     with open(out_folder / MANIFEST_NAME, "w", encoding="utf-8") as f:
