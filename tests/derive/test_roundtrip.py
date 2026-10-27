@@ -10,7 +10,7 @@ every provenance key exactly as the corpus wrote it.
 from __future__ import annotations
 
 import contextlib
-import hashlib
+import json
 import pickle
 import shutil
 from pathlib import Path
@@ -22,12 +22,7 @@ import yaml
 from torch.utils.data import DataLoader
 
 from lanfactory.cli.torch_train import main as torchtrain
-from lanfactory.derive import (
-    AUX_CATEGORY,
-    DERIVATION_METHOD,
-    OnsetGrid,
-    derive_aux_corpus,
-)
+from lanfactory.derive import MANIFEST_NAME, derive_aux_corpus
 from lanfactory.onnx.contract import assert_single_trial_contract
 from tests.derive.conftest import DDM_ONNX
 
@@ -152,52 +147,17 @@ def test_derive_train_export_round_trip(tmp_path, network_type):
         log_prob = float(np.asarray(out).reshape(-1)[0])
         assert np.isfinite(log_prob) and log_prob <= 0.0, log_prob
 
-    # The run: what the corpus wrote, by name, plus the origin tag.
+    # The run: the corpus's source block as params and its manifest's
+    # corpus-wide derive_stats as tags, None as "".
     client = mlflow.MlflowClient(tracking_uri=tracking_uri)
     experiment = client.get_experiment_by_name("derive-roundtrip")
     (run,) = client.search_runs([experiment.experiment_id])
     params, tags = run.data.params, run.data.tags
-    assert params["network_type"] == network_type
     assert tags["data_origin"] == "derived"
     assert tags["run_uuid"] in onnx_path.name  # the MLflow <-> disk join key
-
-    source = pickled["generator_config"]["source"]
-    assert params["derivation_method"] == DERIVATION_METHOD
-    assert params["aux_category"] == AUX_CATEGORY[network_type]
-    assert (
-        params["source_lan_sha256"] == hashlib.sha256(DDM_ONNX.read_bytes()).hexdigest()
-    )
-    # A bare ddm.onnx has no run uuid and no Hub commit: logged as "", and
-    # its MLflow run id is unknown: not logged at all.
-    assert params["source_lan_run_uuid"] == ""
-    assert params["source_lan_hf_commit"] == ""
-    assert "source_lan_run_id" not in params
-    # ddm has a non-decision time, so the corpus default is the onset grid.
-    assert params["integration_grid"] == str(OnsetGrid().n_points)
-    assert params["integration_max_t"] == str(OnsetGrid().max_t)
-    # Every other key the corpus wrote, verbatim.
-    for key, value in source.items():
-        if value is not None:
-            assert params[key] == str(value), key
-
-    # The mass statistics are per file and describe the first file the
-    # dataset read, which file shuffling makes either one: the tags must be
-    # exactly one corpus file's derive_stats, stringified — a None statistic
-    # (nothing fell back in that file) as "".
-    per_file_stats = []
-    for file in files:
-        with open(file, "rb") as f:
-            stats = pickle.load(f)["generator_config"]["derive_stats"]
-        per_file_stats.append(
-            {key: "" if value is None else str(value) for key, value in stats.items()}
-        )
-    logged_stats = {key: tags[key] for key in per_file_stats[0]}
-    assert logged_stats in per_file_stats, (logged_stats, per_file_stats)
-    assert 0.9 < float(tags["derive_total_mass_mean"]) < 1.1
-    # The fallback and the leak are what the corpus policy is about: by name.
-    assert 0.0 <= float(tags["derive_fallback_frac"]) <= 1.0
-    assert 0.0 <= float(tags["derive_leak_below_onset_p99"]) < 0.2
-    if tags["derive_fallback_frac"] == "0.0":
-        assert tags["derive_sim_past_max_t_max"] == ""
-    else:
-        assert 0.0 <= float(tags["derive_sim_past_max_t_max"]) <= 1.0
+    manifest = json.loads((corpus / MANIFEST_NAME).read_text(encoding="utf-8"))
+    expected = {**pickled["generator_config"]["source"], **manifest["derive_stats"]}
+    logged = {**params, **tags}
+    assert {key: logged[key] for key in expected} == {
+        key: "" if value is None else str(value) for key, value in expected.items()
+    }

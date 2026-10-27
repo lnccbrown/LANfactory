@@ -21,7 +21,7 @@ import pytest
 
 import lanfactory
 from lanfactory.cli.utils import log_training_run_identity
-from lanfactory.derive import OnsetGrid
+from lanfactory.derive import MANIFEST_NAME, OnsetGrid
 from lanfactory.derive.corpus import _provenance
 from tests.derive.conftest import DDM_ONNX, DDM_SHA256
 
@@ -195,10 +195,16 @@ class TestLogTrainingRunIdentity:
         assert "param_bounds_json" not in p
 
     def test_derived_corpus_provenance(self, tmp_tracking, tmp_path):
-        """A derived corpus logs its source block as params, None as ""."""
+        """A derived corpus logs its source block as params and its manifest's
+        derive_stats as tags, None as ""."""
         source = _provenance(DDM_ONNX, "opn", OnsetGrid(), None, None)
         dataset = SimpleNamespace(
             data_generator_config={"generator_approach": "derived", "source": source}
+        )
+        stats = {"derive_fallback_frac": 0.037, "derive_sim_past_max_t_max": None}
+        (tmp_path / "data").mkdir()
+        (tmp_path / "data" / MANIFEST_NAME).write_text(
+            json.dumps({"derive_stats": stats})
         )
         run = self._log_and_fetch(
             tmp_tracking, tmp_path, network_type="opn", dataset=dataset
@@ -216,7 +222,12 @@ class TestLogTrainingRunIdentity:
             "integration_grid": str(OnsetGrid().n_points),
             "integration_max_t": "20.0",
         }
-        assert run.data.tags["data_origin"] == "derived"
+        tags = run.data.tags
+        assert tags["data_origin"] == "derived"
+        assert {key: tags[key] for key in stats} == {
+            "derive_fallback_frac": "0.037",
+            "derive_sim_past_max_t_max": "",
+        }
 
     def test_simulated_corpus_has_no_provenance(self, tmp_tracking, tmp_path):
         # DatasetTorch's default data_generator_config is the string "None".
