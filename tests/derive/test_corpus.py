@@ -728,10 +728,12 @@ def test_zero_and_nan_totals_fall_back_instead_of_failing(
         DDM_ONNX, "ddm", network_type, tmp_path, n_files=2, n_theta_per_file=8
     )
     with open(files[0], "rb") as f:
-        labels = pickle.load(f)[f"{network_type}_labels"][:, 0]
+        content = pickle.load(f)
+    labels = content[f"{network_type}_labels"][:, 0]
     rows_per_theta = len(CHOICES) if network_type == "cpn" else 1
     assert np.all(labels[: 2 * rows_per_theta] == 0.5)  # thetas 0 and 1
     assert not np.isnan(labels).any()
+    assert not np.isnan(content[f"{network_type}_data"]).any()  # opn: deadlines
     stats = _manifest(tmp_path)["derive_stats"]
     assert all(np.isfinite(v) for v in stats.values() if v is not None)
 
