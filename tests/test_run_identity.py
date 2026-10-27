@@ -229,6 +229,19 @@ class TestLogTrainingRunIdentity:
             "derive_sim_past_max_t_max": "",
         }
 
+    @pytest.mark.parametrize("no_folder", [False, True], ids=["no-manifest", "none"])
+    def test_derived_corpus_without_manifest(self, tmp_tracking, tmp_path, no_folder):
+        """Pickles copied without their manifest still name the source LAN."""
+        source = _provenance(DDM_ONNX, "opn", OnsetGrid(), None, None)
+        dataset = SimpleNamespace(
+            data_generator_config={"generator_approach": "derived", "source": source}
+        )
+        overrides = {"training_data_folder": None} if no_folder else {}
+        run = self._log_and_fetch(tmp_tracking, tmp_path, dataset=dataset, **overrides)
+        assert run.data.params["source_lan_sha256"] == DDM_SHA256
+        assert run.data.tags["data_origin"] == "derived"
+        assert not any(key.startswith("derive_") for key in run.data.tags)
+
     def test_simulated_corpus_has_no_provenance(self, tmp_tracking, tmp_path):
         # DatasetTorch's default data_generator_config is the string "None".
         dataset = SimpleNamespace(data_generator_config="None")
