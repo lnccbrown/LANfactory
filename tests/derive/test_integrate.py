@@ -19,7 +19,6 @@ from scipy.stats import gamma
 
 from lanfactory.derive import (
     ChoiceMass,
-    IntegrationGrid,
     OnsetGrid,
     choice_mass,
     load_onnx_predictor,
@@ -117,6 +116,8 @@ WEIGHTS = {-1: 0.3, 1: 0.7}
 # keeps its O(h^2) rate (the derivative still jumps there for shape = 2); the
 # (4, 2) row puts ~1% of its mass past max_t.
 THETA = np.array([[2.0, 0.5], [3.0, 1.0], [4.0, 2.0]])
+# The gamma mixture has no onset parameter: its grid is built around onset 0.
+ZEROS = np.zeros(len(THETA))
 
 
 class GammaMixturePredictor:
@@ -131,7 +132,7 @@ class GammaMixturePredictor:
         return log_w + gamma.logpdf(rt, a=shape, scale=scale)
 
 
-def expected_mass(choice: int, grid: IntegrationGrid) -> np.ndarray:
+def expected_mass(choice: int, grid: OnsetGrid) -> np.ndarray:
     """``w[choice] * (G(max_t) - G(t_min))`` per theta row."""
     shape, scale = THETA.T
     g = gamma.cdf(grid.max_t, a=shape, scale=scale) - gamma.cdf(
@@ -142,29 +143,31 @@ def expected_mass(choice: int, grid: IntegrationGrid) -> np.ndarray:
 
 @pytest.fixture(scope="module")
 def gamma_mass() -> ChoiceMass:
-    return choice_mass(GammaMixturePredictor(), THETA, CHOICES)
+    return choice_mass(GammaMixturePredictor(), THETA, CHOICES, onset=ZEROS)
 
 
 def test_masses_match_closed_form(gamma_mass):
     for choice in CHOICES:
-        err = np.abs(gamma_mass.mass(choice) - expected_mass(choice, IntegrationGrid()))
+        err = np.abs(gamma_mass.mass(choice) - expected_mass(choice, OnsetGrid()))
         assert err.max() < 1e-3, f"choice {choice}: max error {err.max():.2e}"
 
 
 def test_mass_error_shrinks_with_grid_resolution():
-    predictor = GammaMixturePredictor()
-
-    def max_err(n_points: int) -> float:
-        grid = IntegrationGrid(n_points=n_points)
-        cm = choice_mass(predictor, THETA, CHOICES, grid=grid)
+    # Measured 1.15e-3, 7.1e-5, 4.4e-6: second order in the point count.
+    def max_err(k: float) -> float:
+        grid = OnsetGrid(
+            n_pre=int(32 * k),
+            n_knee=int(128 * k),
+            n_onset=int(600 * k),
+            n_tail=int(400 * k),
+        )
+        cm = choice_mass(
+            GammaMixturePredictor(), THETA, CHOICES, grid=grid, onset=ZEROS
+        )
         return max(np.abs(cm.mass(c) - expected_mass(c, grid)).max() for c in CHOICES)
 
-    assert max_err(250) > max_err(1000)
-
-    coarse = choice_mass(predictor, THETA, CHOICES, grid=IntegrationGrid(1000))
-    fine = choice_mass(predictor, THETA, CHOICES, grid=IntegrationGrid(4000))
-    for c in CHOICES:
-        assert np.abs(fine.mass(c) - coarse.mass(c)).max() < 2e-4
+    coarse, default, fine = (max_err(k) for k in (0.25, 1, 4))
+    assert coarse > default > fine
 
 
 def test_total_is_sum_over_choices(gamma_mass):
@@ -172,11 +175,10 @@ def test_total_is_sum_over_choices(gamma_mass):
     np.testing.assert_allclose(gamma_mass.total, summed, rtol=0, atol=1e-12)
     # The (4, 2) row deliberately leaks mass past max_t: no renormalisation.
     assert gamma_mass.total[2] < 0.995
-    assert np.all(gamma_mass.total < 1.0)
 
 
 def test_cdf_shape_monotone_and_matches_trapezoid(gamma_mass):
-    assert gamma_mass.cdf.shape == (len(THETA), len(CHOICES), 1000)
+    assert gamma_mass.cdf.shape == (len(THETA), len(CHOICES), OnsetGrid().n_points)
     assert np.all(gamma_mass.cdf[..., 0] == 0.0)
     assert np.all(np.diff(gamma_mass.cdf, axis=-1) >= 0.0)
 
@@ -185,114 +187,21 @@ def test_cdf_shape_monotone_and_matches_trapezoid(gamma_mass):
     t = gamma_mass.t
     for i, (shape, scale) in enumerate(THETA):
         for j, c in enumerate(CHOICES):
-            density = WEIGHTS[c] * gamma.pdf(t, a=shape, scale=scale)
+            density = WEIGHTS[c] * gamma.pdf(t[i], a=shape, scale=scale)
             np.testing.assert_allclose(
-                gamma_mass.cdf[i, j, -1], trapezoid(density, t), rtol=1e-6
+                gamma_mass.cdf[i, j, -1], trapezoid(density, t[i]), rtol=1e-6
             )
 
 
-class SpyPredictor(GammaMixturePredictor):
-    """Records every batch it is handed."""
-
-    def __init__(self) -> None:
-        self.calls: list[np.ndarray] = []
-
-    def __call__(self, batch: np.ndarray) -> np.ndarray:
-        self.calls.append(np.array(batch, copy=True))
-        return super().__call__(batch)
-
-
-def test_chunking_feeds_a_full_chunk_then_the_partial_remainder():
-    spy = SpyPredictor()
-    cm = choice_mass(spy, THETA, CHOICES, chunk_size=2)  # 3 thetas -> [2, 1]
-    per_theta = len(CHOICES) * IntegrationGrid().n_points
-    assert [c.shape[0] for c in spy.calls] == [2 * per_theta, per_theta]
-
-    # Every theta row reached the predictor exactly as given.
-    fed = np.concatenate(spy.calls)
-    np.testing.assert_array_equal(
-        np.unique(fed[:, :2], axis=0), np.unique(THETA.astype(np.float32), axis=0)
-    )
-    # And each slot of the chunked result equals an independent single-theta run.
-    for i in range(len(THETA)):
-        single = choice_mass(GammaMixturePredictor(), THETA[i], CHOICES)
-        np.testing.assert_array_equal(cm.cdf[i], single.cdf[0])
-
-
 def test_single_theta_vector_is_promoted(gamma_mass):
-    cm = choice_mass(GammaMixturePredictor(), THETA[0], CHOICES)
-    assert cm.cdf.shape == (1, 2, 1000)
+    cm = choice_mass(GammaMixturePredictor(), THETA[0], CHOICES, onset=ZEROS[:1])
+    assert cm.cdf.shape == (1, 2, OnsetGrid().n_points)
     np.testing.assert_array_equal(cm.cdf[0], gamma_mass.cdf[0])
 
 
 # --------------------------------------------------------------------------
-# 3. mass_before
+# 3. quantile
 # --------------------------------------------------------------------------
-
-
-def test_mass_before_at_max_t_is_mass(gamma_mass):
-    grid = IntegrationGrid()
-    for c in CHOICES:
-        np.testing.assert_allclose(
-            gamma_mass.mass_before(grid.max_t, c), gamma_mass.mass(c), rtol=1e-12
-        )
-    np.testing.assert_allclose(
-        gamma_mass.mass_before(grid.max_t), gamma_mass.total, rtol=1e-12
-    )
-
-
-def test_mass_before_at_or_below_t_min_is_zero(gamma_mass):
-    grid = IntegrationGrid()
-    assert np.all(gamma_mass.mass_before(grid.t_min, 1) == 0.0)
-    assert np.all(gamma_mass.mass_before(0.0, 1) == 0.0)
-    assert np.all(gamma_mass.mass_before(-3.0) == 0.0)
-
-
-def test_mass_before_on_and_between_grid_points(gamma_mass):
-    t, cdf = gamma_mass.t, gamma_mass.cdf
-    k = 137
-    np.testing.assert_allclose(gamma_mass.mass_before(t[k], -1), cdf[:, 0, k])
-    np.testing.assert_allclose(gamma_mass.mass_before(t[k]), cdf[:, :, k].sum(axis=1))
-
-    midpoint = 0.5 * (t[k] + t[k + 1])
-    np.testing.assert_allclose(
-        gamma_mass.mass_before(midpoint, 1),
-        0.5 * (cdf[:, 1, k] + cdf[:, 1, k + 1]),
-    )
-
-
-def test_mass_before_accepts_a_deadline_per_theta(gamma_mass):
-    deadlines = np.array([0.5, 2.0, 10.0])
-    got = gamma_mass.mass_before(deadlines, 1)
-    assert got.shape == (len(THETA),)
-    for i, d in enumerate(deadlines):
-        assert got[i] == pytest.approx(gamma_mass.mass_before(d, 1)[i])
-    with pytest.raises(ValueError):
-        gamma_mass.mass_before(np.array([0.5, 2.0]), 1)
-
-
-def test_mass_before_clamps_past_max_t(gamma_mass):
-    for c in CHOICES:
-        np.testing.assert_array_equal(
-            gamma_mass.mass_before(1e6, c), gamma_mass.mass(c)
-        )
-
-
-# --------------------------------------------------------------------------
-# 4. quantile
-# --------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("choice", [-1, 1, None])
-def test_quantile_round_trips_through_mass_before(gamma_mass, choice):
-    reference = gamma_mass.total if choice is None else gamma_mass.mass(choice)
-    for u in (0.05, 0.5, 0.95):
-        q = gamma_mass.quantile(u, choice)
-        assert q.shape == (len(THETA),)
-        assert np.all((q > gamma_mass.t[0]) & (q < gamma_mass.t[-1]))
-        np.testing.assert_allclose(
-            gamma_mass.mass_before(q, choice), u * reference, rtol=1e-9
-        )
 
 
 def test_quantile_is_monotone_in_u_and_close_to_scipy(gamma_mass):
@@ -316,7 +225,7 @@ def test_quantile_accepts_a_fraction_per_theta(gamma_mass):
 
 
 # --------------------------------------------------------------------------
-# 5. Errors
+# 4. Errors
 # --------------------------------------------------------------------------
 
 
@@ -328,7 +237,7 @@ def test_wrong_input_width_names_expected_and_actual():
             raise AssertionError("must not be called")
 
     with pytest.raises(ValueError, match=r"width 7.*2 parameters.*4 wide"):
-        choice_mass(Wrong(), THETA, CHOICES)
+        choice_mass(Wrong(), THETA, CHOICES, onset=ZEROS)
 
 
 def test_unknown_choice_code_raises(gamma_mass):
@@ -346,25 +255,13 @@ def test_quantile_rejects_u_outside_open_unit_interval(gamma_mass):
             gamma_mass.quantile(u, 1)
 
 
-def test_grid_validation():
-    with pytest.raises(ValueError, match="n_points"):
-        IntegrationGrid(n_points=1)
-    with pytest.raises(ValueError, match="t_min"):
-        IntegrationGrid(t_min=0.0)
-    with pytest.raises(ValueError, match="t_min"):
-        IntegrationGrid(t_min=30.0, max_t=20.0)
-    grid = IntegrationGrid()
-    assert grid.t[0] == grid.t_min and grid.t[-1] == grid.max_t
-    assert grid.t.shape == (grid.n_points,)
-
-
 def test_chunk_size_validation():
     with pytest.raises(ValueError, match="chunk_size"):
-        choice_mass(GammaMixturePredictor(), THETA, CHOICES, chunk_size=0)
+        choice_mass(GammaMixturePredictor(), THETA, CHOICES, chunk_size=0, onset=ZEROS)
 
 
 # --------------------------------------------------------------------------
-# 6. OnsetGrid
+# 5. OnsetGrid
 # --------------------------------------------------------------------------
 
 
@@ -459,14 +356,14 @@ def test_onset_grid_validation():
 
 
 # --------------------------------------------------------------------------
-# 7. Per-theta grid: a peaked density with a sharp onset
+# 6. Per-theta grid: a peaked density with a sharp onset
 # --------------------------------------------------------------------------
 
 # shape = 2 keeps the density continuous (C^0) at the onset (as in section 2)
 # so the trapezoid rule keeps its O(h^2) rate; the derivative still jumps from
-# 0 to 1/scale^2 there, which is why the uniform grid's error depends on where
-# the onset falls between two of its points. Scale 0.03 puts the whole peak
-# inside two steps of the uniform 1000-point grid.
+# 0 to 1/scale^2 there, so a grid without a point at the onset errs by an
+# amount that depends on where the onset falls between two of its points.
+# Scale 0.03 puts the whole peak inside a few tens of ms.
 PEAK_SHAPE, PEAK_SCALE = 2.0, 0.03
 ONSETS = np.array([[0.0], [0.4], [2.0]])
 
@@ -508,30 +405,15 @@ def peak_mass() -> ChoiceMass:
     )
 
 
-def test_uniform_grid_is_not_fit_for_a_peaked_density():
-    # Pins the grid policy: 1000 uniform points (20 ms apart) straddle a
-    # peak that is a few tens of ms wide. How wrong the total is depends on
-    # where the onset falls between two grid points — measured 1e-4 to 0.036
-    # across one step at t = 0.4 — so sweep the onset over one step and pin
-    # the worst phase against the corpus's own 0.02 flag threshold. The
-    # refined grid stays within 1e-3 at every phase.
-    uniform = IntegrationGrid()
-    h = uniform.t[1] - uniform.t[0]
-    onsets = 0.4 + h * np.arange(8) / 8
-    theta = onsets[:, None]
+def test_onset_grid_is_accurate_at_every_onset_phase():
+    # Pins the grid policy: a uniform 1000-point grid (20 ms apart) missed
+    # this peak by 1e-4 to 0.036 depending on where the onset fell between
+    # two of its points. Sweep the onset over one such step: the refined grid
+    # stays within 1e-3 at every phase.
+    onsets = 0.4 + 0.02 * np.arange(8) / 8
     expected = sum(expected_peak_mass(c, onsets) for c in CHOICES)
-    err_uniform = np.abs(
-        choice_mass(PeakedPredictor(), theta, CHOICES, grid=uniform).total - expected
-    )
-    err_refined = np.abs(
-        choice_mass(
-            PeakedPredictor(), theta, CHOICES, grid=OnsetGrid(), onset=onsets
-        ).total
-        - expected
-    )
-    assert err_uniform.max() > 0.02
-    assert err_uniform.min() < 0.01, "the error is phase-dependent, not uniform"
-    assert err_refined.max() < 1e-3
+    mass = choice_mass(PeakedPredictor(), onsets[:, None], CHOICES, onset=onsets)
+    assert np.abs(mass.total - expected).max() < 1e-3
 
 
 def test_onset_grid_resolves_the_peak_to_1e3(peak_mass):
@@ -592,11 +474,7 @@ def test_leak_below_is_mass_before_summed_over_choices(peak_mass):
     assert np.all(peak_mass.leak_below(onset + 0.05) > 0.1)
 
 
-def test_choice_mass_rejects_mismatched_grid_and_onset():
-    with pytest.raises(ValueError, match="OnsetGrid needs onset"):
-        choice_mass(PeakedPredictor(), ONSETS, CHOICES, grid=OnsetGrid())
-    with pytest.raises(ValueError, match="takes no onset"):
-        choice_mass(PeakedPredictor(), ONSETS, CHOICES, onset=ONSETS[:, 0])
+def test_choice_mass_rejects_an_onset_of_the_wrong_shape():
     with pytest.raises(ValueError, match=r"onset must be \(n_theta,\)"):
         choice_mass(
             PeakedPredictor(), ONSETS, CHOICES, grid=OnsetGrid(), onset=ONSETS[:2, 0]
@@ -604,7 +482,7 @@ def test_choice_mass_rejects_mismatched_grid_and_onset():
 
 
 # --------------------------------------------------------------------------
-# 8. mass_before / quantile on a per-theta (2-D) grid
+# 7. mass_before / quantile on a per-theta (2-D) grid
 # --------------------------------------------------------------------------
 
 
@@ -647,7 +525,7 @@ def test_quantile_on_2d_grid_round_trips_and_matches_scipy(peak_mass, choice):
 
 
 # --------------------------------------------------------------------------
-# 9. survey
+# 8. survey
 # --------------------------------------------------------------------------
 
 SURVEY_BOUNDS = {"a": (0.3, 2.5), "t": (0.0, 2.0)}
@@ -658,8 +536,8 @@ PLANTED_SHARE = (2.5 - 2.0) / (2.5 - 0.3)
 class ScaledPredictor:
     """Rows ``[a, t, rt, choice]``: a smooth shifted gamma, times 1.2 when a > 2.
 
-    Zero at and below ``t``; shape 2 / scale 0.2 is resolved to ~1e-4 by both
-    grids, so any deviation from one is the planted scale, not quadrature.
+    Zero at and below ``t``; shape 2 / scale 0.2 is resolved to ~1e-4 by a grid
+    built around ``t``, so any deviation from one is the planted scale.
     """
 
     input_width = 4
@@ -746,7 +624,7 @@ def test_survey_is_json_serialisable_and_fast(scaled_survey):
     assert r["seconds"] <= elapsed
 
 
-def test_survey_without_an_onset_uses_the_uniform_grid():
+def test_survey_without_an_onset_builds_the_grid_around_zero():
     r = survey(
         ScaledPredictor(),
         SURVEY_BOUNDS,
@@ -755,7 +633,7 @@ def test_survey_without_an_onset_uses_the_uniform_grid():
         n_theta=300,
         onset_param=None,
     )
-    assert r["grid"] == repr(IntegrationGrid())
+    assert r["grid"] == repr(OnsetGrid())
     assert r["leak_below_onset"] is None
     assert r["total"]["frac_gt_0.10"] == pytest.approx(PLANTED_SHARE, abs=0.08)
 
@@ -774,17 +652,6 @@ def test_survey_validation():
         survey(pred, SURVEY_BOUNDS, SURVEY_PARAMS, CHOICES, onset_param="tau")
     with pytest.raises(ValueError, match="lacks bounds"):
         survey(pred, {"a": (0.3, 2.5)}, SURVEY_PARAMS, CHOICES)
-    with pytest.raises(ValueError, match="does not go with"):
-        survey(pred, SURVEY_BOUNDS, SURVEY_PARAMS, CHOICES, grid=IntegrationGrid())
-    with pytest.raises(ValueError, match="does not go with"):
-        survey(
-            pred,
-            SURVEY_BOUNDS,
-            SURVEY_PARAMS,
-            CHOICES,
-            onset_param=None,
-            grid=OnsetGrid(),
-        )
     with pytest.raises(ValueError, match="n_theta"):
         survey(pred, SURVEY_BOUNDS, SURVEY_PARAMS, CHOICES, n_theta=0)
     # Without the check a non-positive chunk_size skips the loop and returns

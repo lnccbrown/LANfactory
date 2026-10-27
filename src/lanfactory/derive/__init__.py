@@ -2,7 +2,6 @@
 
 from .integrate import (
     ChoiceMass,
-    IntegrationGrid,
     OnnxPredictor,
     OnsetGrid,
     Predictor,
@@ -13,7 +12,6 @@ from .integrate import (
 
 __all__ = [
     "ChoiceMass",
-    "IntegrationGrid",
     "OnnxPredictor",
     "OnsetGrid",
     "Predictor",

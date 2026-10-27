@@ -10,7 +10,7 @@ The density is integrated with the trapezoid rule over the full support
 `[t_min, max_t]` (`max_t` = 20 s, the LANs' training support; nothing is
 extrapolated past it). A LAN's density is not smooth: it rises from zero
 within a few milliseconds of the non-decision time `t`. On the Hub ddm LAN a
-uniform 1000-point `IntegrationGrid` carries 15–25 % quadrature error at
+uniform 1000-point grid carries 15–25 % quadrature error at
 `a < 0.5` (totals down to 0.66 that are pure grid artefacts), so the grid of
 record is the per-parameter-vector `OnsetGrid`: 32 points on
 `[t_min, t − 0.05]`, 128 on `[t − 0.05, t]`, 600 on `[t, t + 1]` and 400 on
@@ -37,8 +37,6 @@ whole training box.
 ::: lanfactory.derive.OnnxPredictor
 
 ::: lanfactory.derive.Predictor
-
-::: lanfactory.derive.IntegrationGrid
 
 ::: lanfactory.derive.OnsetGrid
 
