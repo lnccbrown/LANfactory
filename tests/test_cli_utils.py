@@ -1,10 +1,10 @@
 """Tests for CLI utilities."""
 
-from unittest.mock import patch, mock_open
+from unittest.mock import mock_open, patch
 
 import pytest
 
-from lanfactory.cli.utils import _make_train_network_configs, _get_train_network_config
+from lanfactory.cli.utils import _get_train_network_config, _make_train_network_configs
 
 
 def test_make_train_network_configs_with_dict_args():

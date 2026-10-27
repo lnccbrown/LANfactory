@@ -1,17 +1,18 @@
 import logging
 import multiprocessing
-import os
 import random
 import time
 import uuid
 from copy import deepcopy
+from pathlib import Path
 
 import jax
-import lanfactory
 import numpy as np
 import pytest
 import ssms
 import torch
+
+import lanfactory
 
 from .constants import (
     TEST_GENERATOR_CONSTANTS,
@@ -69,6 +70,60 @@ def random_seed():
 
 
 @pytest.fixture
+def data_folder(tmp_path):
+    """Fixture providing a temporary folder for generated training data."""
+    folder = tmp_path / "data"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
+
+
+@pytest.fixture
+def model_folder(tmp_path):
+    """Fixture providing a temporary folder for trained model artifacts."""
+    folder = tmp_path / "models"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
+
+
+@pytest.fixture
+def dummy_training_data_files():
+    """Fixture providing a factory to generate dummy training data files."""
+
+    def _generate(generator_config, model_config, save=True):
+        """Generate dummy training data files and return their paths.
+
+        Args:
+            generator_config: Data generator configuration. Its
+                ``output.folder`` entry determines where files are written.
+            model_config: Model configuration passed to the data generator.
+            save: Whether to persist the generated data to disk.
+
+        Returns:
+            List of string paths to the generated training data files.
+        """
+        output_folder = Path(generator_config["output"]["folder"])
+        output_folder.mkdir(parents=True, exist_ok=True)
+        for i in range(TEST_GENERATOR_CONSTANTS.N_DATA_FILES):
+            logger.info(
+                "Generating training data for file %d of %d",
+                i + 1,
+                TEST_GENERATOR_CONSTANTS.N_DATA_FILES,
+            )
+            my_dataset_generator = (
+                ssms.dataset_generators.lan_mlp.TrainingDataGenerator(
+                    config=generator_config, model_config=model_config
+                )
+            )
+            my_dataset_generator.generate_data_training(save=save)
+
+        return sorted(
+            str(file_) for file_ in output_folder.iterdir() if file_.is_file()
+        )
+
+    return _generate
+
+
+@pytest.fixture
 def sample_data_small():
     """Fixture providing a small synthetic dataset for testing."""
     np.random.seed(42)
@@ -95,10 +150,16 @@ def test_run_seed():
     return int(time.time())
 
 
+# The default parameter sampler draws each drift rate independently, so models
+# whose simulator requires the drift rates to sum to 1 can never generate
+# training data. Keep them out of the random pool.
+UNSAMPLEABLE_MODELS = {"lba_3_vs_constraint", "lba_angle_3_vs_constraint"}
+
+
 @pytest.fixture
 def available_models():
     """Fixture providing a list of available models."""
-    return list(ssms.config.model_config.keys())
+    return [m for m in ssms.config.model_config if m not in UNSAMPLEABLE_MODELS]
 
 
 @pytest.fixture
@@ -133,10 +194,10 @@ def model_selector(request, available_models, test_run_seed):
 
 
 @pytest.fixture
-def dummy_generator_config(model_selector):
+def dummy_generator_config(model_selector, tmp_path):
     """Fixture providing a dummy model config for testing."""
 
-    def _dummy_generator_config(mode="random"):
+    def _dummy_generator_config(mode="random", output_folder=None):
         simulator_param_mapping = True
         while simulator_param_mapping:
             generator_config = ssms.config.get_default_generator_config("lan")
@@ -148,9 +209,11 @@ def dummy_generator_config(model_selector):
             generator_config["simulator"]["n_samples"] = (
                 TEST_GENERATOR_CONSTANTS.N_SAMPLES
             )
-            generator_config["output"]["folder"] = os.path.join(
-                TEST_GENERATOR_CONSTANTS.OUT_FOLDER, str(uuid.uuid4())
-            )
+
+            if output_folder is None:
+                output_folder = str(tmp_path / "training_data" / str(uuid.uuid4()))
+
+            generator_config["output"]["folder"] = output_folder
             generator_config["training"]["n_samples_per_param"] = (
                 TEST_GENERATOR_CONSTANTS.N_SAMPLES_BY_PARAMETER_SET
             )
@@ -169,10 +232,10 @@ def dummy_generator_config(model_selector):
 
 
 @pytest.fixture
-def dummy_generator_config_simple_two_choices(model_selector):
+def dummy_generator_config_simple_two_choices(model_selector, tmp_path):
     """Fixture providing a dummy model config for testing."""
 
-    def _dummy_generator_config_simple_two_choices(mode="random"):
+    def _dummy_generator_config_simple_two_choices(mode="random", output_folder=None):
         two_choices = False
         simulator_param_mapping = True
         while (not two_choices) or (simulator_param_mapping):
@@ -185,19 +248,19 @@ def dummy_generator_config_simple_two_choices(model_selector):
             generator_config["simulator"]["n_samples"] = (
                 TEST_GENERATOR_CONSTANTS.N_SAMPLES
             )
-            generator_config["output"]["folder"] = os.path.join(
-                TEST_GENERATOR_CONSTANTS.OUT_FOLDER, str(uuid.uuid4())
-            )
+
+            if output_folder is None:
+                output_folder = str(tmp_path / "training_data" / str(uuid.uuid4()))
+
+            generator_config["output"]["folder"] = output_folder
             generator_config["training"]["n_samples_per_param"] = (
                 TEST_GENERATOR_CONSTANTS.N_SAMPLES_BY_PARAMETER_SET
             )
             model_config = deepcopy(ssms.config.model_config[generator_config["model"]])
-            if model_config["nchoices"] == 2:
-                two_choices = True
-            if "simulator_param_mappings" in model_config:
-                simulator_param_mapping = True
-            else:
-                simulator_param_mapping = False
+            # Re-evaluate both conditions for every candidate: a flag left over
+            # from an earlier draw used to let a non-two-choice model through.
+            two_choices = model_config["nchoices"] == 2
+            simulator_param_mapping = "simulator_param_mappings" in model_config
 
         logger.info(f"Generator config from dummy_generator_config: {generator_config}")
         logger.info(f"Model config from dummy_generator_config: {model_config}")

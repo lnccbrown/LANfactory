@@ -124,9 +124,10 @@ def _download_model_hf(  # pragma: no cover
     model_files = [f for f in all_files if f.startswith(path_prefix)]
 
     if not model_files:
+        available_paths = {f.split("/")[0] for f in all_files if "/" in f}
         raise FileNotFoundError(
             f"No files found at {repo_id}/{path_prefix}. "
-            f"Available paths: {set(f.split('/')[0] for f in all_files if '/' in f)}"
+            f"Available paths: {available_paths}"
         )
 
     if include_patterns:

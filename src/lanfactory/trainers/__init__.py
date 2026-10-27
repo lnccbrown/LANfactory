@@ -1,18 +1,18 @@
 import warnings
 
+from .jax_mlp import JaxMLP, JaxMLPFactory, ModelTrainerJaxMLP
 from .torch_mlp import (
     DatasetTorch,
-    TorchMLP,
-    TorchMLPFactory,
-    ModelTrainerTorchMLP,
     LoadTorchMLP,
     LoadTorchMLPInfer,
+    ModelTrainerTorchMLP,
+    TorchMLP,
+    TorchMLPFactory,
     make_dataloader,
     make_train_valid_dataloaders,
 )
-from .jax_mlp import JaxMLPFactory, JaxMLP, ModelTrainerJaxMLP
 
-__all__ = [
+__all__ = [  # noqa: RUF022 - grouped by backend, not alphabetically
     # Dataset and DataLoader helpers
     "DatasetTorch",
     "make_dataloader",
