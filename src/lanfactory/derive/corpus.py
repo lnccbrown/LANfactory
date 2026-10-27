@@ -112,8 +112,9 @@ def sample_deadlines(
     ``bounds`` (ssms' deadline box, so the corpus covers it); the rest are the
     LAN's own reaction-time quantiles under each theta —
     :meth:`ChoiceMass.quantile` at ``u ~ U(0.05, 0.95)`` — so the deadlines
-    concentrate where the omission probability is informative. Everything is
-    clipped to ``bounds``.
+    concentrate where the omission probability is informative. A theta whose
+    LAN has no mass to invert (zero or NaN total) draws from the uniform share.
+    Everything is clipped to ``bounds``.
 
     Parameters
     ----------
@@ -138,6 +139,7 @@ def sample_deadlines(
     from_quantile = rng.random(n_theta) < deadline_quantile_frac
     uniform = rng.uniform(lower, upper, size=n_theta)
     quantile = mass.quantile(rng.uniform(0.05, 0.95, size=n_theta))
+    from_quantile &= ~np.isnan(quantile)
     return np.clip(np.where(from_quantile, quantile, uniform), lower, upper)
 
 
