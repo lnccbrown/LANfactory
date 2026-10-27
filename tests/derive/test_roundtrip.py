@@ -24,7 +24,7 @@ from torch.utils.data import DataLoader
 from lanfactory.cli.torch_train import main as torchtrain
 from lanfactory.derive import MANIFEST_NAME, derive_aux_corpus
 from lanfactory.onnx.contract import assert_single_trial_contract
-from tests.derive.conftest import DDM_ONNX
+from tests._onnx_utils import DDM_ONNX
 
 mlflow = pytest.importorskip("mlflow")
 

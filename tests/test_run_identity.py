@@ -23,7 +23,7 @@ import lanfactory
 from lanfactory.cli.utils import log_training_run_identity
 from lanfactory.derive import MANIFEST_NAME, OnsetGrid
 from lanfactory.derive.corpus import _provenance
-from tests.derive.conftest import DDM_ONNX, DDM_SHA256
+from tests._onnx_utils import DDM_ONNX, DDM_SHA256
 
 mlflow = pytest.importorskip("mlflow")
 

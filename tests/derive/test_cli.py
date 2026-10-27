@@ -10,7 +10,7 @@ from typer.testing import CliRunner
 
 from lanfactory.cli.derive_aux import app
 from lanfactory.derive import MANIFEST_NAME, derive_aux_corpus
-from tests.derive.conftest import DDM_ONNX, DDM_SHA256, HUB_COMMIT
+from tests._onnx_utils import DDM_ONNX, DDM_SHA256, HUB_COMMIT
 
 _ANSI_RE = re.compile(r"\x1b\[[\d;]*m")
 RUN_UUID = "56d99936415e11f0a2bf3cecefb6d5ee"
