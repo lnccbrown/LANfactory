@@ -20,7 +20,7 @@ total mass has median `|total − 1|` 0.0037, p99 0.080, min 0.877 / max 1.219,
 with 1.9 % of the box beyond 0.05. Integrating from `t` only was tested and
 rejected (mean error against simulation 0.0083 vs 0.0042): the LAN leaks
 mass below `t` (mean 0.0035, p99 0.052) and that leak is part of what it
-predicts, so `ChoiceMass.leak_below` reports it rather than dropping it.
+predicts, so `survey` reports it (`leak_below_onset`) rather than dropping it.
 
 ## Tail policy
 

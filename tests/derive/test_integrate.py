@@ -463,17 +463,6 @@ def test_onset_grid_chunks_agree_with_single_theta_runs(peak_mass):
         np.testing.assert_array_equal(peak_mass.cdf[i], single.cdf[0])
 
 
-def test_leak_below_is_mass_before_summed_over_choices(peak_mass):
-    onset = ONSETS[:, 0]
-    np.testing.assert_array_equal(
-        peak_mass.leak_below(onset), peak_mass.mass_before(onset)
-    )
-    # The synthetic density is exactly zero at and below the onset.
-    np.testing.assert_array_equal(peak_mass.leak_below(onset), 0.0)
-    # A deadline past the onset does see mass: the definition is not a no-op.
-    assert np.all(peak_mass.leak_below(onset + 0.05) > 0.1)
-
-
 def test_choice_mass_rejects_an_onset_of_the_wrong_shape():
     with pytest.raises(ValueError, match=r"onset must be \(n_theta,\)"):
         choice_mass(
@@ -501,6 +490,11 @@ def test_mass_before_on_2d_grid_hits_grid_points_and_clamps(peak_mass):
     for i, d in enumerate(deadlines):
         assert got[i] == pytest.approx(peak_mass.mass_before(d, 1)[i])
     assert got[0] < got[1] < got[2]
+    # The synthetic density is exactly zero at and below the onset; a deadline
+    # past the onset does see mass (what survey's leak_below_onset relies on).
+    onset = ONSETS[:, 0]
+    np.testing.assert_array_equal(peak_mass.mass_before(onset), 0.0)
+    assert np.all(peak_mass.mass_before(onset + 0.05) > 0.1)
     # Clamping at both ends.
     for c in CHOICES:
         np.testing.assert_array_equal(peak_mass.mass_before(1e6, c), peak_mass.mass(c))

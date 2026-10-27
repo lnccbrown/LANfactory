@@ -440,26 +440,6 @@ class ChoiceMass:
         w = (d - t_lo) / (t_hi - t_lo)
         return curve[rows, lo] * (1.0 - w) + curve[rows, hi] * w
 
-    def leak_below(self, onset: ArrayLike) -> NDArray[np.float64]:
-        """Mass on ``[t_min, onset]`` summed over choices, per parameter vector.
-
-        Under the simulated model no response precedes the non-decision
-        time; a LAN nevertheless puts some density there, and the corpus and
-        :func:`survey` report that leak through this one definition, which
-        is :meth:`mass_before` with ``choice=None``.
-
-        Parameters
-        ----------
-        onset
-            Scalar or ``(n_theta,)`` onset times in seconds.
-
-        Returns
-        -------
-        NDArray[np.float64]
-            ``(n_theta,)``.
-        """
-        return self.mass_before(onset)
-
     def quantile(
         self, u: ArrayLike, choice: float | None = None
     ) -> NDArray[np.float64]:
@@ -689,8 +669,8 @@ def survey(
         ``total`` (mean/min/max of the total and quantiles and exceedance
         fractions of ``|total - 1|``), ``shrunk_box`` (the same over the
         interior of the box plus ``frac_of_theta``), ``leak_below_onset``
-        (``mean``/``p99``/``max`` of :meth:`ChoiceMass.leak_below`, or
-        ``None``) and ``by_param`` (``{name: [10 bins of lo/hi/mean_dev/
+        (``mean``/``p99``/``max`` of :meth:`ChoiceMass.mass_before` at the
+        onset, or ``None``) and ``by_param`` (``{name: [10 bins of lo/hi/mean_dev/
         max_abs_dev/n]}``; empty bins carry ``None``).
 
     Raises
@@ -736,7 +716,7 @@ def survey(
         )
         total[start:stop] = mass.total
         if leak is not None:
-            leak[start:stop] = mass.leak_below(onset)
+            leak[start:stop] = mass.mass_before(onset)
     seconds = time.perf_counter() - started
 
     dev = total - 1.0
