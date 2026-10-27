@@ -211,8 +211,7 @@ truth.
 = 4096`, `seed = 0` and the defaults (laptop, single-threaded ssms). Which
 thetas fall back depends only on the sampled thetas and the grid, so the
 fraction is the same for every network type — 3.86 % of the 8192 thetas
-(3.71 % in file 0, 4.00 % in file 1) — and reproduces across processes (the
-parameters are drawn in the model's order, not ssms' hash-dependent one).
+(3.71 % in file 0, 4.00 % in file 1) — and reproduces across processes.
 The types differ only in what the fallback costs to simulate:
 
 | type | seconds per file | share of file time in simulation | 100 files (extrapolated) |

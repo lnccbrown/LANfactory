@@ -103,34 +103,6 @@ _RUN_UUID = re.compile(r"^[0-9a-f]{32}$")
 # --------------------------------------------------------------------------
 
 
-class _OrderedUniformSampler(UniformParameterSampler):
-    """ssms' uniform sampler drawing the parameters in ``param_space`` order.
-
-    ssms orders the draws by a topological sort over ``set`` objects, so the
-    column that consumes each slice of the generator's stream — and with it
-    every sampled theta — changes with ``PYTHONHASHSEED`` from one process to
-    the next. Insertion order of ``param_space`` (the model's parameter
-    order) is a valid topological order once each parameter is placed after
-    the parameters its bounds name, and it is the same in every process.
-    """
-
-    def _topological_sort(self) -> list[str]:
-        order: list[str] = []
-        pending = list(self.param_space)
-        while pending:
-            for name in pending:
-                needs = {b for b in self.param_space[name] if isinstance(b, str)}
-                if needs.issubset(order):
-                    order.append(name)
-                    pending.remove(name)
-                    break
-            else:
-                raise ValueError(
-                    f"circular parameter dependency among {pending} in param_space"
-                )
-        return order
-
-
 def sample_theta(
     model_config: dict, n: int, rng: np.random.Generator
 ) -> NDArray[np.float32]:
@@ -139,10 +111,9 @@ def sample_theta(
     Uses ssms' ``UniformParameterSampler`` on ``model_config["param_bounds_dict"]``
     with the model's sampling transforms (``ModelConfigBuilder
     .get_sampling_transforms``), which is what ssms' simulation pipeline
-    builds — except that the parameters are drawn in ``model_config["params"]``
-    order rather than ssms' hash-dependent order, so the same ``rng`` state
-    gives the same thetas in every process (ssms' own order varies with
-    ``PYTHONHASHSEED``). Columns follow ``model_config["params"]``.
+    builds. The bounds are declared in ``model_config["params"]`` order, which
+    ssms draws in, so the same ``rng`` state gives the same thetas in every
+    process. Columns follow ``model_config["params"]``.
 
     Parameters
     ----------
@@ -162,7 +133,7 @@ def sample_theta(
     params = list(model_config["params"])
     param_space = {name: bounds[name] for name in params if name in bounds}
     param_space.update({name: b for name, b in bounds.items() if name not in params})
-    sampler = _OrderedUniformSampler(
+    sampler = UniformParameterSampler(
         param_space=param_space,
         constraints=ModelConfigBuilder.get_sampling_transforms(model_config),
     )
