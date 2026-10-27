@@ -42,8 +42,7 @@ from lanfactory.derive.corpus import (
     simulate_labels,
 )
 from lanfactory.trainers.torch_mlp import DatasetTorch
-from tests._onnx_utils import export_tiny_torch_lan
-from tests.derive.conftest import DDM_ONNX, DDM_SHA256
+from tests._onnx_utils import DDM_ONNX, DDM_SHA256, export_tiny_torch_lan
 
 DEADLINE_BOUNDS = [0.001, 10.0]  # ssms' DEADLINE_PARAM_CONFIG, as the manifest lists it
 
