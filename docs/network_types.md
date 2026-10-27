@@ -103,7 +103,7 @@ data again contributes one row per parameter set.
 
 ## Deriving auxiliary networks from a trained LAN
 
-A CPN, OPN, or go/no-go network learns a quantity that is already implied by
+A CPN or OPN learns a quantity that is already implied by
 the LAN of the same model: the choice probability is the LAN's density
 integrated over reaction time for one choice, and the omission probability
 under a deadline is one minus the density integrated up to that deadline.
@@ -136,7 +136,6 @@ labels are probabilities in `[0, 1]` for the `bcelogit` loss.
 | --- | --- | --- |
 | `cpn` | `[theta..., choice]`, one row per choice code | `P(choice | theta)` |
 | `opn` | `[theta..., deadline]`, deadline last | `P(no response before deadline | theta)` |
-| `gonogo` | `[theta..., deadline]` | `P(nogo or omission | theta)`; nogo = every choice but the largest code, as in ssms' `nogo_p` |
 
 A derived CPN corpus carries the choice as an *input* (one row per choice
 code), so no choice category is assumed and the network is `n_params + 1`
@@ -144,17 +143,15 @@ wide (`[1, 5]` for `ddm`). This differs from a simulated ssms CPN corpus,
 whose rows are `[theta...]` alone with a single `P(choice = 1)` label
 (`n_params` wide, `[1, 4]` for `ddm`, the layout of the CPN section above):
 the two CPN artifacts are not interchangeable, and a consumer must know which
-one it is loading. The `opn` and `gonogo` rows match ssms' simulated layout.
+one it is loading. The `opn` rows match ssms' simulated layout.
 
-For `opn` and `gonogo`, deadlines are sampled per parameter vector: a
+For `opn`, deadlines are sampled per parameter vector: a
 `--deadline-quantile-frac` share (default 0.7) from the LAN's own
 reaction-time quantiles under that theta, so the training deadlines sit where
 the omission probability is informative, and the rest uniform on ssms'
 deadline bounds `(0.001, 10)` so the corpus still covers the box. Every label
 is the LAN's mass as a fraction of the LAN's own total (see *Renormalisation*
-below); the float32 clip to `[0, 1]` is a safety net, and the omission term is
-formed once, before it enters either label, so `gonogo == nogo_before /
-total + opn` holds row by row in the written corpus.
+below); the float32 clip to `[0, 1]` is a safety net.
 
 **Deriving and training.**
 
@@ -167,9 +164,8 @@ torchtrain --config-path cpn.yaml --training-data-folder data/cpn/ddm \
 
 `cpn.yaml` is the CPN config from above with `NETWORK_TYPE: "cpn"` and a batch
 size that divides the rows per file: with the default `--n-theta-per-file
-4096` a file holds 4096 rows for `opn` / `gonogo` and `4096 × n_choices` for
-`cpn` (8192 for a two-choice model), so `CPU_BATCH_SIZE: 512` works for all
-three. The Python entry point is `lanfactory.derive.derive_aux_corpus`; see the
+4096` a file holds 4096 rows for `opn` and `4096 × n_choices` for `cpn`
+(8192 for a two-choice model), so `CPU_BATCH_SIZE: 512` works for both. The Python entry point is `lanfactory.derive.derive_aux_corpus`; see the
 [API reference](api/derive.md#derived-corpora) for the pickle contract and the
 provenance keys.
 
@@ -194,9 +190,8 @@ vector whose total lies outside `--fallback-window` (default the open
 interval `0.98 1.03`, which flags 3.7 % of the ddm box) is therefore labelled
 by **ssms simulation** instead of the LAN (`--fallback-n-sim` trials, default
 20 000): the CPN label is the choice frequency conditional on responding
-within `max_t` — what the renormalised LAN label estimates — and the OPN /
-go-no-go labels come from the `{model}_deadline` simulator with the row's
-deadline. With the fallback on, the unflagged residual against simulation is
+within `max_t` — what the renormalised LAN label estimates — and the OPN
+label comes from the `{model}_deadline` simulator with the row's deadline. With the fallback on, the unflagged residual against simulation is
 ≤ 0.023 (CPN) / ≤ 0.033 (OPN). `--no-fallback` labels everything from the
 LAN. Every file and the manifest record the share that fell back
 (`derive_fallback_frac`) and the simulation's own blind spot,
@@ -222,7 +217,7 @@ The types differ only in what the fallback costs to simulate:
 The one-off survey of the LAN (20 000 θ) adds about 5 s per corpus.
 Integrating a file takes about a second; the rest is the fallback, whose
 thetas are the slow ones to simulate (large `a`, small `|v|`: long reaction
-times). `opn` / `gonogo` simulate each fallback theta twice — the base model
+times). `opn` simulates each fallback theta twice — the base model
 for `derive_sim_past_max_t_max` and the deadline model for the label — but
 the deadline run stops at the deadline and is cheap.
 

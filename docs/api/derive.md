@@ -37,7 +37,6 @@ Every row is `n_params + 1` wide, in ssms parameter order:
 | --- | --- | --- |
 | `cpn` | `[theta..., choice]` — one row per choice code in `model_config["choices"]` | `mass(choice) / total` |
 | `opn` | `[theta..., deadline]` (deadline last) | `1 − F(deadline) / total`, `F(d)` = `mass_before(d)` summed over choices |
-| `gonogo` | `[theta..., deadline]` | `nogo_before(deadline) / total + (1 − F(deadline) / total)`, `nogo` = every choice but the largest code (ssms' `nogo_p`) |
 
 Labels are renormalised by the network's own total (`ChoiceMass.total`, the
 mass on `[t_min, max_t]` summed over choices); the total is recorded, never
@@ -46,15 +45,14 @@ carry its mean / min / max. The LAN's error against simulation is mostly
 scale, so the division removes most of it (Hub ddm LAN: cpn mean error 0.035
 → 0.004, max 0.17 → 0.033); what remains sits where the total is off, which
 is what the simulation fallback of `derive_aux_corpus` covers. The float32
-clip to `[0, 1]` is kept as a safety net, and the omission term is formed
-once so `gonogo == nogo_before / total + opn` holds row by row.
+clip to `[0, 1]` is kept as a safety net.
 A derived `cpn` corpus is one column wider than ssms' simulated CPN corpus
 (`[theta...]` with a single `P(choice = 1)` label); see the
 [network types](../network_types.md#deriving-auxiliary-networks-from-a-trained-lan)
 page.
 
 **Batch size.** `DatasetTorch` requires the batch size to divide the rows
-per file: `n_theta_per_file` rows for `opn` / `gonogo`, `n_theta_per_file
+per file: `n_theta_per_file` rows for `opn`, `n_theta_per_file
 × n_choices` for `cpn`. With the default 4096 thetas that is 4096 and 8192
 rows for a two-choice model; `512` divides both.
 
@@ -73,7 +71,7 @@ page gives the measurements behind the policy.
 
 **Provenance.** `generator_config["source"]` is the flat dict returned by
 `SourceLAN.provenance`, with exactly the keys `derivation_method`
-(`"derived-from-lan"`), `aux_category` (`choice` / `omission` / `nogo`),
+(`"derived-from-lan"`), `aux_category` (`choice` / `omission`),
 `source_lan_run_uuid`, `source_lan_sha256`, `source_lan_hf_commit`,
 `source_lan_run_id` (`None`; filled in by the tool that knows the MLflow
 run), `integration_grid`, `integration_max_t`. Downstream tools read these
@@ -88,8 +86,6 @@ by name.
 ::: lanfactory.derive.cpn_labels
 
 ::: lanfactory.derive.opn_labels
-
-::: lanfactory.derive.gonogo_labels
 
 ::: lanfactory.derive.simulate_labels
 

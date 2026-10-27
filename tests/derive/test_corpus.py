@@ -31,7 +31,6 @@ from lanfactory.derive import (
     choice_mass,
     cpn_labels,
     derive_aux_corpus,
-    gonogo_labels,
     load_onnx_predictor,
     opn_labels,
     sample_deadlines,
@@ -39,7 +38,6 @@ from lanfactory.derive import (
     simulate_labels,
 )
 from lanfactory.derive import corpus as corpus_module
-from lanfactory.derive.corpus import _nogo_before, _omission
 from lanfactory.trainers.torch_mlp import DatasetTorch
 from tests._onnx_utils import export_tiny_torch_lan
 from tests.derive.conftest import DDM_ONNX, DDM_SHA256
@@ -167,56 +165,19 @@ def test_identity_thetas_sit_inside_the_fallback_window(ddm_mass):
 
 
 # --------------------------------------------------------------------------
-# 2. opn / gonogo identity vs ddm_deadline simulations
+# 2. opn identity vs ddm_deadline simulations
 # --------------------------------------------------------------------------
 
 
-def test_opn_and_gonogo_match_ddm_deadline_simulations(ddm_mass):
+def test_opn_matches_ddm_deadline_simulations(ddm_mass):
     _, opn = opn_labels(ddm_mass, THETA, DEADLINES)
-    _, gonogo = gonogo_labels(ddm_mass, THETA, DEADLINES)
     for i, (theta, d) in enumerate(zip(THETA, DEADLINES, strict=True)):
-        rts, choices = _simulate("ddm_deadline", np.append(theta, d), seed=10 + i)
-        # ssms marks an omission in rts (-999.0) and leaves choices alone.
-        omitted = rts == -999.0
-        omission_p = omitted.mean()
-        nogo_p = ((choices != max(CHOICES)) | omitted).mean()  # ssms' nogo_p
-        print(
-            f"theta={theta.tolist()} d={d}: opn={opn[i, 0]:.4f} sim={omission_p:.4f}"
-            f" | gonogo={gonogo[i, 0]:.4f} sim={nogo_p:.4f}"
-        )
+        rts, _ = _simulate("ddm_deadline", np.append(theta, d), seed=10 + i)
+        # ssms marks an omission in rts (-999.0).
+        omission_p = np.mean(rts == -999.0)
+        print(f"theta={theta.tolist()} d={d}: opn={opn[i, 0]:.4f} sim={omission_p:.4f}")
         assert 0.2 < omission_p < 0.7, "deadline should leave omissions informative"
         assert opn[i, 0] == pytest.approx(omission_p, abs=0.02)
-        assert gonogo[i, 0] == pytest.approx(nogo_p, abs=0.02)
-
-
-def test_gonogo_decomposes_into_nogo_mass_plus_opn(ddm_mass):
-    """gonogo = mass_before(d, c_nogo) / total + opn, c_nogo every non-max choice.
-
-    The float64 terms the labels are cast from satisfy the identity to 1e-12
-    against ``ChoiceMass`` directly (ddm has one nogo choice, ``-1``); the
-    emitted float32 labels satisfy it to float32 precision.
-    """
-    # Labels are computed at the float32-rounded deadline the row carries.
-    d = DEADLINES.astype(np.float32).astype(np.float64)
-    total = ddm_mass.total
-    nogo_before = ddm_mass.mass_before(d, -1) / total
-    omission = 1.0 - ddm_mass.mass_before(d) / total
-    assert np.all((0.0 < omission) & (omission < 1.0)), "clip must be a no-op here"
-    np.testing.assert_allclose(
-        _nogo_before(ddm_mass, d) / total, nogo_before, atol=1e-12
-    )
-    np.testing.assert_allclose(_omission(ddm_mass, d), omission, atol=1e-12)
-
-    _, opn = opn_labels(ddm_mass, THETA, DEADLINES)
-    _, gonogo = gonogo_labels(ddm_mass, THETA, DEADLINES)
-    np.testing.assert_allclose(opn[:, 0], omission, rtol=0, atol=1e-7)
-    np.testing.assert_allclose(gonogo[:, 0], nogo_before + omission, rtol=0, atol=1e-7)
-    np.testing.assert_allclose(
-        gonogo[:, 0].astype(np.float64),
-        nogo_before + opn[:, 0].astype(np.float64),
-        rtol=0,
-        atol=1e-6,  # float32 labels
-    )
 
 
 def _synthetic_mass(per_choice_total: list[float], n_points: int = 50) -> ChoiceMass:
@@ -233,8 +194,7 @@ def test_labels_are_renormalised_by_the_total():
 
     With a total of 1.05 the raw masses would give a negative omission and,
     for ``[1.05, 0.02]``, a choice mass above one; renormalised they are
-    probabilities without needing the clip, and the decomposition
-    ``gonogo == nogo_before / total + opn`` holds exactly.
+    probabilities without needing the clip.
     """
     theta = np.zeros((1, 2), dtype=np.float32)
     mass = _synthetic_mass([0.6, 0.45])
@@ -244,9 +204,6 @@ def test_labels_are_renormalised_by_the_total():
     assert cpn[:, 0].sum() == pytest.approx(1.0, abs=1e-6)
     _, opn = opn_labels(mass, theta, 20.0)
     assert opn[0, 0] == pytest.approx(0.0, abs=1e-7)  # F(max_t) == total
-    _, gonogo = gonogo_labels(mass, theta, 20.0)
-    assert gonogo[0, 0] == pytest.approx(0.6 / 1.05)
-    assert gonogo[0, 0] == pytest.approx(mass.mass(-1)[0] / 1.05 + opn[0, 0])
     # Part-way down the ramp the omission is the un-reached share of the total.
     _, opn_half = opn_labels(mass, theta, mass.t[0, 24])
     assert opn_half[0, 0] == pytest.approx(1.0 - 24 / 49, abs=1e-6)
@@ -254,33 +211,18 @@ def test_labels_are_renormalised_by_the_total():
     over = _synthetic_mass([1.05, 0.02])
     _, cpn = cpn_labels(over, theta, CHOICES)
     np.testing.assert_allclose(cpn[:, 0], [1.05 / 1.07, 0.02 / 1.07], rtol=1e-6)
-    _, gonogo = gonogo_labels(over, theta, 20.0)
-    assert gonogo[0, 0] == pytest.approx(1.05 / 1.07)
-    assert np.all((gonogo >= 0.0) & (gonogo <= 1.0) & (cpn >= 0.0) & (cpn <= 1.0))
+    assert np.all((cpn >= 0.0) & (cpn <= 1.0))
 
     empty = _synthetic_mass([0.0, 0.0])
-    for build, extra in (
-        (cpn_labels, CHOICES),
-        (opn_labels, 1.0),
-        (gonogo_labels, 1.0),
-    ):
+    for build, extra in ((cpn_labels, CHOICES), (opn_labels, 1.0)):
         with pytest.raises(ValueError, match=r"total mass must be > 0.*\[0\]"):
             build(empty, theta, extra)
 
 
-def test_gonogo_sums_every_non_maximal_choice():
-    """With three choices the nogo set is {0, 1}, not just the smallest code."""
+def test_cpn_emits_a_row_per_choice_code():
+    """Three choices: a row per code, in code order, labelled with its share."""
     mass = _synthetic_mass([0.2, 0.3, 0.4])  # total 0.9; labels are shares of it
     theta = np.zeros((1, 2), dtype=np.float32)
-    data, gonogo = gonogo_labels(mass, theta, 20.0)
-    assert gonogo[0, 0] == pytest.approx(0.5 / 0.9)  # min-only would give 0.2 / 0.9
-    _, opn = opn_labels(mass, theta, 20.0)
-    assert opn[0, 0] == pytest.approx(0.0, abs=1e-7)
-    # Part-way down the ramp every choice term scales, the omission fills up.
-    frac = 24 / 49  # ramp value at grid node 24 of 50
-    _, part = gonogo_labels(mass, theta, mass.t[0, 24])
-    assert part[0, 0] == pytest.approx(frac * 0.5 / 0.9 + (1.0 - frac))
-    # cpn emits a row per code, in code order, labelled with that code's share.
     data, cpn = cpn_labels(mass, theta, mass.choices)
     np.testing.assert_array_equal(data[:, -1], [0.0, 1.0, 2.0])
     np.testing.assert_allclose(cpn[:, 0], np.array([0.2, 0.3, 0.4]) / 0.9, rtol=1e-6)
@@ -302,8 +244,6 @@ def test_deadline_labels_use_the_float32_deadline_the_row_carries():
     assert abs(d32 - 1.0005) > 1e-8, "1.0005 must not be exact in float32"
     assert opn[0, 0] == pytest.approx(1.0 - (d32 - 1.0) / 0.001, abs=1e-7)
     assert abs(opn[0, 0] - 0.5) > 1e-6  # the float64 deadline would give 0.5
-    _, gonogo = gonogo_labels(mass, theta, 1.0005)
-    assert gonogo[0, 0] == pytest.approx((d32 - 1.0) / 0.001 + opn[0, 0], abs=1e-7)
 
 
 # --------------------------------------------------------------------------
@@ -329,19 +269,18 @@ def test_cpn_rows_are_theta_major_over_every_choice(ddm_mass):
 
 
 def test_deadline_rows_put_the_deadline_last(ddm_mass):
-    for build in (opn_labels, gonogo_labels):
-        data, labels = build(ddm_mass, THETA, DEADLINES)
-        assert data.shape == (len(THETA), THETA.shape[1] + 1)
-        assert labels.shape == (len(THETA), 1)
-        assert data.dtype == labels.dtype == np.float32
-        np.testing.assert_array_equal(data[:, :-1], THETA)
-        np.testing.assert_array_equal(data[:, -1], DEADLINES.astype(np.float32))
+    data, labels = opn_labels(ddm_mass, THETA, DEADLINES)
+    assert data.shape == (len(THETA), THETA.shape[1] + 1)
+    assert labels.shape == (len(THETA), 1)
+    assert data.dtype == labels.dtype == np.float32
+    np.testing.assert_array_equal(data[:, :-1], THETA)
+    np.testing.assert_array_equal(data[:, -1], DEADLINES.astype(np.float32))
 
 
 @pytest.mark.parametrize(
     "build,extra",
-    [(cpn_labels, CHOICES), (opn_labels, 1.0), (gonogo_labels, 1.0)],
-    ids=["cpn", "opn", "gonogo"],
+    [(cpn_labels, CHOICES), (opn_labels, 1.0)],
+    ids=["cpn", "opn"],
 )
 def test_label_functions_reject_bad_theta(ddm_mass, build, extra):
     with pytest.raises(ValueError, match="parameter vectors"):
@@ -438,7 +377,7 @@ def test_source_lan_hashes_and_parses_run_uuid(tmp_path):
     assert record["source_lan_run_id"] is None
     assert record["integration_grid"] == 1160
     assert record["integration_max_t"] == 15.0
-    assert AUX_CATEGORY == {"cpn": "choice", "opn": "omission", "gonogo": "nogo"}
+    assert AUX_CATEGORY == {"cpn": "choice", "opn": "omission"}
     with pytest.raises(ValueError, match="network_type"):
         hub.provenance("lan", OnsetGrid())
 
@@ -701,10 +640,7 @@ def test_simulate_labels_matches_the_raw_ssms_formulas():
     opn, past_opn = simulate_labels(
         "ddm", theta, "opn", d, n_sim, np.random.default_rng(5)
     )
-    gonogo, _ = simulate_labels(
-        "ddm", theta, "gonogo", d, n_sim, np.random.default_rng(5)
-    )
-    assert opn.shape == gonogo.shape == (2, 1)
+    assert opn.shape == (2, 1)
     np.testing.assert_array_equal(past_opn, past)  # same base draw, same seed
     out = simulator(
         theta=np.column_stack([theta, d.astype(np.float32)]),
@@ -714,12 +650,8 @@ def test_simulate_labels_matches_the_raw_ssms_formulas():
         random_state=seed_deadline,
     )
     omitted = out["rts"].reshape(n_sim, 2) == -999.0
-    chosen = out["choices"].reshape(n_sim, 2)
     np.testing.assert_array_equal(opn[:, 0], omitted.mean(axis=0))
-    np.testing.assert_array_equal(
-        gonogo[:, 0], ((chosen != max(CHOICES)) | omitted).mean(axis=0)
-    )
-    assert np.all(gonogo >= opn) and np.all((0.2 < opn) & (opn < 0.7))
+    assert np.all((0.2 < opn) & (opn < 0.7))
 
     # A scalar deadline broadcasts; the same rng state reproduces the labels.
     again, _ = simulate_labels("ddm", theta, "opn", d, n_sim, np.random.default_rng(5))

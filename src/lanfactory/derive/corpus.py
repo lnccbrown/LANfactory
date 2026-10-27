@@ -1,4 +1,4 @@
-"""Turn a LAN's per-choice masses into cpn / opn / gonogo training corpora.
+"""Turn a LAN's per-choice masses into cpn / opn training corpora.
 
 :mod:`lanfactory.derive.integrate` integrates a trained LAN's density over
 reaction time. This module samples parameter vectors the way ssms samples a
@@ -16,15 +16,10 @@ type       training row                           label
 cpn        ``[theta..., choice]`` — one row per   ``mass(choice) / total``
            choice code in ``model_config["choices"]``
 opn        ``[theta..., deadline]``               ``1 - F(deadline) / total``
-gonogo     ``[theta..., deadline]``               ``nogo_before(deadline) / total``
-                                                  ``+ (1 - F(deadline) / total)``
 =========  =====================================  ==============================
 
-with ``total`` the LAN's mass on ``[t_min, max_t]`` summed over choices,
-``F(d) = mass_before(d)`` summed over choices and ``nogo_before(d)`` the
-mass before ``d`` of every choice but the largest code (ssms' own ``nogo_p``:
-a trial is *nogo* when its choice is anything but the largest choice code,
-or when it is omitted).
+with ``total`` the LAN's mass on ``[t_min, max_t]`` summed over choices and
+``F(d) = mass_before(d)`` summed over choices.
 
 Labels are renormalised by the network's own total
 ---------------------------------------------------
@@ -36,10 +31,8 @@ max 0.17 to 0.004 / 0.033 and the opn error from 0.026 / 0.22 to 0.012 /
 0.18 — so every label is the LAN's mass as a fraction of its own total, and
 the total is recorded in every pickle (``generator_config["derive_stats"]``)
 and in the manifest, never hidden. The ratios lie in ``[0, 1]`` up to
-rounding; the float32 clip in :func:`_labels` is kept as a safety net, and
-the omission term is formed once so that the decomposition
-``gonogo_label == nogo_before(deadline) / total + opn_label`` holds row by
-row in the written corpus. A parameter vector with zero total is rejected.
+rounding; the float32 clip in :func:`_labels` is kept as a safety net. A
+parameter vector with zero total is rejected.
 """
 
 from __future__ import annotations
@@ -76,17 +69,16 @@ __all__ = [
     "SourceLAN",
     "cpn_labels",
     "derive_aux_corpus",
-    "gonogo_labels",
     "opn_labels",
     "sample_deadlines",
     "sample_theta",
     "simulate_labels",
 ]
 
-NETWORK_TYPES: tuple[str, ...] = ("cpn", "opn", "gonogo")
+NETWORK_TYPES: tuple[str, ...] = ("cpn", "opn")
 """Auxiliary network types a corpus can be derived for."""
 
-AUX_CATEGORY: dict[str, str] = {"cpn": "choice", "opn": "omission", "gonogo": "nogo"}
+AUX_CATEGORY: dict[str, str] = {"cpn": "choice", "opn": "omission"}
 """What each network type's label is the probability of."""
 
 DERIVATION_METHOD = "derived-from-lan"
@@ -224,27 +216,6 @@ def _total(mass: ChoiceMass) -> NDArray[np.float64]:
     return total
 
 
-def _omission(mass: ChoiceMass, deadline: NDArray[np.float64]) -> NDArray[np.float64]:
-    """``P(no response before deadline)`` as a float64 probability.
-
-    ``1 - F(deadline) / total`` with ``F`` the mass before the deadline
-    summed over choices, clipped to ``[0, 1]`` once so that the same term
-    enters :func:`opn_labels` and :func:`gonogo_labels`.
-    """
-    return np.clip(1.0 - mass.mass_before(deadline) / _total(mass), 0.0, 1.0)
-
-
-def _nogo_before(
-    mass: ChoiceMass, deadline: NDArray[np.float64]
-) -> NDArray[np.float64]:
-    """Mass of every non-maximal choice before ``deadline`` (ssms' nogo set)."""
-    go_choice = mass.choices.max()
-    return sum(
-        (mass.mass_before(deadline, c) for c in mass.choices if c != go_choice),
-        np.zeros(mass.cdf.shape[0]),
-    )
-
-
 def _deadline_rows(
     theta: NDArray[np.float32], deadlines: ArrayLike
 ) -> tuple[NDArray[np.float32], NDArray[np.float64]]:
@@ -327,39 +298,7 @@ def opn_labels(
     theta_arr = _as_theta(theta)
     _check_rows(mass, theta_arr)
     data, d = _deadline_rows(theta_arr, deadlines)
-    return data, _labels(_omission(mass, d))
-
-
-def gonogo_labels(
-    mass: ChoiceMass, theta: ArrayLike, deadlines: ArrayLike
-) -> tuple[NDArray[np.float32], NDArray[np.float32]]:
-    """Go/no-go rows ``[theta..., deadline]`` labelled with ssms' ``nogo_p``.
-
-    ssms counts a trial as *nogo* when its choice is not the largest choice
-    code **or** it is omitted, so the label is the mass of every non-maximal
-    choice before the deadline plus the omission probability, both as a
-    fraction of the LAN's own total: ``gonogo == nogo_before / total + opn``
-    row by row.
-
-    Parameters
-    ----------
-    mass
-        Masses for ``theta``.
-    theta
-        ``(n_theta, n_params)``.
-    deadlines
-        Scalar or ``(n_theta,)`` deadlines in seconds.
-
-    Returns
-    -------
-    tuple[NDArray[np.float32], NDArray[np.float32]]
-        ``data`` of shape ``(n_theta, n_params + 1)`` and ``labels`` of shape
-        ``(n_theta, 1)``.
-    """
-    theta_arr = _as_theta(theta)
-    _check_rows(mass, theta_arr)
-    data, d = _deadline_rows(theta_arr, deadlines)
-    return data, _labels(_nogo_before(mass, d) / _total(mass) + _omission(mass, d))
+    return data, _labels(1.0 - mass.mass_before(d) / _total(mass))
 
 
 # --------------------------------------------------------------------------
@@ -390,21 +329,19 @@ def simulate_labels(
       ``rt ≈ max_t + t`` with a choice).
     * ``opn``: ``mean(rts == -999)`` under the ``{model}_deadline`` simulator
       with the row's deadline appended to theta — the omission probability.
-    * ``gonogo``: ``mean(choices != max(choices) | rts == -999)`` under the
-      same simulator — ssms' ``nogo_p``.
 
     Parameters
     ----------
     model
-        ssms base model name, e.g. ``"ddm"``; ``opn`` / ``gonogo`` simulate
+        ssms base model name, e.g. ``"ddm"``; ``opn`` simulates
         ``f"{model}_deadline"``.
     theta
         ``(n_theta, n_params)`` parameter vectors of the base model.
     network_type
         One of :data:`NETWORK_TYPES`.
     deadlines
-        Scalar or ``(n_theta,)`` deadlines in seconds; required for ``opn``
-        and ``gonogo``, ignored for ``cpn``.
+        Scalar or ``(n_theta,)`` deadlines in seconds; required for ``opn``,
+        ignored for ``cpn``.
     n_sim
         Trials simulated per parameter vector.
     rng
@@ -429,7 +366,7 @@ def simulate_labels(
     ------
     ValueError
         For an unknown ``network_type``, ``n_sim < 1``, empty ``theta``,
-        missing deadlines for ``opn`` / ``gonogo``, or a parameter vector
+        missing deadlines for ``opn``, or a parameter vector
         under which no trial responds before ``max_t``.
     """
     _check_network_type(network_type)
@@ -481,12 +418,7 @@ def simulate_labels(
         random_state=seed_deadline,
     )
     omitted = np.asarray(with_deadline["rts"]).reshape(n_sim, n_theta) == -999.0
-    if network_type == "opn":
-        labels = omitted.mean(axis=0)
-    else:
-        chosen = np.asarray(with_deadline["choices"]).reshape(n_sim, n_theta)
-        labels = ((chosen != choices.max()) | omitted).mean(axis=0)
-    return labels[:, None], past_max_t
+    return omitted.mean(axis=0)[:, None], past_max_t
 
 
 # --------------------------------------------------------------------------
@@ -695,11 +627,11 @@ def derive_aux_corpus(
     seed: int = 0,
     source: SourceLAN | None = None,
 ) -> list[Path]:
-    """Write a cpn / opn / gonogo training corpus derived from a LAN.
+    """Write a cpn / opn training corpus derived from a LAN.
 
     Each file holds ``n_theta_per_file`` parameter vectors sampled as ssms
     would (:func:`sample_theta`), their masses under the LAN, and the rows and
-    labels of :func:`cpn_labels`, :func:`opn_labels` or :func:`gonogo_labels`.
+    labels of :func:`cpn_labels` or :func:`opn_labels`.
     The pickles carry ``{type}_data``, ``{type}_labels``, ``generator_config``
     and ``model_config`` — the layout ``DatasetTorch`` and the training CLIs
     read — so the result trains with the trainers unchanged. A
@@ -735,7 +667,7 @@ def derive_aux_corpus(
         Number of pickles; at least 2, since the trainers split files into
         train and validation sets.
     n_theta_per_file
-        Parameter vectors per file. Rows per file are this for opn / gonogo
+        Parameter vectors per file. Rows per file are this for opn
         and this times the number of choices for cpn; the trainers require
         the batch size to divide the row count.
     grid
@@ -744,7 +676,7 @@ def derive_aux_corpus(
         It is recorded as ``grid`` in ``generator_config["derive"]`` and in
         the manifest.
     deadline_quantile_frac
-        Passed to :func:`sample_deadlines` (opn / gonogo only).
+        Passed to :func:`sample_deadlines` (opn only).
     fallback_window
         ``(lo, hi)``: a theta whose total mass lies outside ``[lo, hi]`` (the
         endpoints are trusted) is labelled by simulation. The default flags 3.7 % of the ddm box
@@ -877,8 +809,7 @@ def derive_aux_corpus(
             deadlines = sample_deadlines(
                 mass, rng, deadline_quantile_frac, bounds=deadline_bounds
             )
-            build = opn_labels if network_type == "opn" else gonogo_labels
-            data, labels = build(mass, theta, deadlines)
+            data, labels = opn_labels(mass, theta, deadlines)
 
         flagged = _flag_totals(mass.total, fallback_window)
         past_max_t = None

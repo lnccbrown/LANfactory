@@ -1,7 +1,7 @@
 """Command-line interface for deriving auxiliary-network corpora from a LAN.
 
-Integrates a trained LAN's density over reaction time and writes a cpn, opn or
-gonogo training corpus in the layout ``torchtrain`` / ``jaxtrain`` consume.
+Integrates a trained LAN's density over reaction time and writes a cpn or opn
+training corpus in the layout ``torchtrain`` / ``jaxtrain`` consume.
 
 Usage:
     derive-aux --from-onnx ddm.onnx --network-type cpn --model-name ddm \\
@@ -62,13 +62,13 @@ def main(
     n_theta_per_file: int = typer.Option(
         4096,
         "--n-theta-per-file",
-        help="Parameter vectors per file (rows per file for opn/gonogo; "
+        help="Parameter vectors per file (rows per file for opn; "
         "times the number of choices for cpn).",
     ),
     deadline_quantile_frac: float = typer.Option(
         0.7,
         "--deadline-quantile-frac",
-        help="Share of opn/gonogo deadlines drawn from the LAN's own RT quantiles; "
+        help="Share of opn deadlines drawn from the LAN's own RT quantiles; "
         "the rest are uniform on the deadline bounds.",
     ),
     fallback_window: tuple[float, float] = typer.Option(
@@ -108,7 +108,7 @@ def main(
         help="Hub revision (commit, tag, or branch) of that download.",
     ),
 ):
-    """Derive a cpn / opn / gonogo training corpus from a trained LAN.
+    """Derive a cpn / opn training corpus from a trained LAN.
 
     Writes ``--n-files`` pickles plus ``derive_manifest.json`` to
     ``--output-folder`` and prints the manifest path. Train on the folder with
