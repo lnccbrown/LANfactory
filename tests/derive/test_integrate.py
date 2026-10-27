@@ -593,15 +593,6 @@ def test_survey_by_param_localises_the_defect(scaled_survey):
     )
 
 
-def test_survey_worst_cell_sits_above_a_equals_two(scaled_survey):
-    cell = scaled_survey["worst_cell"]
-    assert {cell["param_x"], cell["param_y"]} == {"a", "t"}
-    axis = "x" if cell["param_x"] == "a" else "y"
-    assert cell[f"{axis}_lo"] >= 2.0
-    assert cell["mean_dev"] == pytest.approx(0.2, abs=1e-3)
-    assert cell["n"] > 0
-
-
 def test_survey_leak_and_shrunk_box(scaled_survey):
     leak = scaled_survey["leak_below_onset"]
     # Exactly zero except for onsets below the grid clip (t < 1.1e-3), where

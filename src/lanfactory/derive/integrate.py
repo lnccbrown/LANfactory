@@ -690,11 +690,8 @@ def survey(
         fractions of ``|total - 1|``), ``shrunk_box`` (the same over the
         interior of the box plus ``frac_of_theta``), ``leak_below_onset``
         (``mean``/``p99``/``max`` of :meth:`ChoiceMass.leak_below`, or
-        ``None``), ``by_param`` (``{name: [10 bins of lo/hi/mean_dev/
-        max_abs_dev/n]}``; empty bins carry ``None``) and ``worst_cell``
-        (on an 8×8 grid of the two parameters most correlated with the
-        deviation, the cell with the largest ``|mean_dev|``; ``None`` with
-        fewer than two parameters).
+        ``None``) and ``by_param`` (``{name: [10 bins of lo/hi/mean_dev/
+        max_abs_dev/n]}``; empty bins carry ``None``).
 
     Raises
     ------
@@ -768,35 +765,6 @@ def survey(
             )
         by_param[name] = bins
 
-    worst_cell = None
-    if n_params >= 2 and n_theta >= 2:
-        with np.errstate(divide="ignore", invalid="ignore"):
-            corr = np.array(
-                [np.corrcoef(theta[:, j], dev)[0, 1] for j in range(n_params)]
-            )
-        corr = np.nan_to_num(corr)
-        jx, jy = np.argsort(-np.abs(corr))[:2]
-        ix = _bin_index(theta[:, jx], lo[jx], hi[jx], 8)
-        iy = _bin_index(theta[:, jy], lo[jy], hi[jy], 8)
-        flat = ix * 8 + iy
-        counts = np.bincount(flat, minlength=64)
-        sums = np.bincount(flat, weights=dev, minlength=64)
-        means = np.where(counts > 0, sums / np.maximum(counts, 1), 0.0)
-        cell = int(np.argmax(np.abs(means)))
-        cx, cy = divmod(cell, 8)
-        x_edges = np.linspace(lo[jx], hi[jx], 9)
-        y_edges = np.linspace(lo[jy], hi[jy], 9)
-        worst_cell = {
-            "param_x": params[jx],
-            "param_y": params[jy],
-            "x_lo": float(x_edges[cx]),
-            "x_hi": float(x_edges[cx + 1]),
-            "y_lo": float(y_edges[cy]),
-            "y_hi": float(y_edges[cy + 1]),
-            "mean_dev": float(means[cell]),
-            "n": int(counts[cell]),
-        }
-
     return {
         "n_theta": int(n_theta),
         "grid": repr(grid),
@@ -813,5 +781,4 @@ def survey(
             }
         ),
         "by_param": by_param,
-        "worst_cell": worst_cell,
     }
