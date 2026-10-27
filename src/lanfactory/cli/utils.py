@@ -206,8 +206,8 @@ def log_training_run_identity(
 
     Every field a catalog needs to answer "which network is this?" is logged on
     the run itself rather than being recoverable only from experiment-name
-    conventions or by unpickling artifacts. The key set is listed in
-    ``docs/using_mlflow.md`` (*What Gets Tracked?* and *Derived corpora*).
+    conventions or by unpickling artifacts. Schema documented in HSSMSpine
+    ``_docs/mlflow-schema.md``.
 
     Params vs tags split is deliberate, for resume safety: MLflow rejects
     re-logging a param key with a *different* value, and a run resumed via

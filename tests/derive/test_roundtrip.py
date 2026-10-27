@@ -74,7 +74,6 @@ def _training_yaml(path: Path, network_type: str, corpus: Path) -> Path:
         "NETWORK_TYPE": network_type,
         "CPU_BATCH_SIZE": ROWS_PER_FILE[network_type],
         "GPU_BATCH_SIZE": ROWS_PER_FILE[network_type],
-        "GENERATOR_APPROACH": "derived",
         "OPTIMIZER_": "adam",
         "N_EPOCHS": 2,
         "TRAINING_DATA_FOLDER": str(corpus),
