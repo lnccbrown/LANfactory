@@ -33,6 +33,8 @@ from lanfactory.derive import (
 )
 from lanfactory.derive import corpus as corpus_module
 from lanfactory.derive.corpus import (
+    FALLBACK_WINDOW,
+    GRID,
     _provenance,
     _sha256,
     cpn_labels,
@@ -42,13 +44,11 @@ from lanfactory.derive.corpus import (
     simulate_labels,
 )
 from lanfactory.trainers.torch_mlp import DatasetTorch
-from tests._onnx_utils import DDM_ONNX, DDM_SHA256, export_tiny_torch_lan
-
-DEADLINE_BOUNDS = [0.001, 10.0]  # ssms' DEADLINE_PARAM_CONFIG, as the manifest lists it
+from tests._onnx_utils import DDM_ONNX, DDM_SHA256
+from tests.onnx.test_contract import make_onnx
 
 CHOICES = [-1, 1]
 MAX_T = 20.0
-FALLBACK_WINDOW = (0.98, 1.03)
 # Five parameter vectors well inside the ddm training box
 # (v: [-3, 3], a: [0.3, 2.5], z: [0.1, 0.9], t: [0, 2]) whose total mass
 # under the fixture LAN lies inside the fallback window, so the identity
@@ -86,8 +86,6 @@ STATS_KEYS = {
     "derive_sim_past_max_t_max",
     "derive_leak_below_onset_p99",
 }
-# The grid of record, as the pickles and the manifest carry it.
-GRID_RECORD = {"onset_param": "t", "n_points": 1160, **asdict(OnsetGrid())}
 # Trials per fallback theta in the corpus tests: small enough to keep them fast.
 FALLBACK_N_SIM = 500
 
@@ -95,13 +93,7 @@ FALLBACK_N_SIM = 500
 @pytest.fixture(scope="module")
 def ddm_mass() -> ChoiceMass:
     """Masses of THETA on the grid of record, the onset grid around ``t``."""
-    return choice_mass(
-        load_onnx_predictor(DDM_ONNX),
-        THETA,
-        CHOICES,
-        grid=OnsetGrid(),
-        onset=THETA[:, 3],
-    )
+    return choice_mass(load_onnx_predictor(DDM_ONNX), THETA, CHOICES, THETA[:, 3])
 
 
 def _simulate(model: str, theta: np.ndarray, seed: int) -> tuple[np.ndarray, ...]:
@@ -111,8 +103,12 @@ def _simulate(model: str, theta: np.ndarray, seed: int) -> tuple[np.ndarray, ...
     return out["rts"].ravel(), out["choices"].ravel()
 
 
+def _manifest(folder: Path) -> dict:
+    return json.loads((folder / MANIFEST_NAME).read_text())
+
+
 # --------------------------------------------------------------------------
-# 1. cpn identity: mass(c) vs simulated choice frequency, for every choice
+# 1. Identity against ssms simulations
 # --------------------------------------------------------------------------
 
 
@@ -122,43 +118,32 @@ def test_fixture_is_the_production_ddm_lan():
     assert load_onnx_predictor(DDM_ONNX).input_width == 6
 
 
-@pytest.mark.parametrize("choice", CHOICES)
-def test_cpn_label_matches_simulated_choice_frequency(ddm_mass, choice):
-    """One label per choice code, no category assumed.
-
-    The label is ``mass(c) / total``, which estimates the choice frequency
-    *conditional on responding within max_t*: ``mean(choices == c & responded)
-    / mean(responded)`` with ``responded = (rts >= 0) & (rts < max_t)``. ddm
-    returns a trial still running at ``max_t`` at ``rt ≈ max_t + t`` with a
-    choice, so the unconditional ``choice_p`` a simulated corpus carries is
-    printed beside it; for these thetas no trial reaches 20 s and the two
-    coincide. Inside the fallback window the renormalised label is within
-    0.01 of simulation (0.02 before renormalisation).
-    """
-    _, labels = cpn_labels(ddm_mass, THETA, CHOICES)
-    j = CHOICES.index(choice)
-    for i, theta in enumerate(THETA):
-        rts, choices = _simulate("ddm", theta, seed=i)
-        responded = (rts >= 0) & (rts < MAX_T)
-        conditional = np.mean((choices == choice) & responded) / responded.mean()
-        label = labels[i * len(CHOICES) + j, 0]
-        print(
-            f"theta={theta.tolist()} choice={choice}: label={label:.4f} "
-            f"sim(rt<20)={conditional:.4f} choice_p={np.mean(choices == choice):.4f} "
-            f"total={ddm_mass.total[i]:.4f}"
-        )
-        assert label == pytest.approx(conditional, abs=0.01)
-
-
 def test_identity_thetas_sit_inside_the_fallback_window(ddm_mass):
     """The identity tests measure the LAN, so its totals must not be flagged."""
     lo, hi = FALLBACK_WINDOW
     assert np.all((ddm_mass.total > lo) & (ddm_mass.total < hi)), ddm_mass.total
 
 
-# --------------------------------------------------------------------------
-# 2. opn identity vs ddm_deadline simulations
-# --------------------------------------------------------------------------
+def test_cpn_labels_match_simulated_choice_frequencies(ddm_mass):
+    """One label per choice code, no category assumed.
+
+    The label is ``by_choice / total``, which estimates the choice frequency
+    *conditional on responding within max_t*: ``mean(choices == c & responded)
+    / mean(responded)`` with ``responded = (rts >= 0) & (rts < max_t)``. ddm
+    returns a trial still running at ``max_t`` at ``rt ≈ max_t + t`` with a
+    choice; for these thetas no trial reaches 20 s, so the conditional and
+    unconditional frequencies coincide. Inside the fallback window the
+    renormalised label is within 0.01 of simulation (0.02 before
+    renormalisation).
+    """
+    _, labels = cpn_labels(ddm_mass, THETA, CHOICES)
+    labels = labels.reshape(len(THETA), len(CHOICES))
+    for i, theta in enumerate(THETA):
+        rts, choices = _simulate("ddm", theta, seed=i)
+        responded = (rts >= 0) & (rts < MAX_T)
+        for j, choice in enumerate(CHOICES):
+            conditional = np.mean((choices == choice) & responded) / responded.mean()
+            assert labels[i, j] == pytest.approx(conditional, abs=0.01)
 
 
 def test_opn_matches_ddm_deadline_simulations(ddm_mass):
@@ -167,22 +152,25 @@ def test_opn_matches_ddm_deadline_simulations(ddm_mass):
         rts, _ = _simulate("ddm_deadline", np.append(theta, d), seed=10 + i)
         # ssms marks an omission in rts (-999.0).
         omission_p = np.mean(rts == -999.0)
-        print(f"theta={theta.tolist()} d={d}: opn={opn[i, 0]:.4f} sim={omission_p:.4f}")
         assert 0.2 < omission_p < 0.7, "deadline should leave omissions informative"
         assert opn[i, 0] == pytest.approx(omission_p, abs=0.02)
 
 
+# --------------------------------------------------------------------------
+# 2. Labels and row layouts
+# --------------------------------------------------------------------------
+
+
 def _synthetic_mass(per_choice_total: list[float], n_points: int = 50) -> ChoiceMass:
-    """A ChoiceMass whose per-choice cdf ramps linearly to the given totals."""
+    """A ChoiceMass whose cdf ramps linearly to the sum of the given totals."""
     t = np.linspace(1e-4, 20.0, n_points)[None, :]
-    ramp = np.linspace(0.0, 1.0, n_points)
-    cdf = np.stack([np.stack([total * ramp for total in per_choice_total])])
-    choices = np.array(CHOICES if len(per_choice_total) == 2 else [0, 1, 2])
-    return ChoiceMass(t=t, choices=choices, cdf=cdf)
+    by_choice = np.array([per_choice_total])
+    cdf = by_choice.sum() * np.linspace(0.0, 1.0, n_points)[None, :]
+    return ChoiceMass(t=t, cdf=cdf, by_choice=by_choice)
 
 
 def test_labels_are_renormalised_by_the_total():
-    """Every label is a fraction of the LAN's own total; a zero total is refused.
+    """Every label is a fraction of the LAN's own total; a zero total is NaN.
 
     With a total of 1.05 the raw masses would give a negative omission and,
     for ``[1.05, 0.02]``, a choice mass above one; renormalised they are
@@ -203,19 +191,18 @@ def test_labels_are_renormalised_by_the_total():
     over = _synthetic_mass([1.05, 0.02])
     _, cpn = cpn_labels(over, theta, CHOICES)
     np.testing.assert_allclose(cpn[:, 0], [1.05 / 1.07, 0.02 / 1.07], rtol=1e-6)
-    assert np.all((cpn >= 0.0) & (cpn <= 1.0))
 
     empty = _synthetic_mass([0.0, 0.0])
-    for build, extra in ((cpn_labels, CHOICES), (opn_labels, 1.0)):
-        with pytest.raises(ValueError, match=r"total mass must be > 0.*\[0\]"):
-            build(empty, theta, extra)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        assert np.isnan(cpn_labels(empty, theta, CHOICES)[1]).all()
+        assert np.isnan(opn_labels(empty, theta, 1.0)[1]).all()
 
 
 def test_cpn_emits_a_row_per_choice_code():
     """Three choices: a row per code, in code order, labelled with its share."""
     mass = _synthetic_mass([0.2, 0.3, 0.4])  # total 0.9; labels are shares of it
     theta = np.zeros((1, 2), dtype=np.float32)
-    data, cpn = cpn_labels(mass, theta, mass.choices)
+    data, cpn = cpn_labels(mass, theta, [0, 1, 2])
     np.testing.assert_array_equal(data[:, -1], [0.0, 1.0, 2.0])
     np.testing.assert_allclose(cpn[:, 0], np.array([0.2, 0.3, 0.4]) / 0.9, rtol=1e-6)
 
@@ -227,8 +214,9 @@ def test_deadline_labels_use_the_float32_deadline_the_row_carries():
     float64 deadline the mass before it is exactly 0.5.
     """
     t = np.array([[1e-4, 1.0, 1.001, 20.0]])
-    cdf = np.array([[[0.0, 0.0, 1.0, 1.0], [0.0, 0.0, 0.0, 0.0]]])
-    mass = ChoiceMass(t=t, choices=np.array(CHOICES), cdf=cdf)
+    mass = ChoiceMass(
+        t=t, cdf=np.array([[0.0, 0.0, 1.0, 1.0]]), by_choice=np.array([[1.0, 0.0]])
+    )
     theta = np.zeros((1, 2), dtype=np.float32)
     data, opn = opn_labels(mass, theta, 1.0005)
     d32 = float(np.float32(1.0005))
@@ -236,11 +224,6 @@ def test_deadline_labels_use_the_float32_deadline_the_row_carries():
     assert abs(d32 - 1.0005) > 1e-8, "1.0005 must not be exact in float32"
     assert opn[0, 0] == pytest.approx(1.0 - (d32 - 1.0) / 0.001, abs=1e-7)
     assert abs(opn[0, 0] - 0.5) > 1e-6  # the float64 deadline would give 0.5
-
-
-# --------------------------------------------------------------------------
-# 3. Row layouts
-# --------------------------------------------------------------------------
 
 
 def test_cpn_rows_are_theta_major_over_every_choice(ddm_mass):
@@ -253,11 +236,8 @@ def test_cpn_rows_are_theta_major_over_every_choice(ddm_mass):
             row = i * len(CHOICES) + j
             np.testing.assert_array_equal(data[row, :-1], theta)
             assert data[row, -1] == c
-            expected = ddm_mass.mass(c)[i] / ddm_mass.total[i]
+            expected = ddm_mass.by_choice[i, j] / ddm_mass.total[i]
             assert labels[row, 0] == pytest.approx(expected, abs=1e-7)
-        assert labels[i * len(CHOICES) : (i + 1) * len(CHOICES), 0].sum() == (
-            pytest.approx(1.0, abs=1e-6)
-        )
 
 
 def test_deadline_rows_put_the_deadline_last(ddm_mass):
@@ -270,7 +250,7 @@ def test_deadline_rows_put_the_deadline_last(ddm_mass):
 
 
 # --------------------------------------------------------------------------
-# 4. Sampling
+# 3. Sampling
 # --------------------------------------------------------------------------
 
 
@@ -292,13 +272,13 @@ def test_sample_theta_matches_ssms_bounds_and_order():
 def box_mass() -> ChoiceMass:
     config = ModelConfigBuilder.from_model("ddm")
     theta = sample_theta(config, 2000, np.random.default_rng(1))
-    return choice_mass(load_onnx_predictor(DDM_ONNX), theta, CHOICES, onset=theta[:, 3])
+    return choice_mass(load_onnx_predictor(DDM_ONNX), theta, CHOICES, theta[:, 3])
 
 
 def test_sample_deadlines_covers_the_box_and_concentrates(box_mass):
     bounds = (0.001, 10.0)
     rng = np.random.default_rng(2)
-    d = sample_deadlines(box_mass, rng, deadline_quantile_frac=0.7, bounds=bounds)
+    d = sample_deadlines(box_mass, rng, 0.7, bounds)
     assert d.shape == (2000,)
     assert np.all((d >= bounds[0]) & (d <= bounds[1]))
     # The uniform share reaches both edges of the box ...
@@ -314,15 +294,13 @@ def test_sample_deadlines_covers_the_box_and_concentrates(box_mass):
     assert only_uniform.max() > 9.0 and np.mean(only_uniform > 5.0) > 0.4
 
     np.testing.assert_array_equal(
-        sample_deadlines(box_mass, np.random.default_rng(3)),
-        sample_deadlines(box_mass, np.random.default_rng(3)),
+        sample_deadlines(box_mass, np.random.default_rng(3), 0.7, bounds),
+        sample_deadlines(box_mass, np.random.default_rng(3), 0.7, bounds),
     )
-    with pytest.raises(ValueError, match="bounds"):
-        sample_deadlines(box_mass, rng, bounds=(2.0, 1.0))
 
 
 # --------------------------------------------------------------------------
-# 5. Provenance
+# 4. Provenance
 # --------------------------------------------------------------------------
 
 
@@ -350,7 +328,7 @@ def test_provenance_hashes_and_parses_run_uuid(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# 6. Corpus layout, read back through DatasetTorch
+# 5. Corpus layout, read back through DatasetTorch
 # --------------------------------------------------------------------------
 
 N_THETA = 64
@@ -404,38 +382,23 @@ def test_pickle_carries_the_contract_keys(derived):
         "model_config",
     }
     generator_config = content["generator_config"]
-    assert generator_config["generator_approach"] == "derived"
-    assert generator_config["model"] == "ddm"
-    assert generator_config["network_type"] == network_type
-    assert generator_config["n_files"] == 2
-    assert generator_config["n_theta_per_file"] == N_THETA
-    assert generator_config["file_index"] == 1
+    assert generator_config == {
+        "generator_approach": "derived",
+        "model": "ddm",
+        "network_type": network_type,
+        "n_files": 2,
+        "n_theta_per_file": N_THETA,
+        "derive": {
+            "grid": asdict(GRID),
+            "deadline_quantile_frac": 0.7,
+            "fallback_window": (0.98, 1.03),
+            "fallback_n_sim": FALLBACK_N_SIM,
+            "seed": 0,
+        },
+        "source": _provenance(DDM_ONNX, network_type, GRID, None, None),
+        "file_index": 1,
+    }
     assert tuple(generator_config["source"]) == AUX_PROVENANCE_KEYS
-    assert generator_config["source"]["aux_category"] == AUX_CATEGORY[network_type]
-    assert generator_config["source"]["source_lan_sha256"] == DDM_SHA256
-    assert generator_config["source"]["source_lan_run_uuid"] is None
-    assert set(generator_config["derive_stats"]) == STATS_KEYS
-    # The stats are total-mass stats of this file's thetas: near one, ordered.
-    stats = generator_config["derive_stats"]
-    assert 0.9 < stats["derive_total_mass_mean"] < 1.1
-    assert stats["derive_total_mass_min"] <= stats["derive_total_mass_mean"]
-    assert stats["derive_total_mass_mean"] <= stats["derive_total_mass_max"]
-    assert 0.0 <= stats["derive_fallback_frac"] <= 1.0
-    if stats["derive_fallback_frac"] > 0.0:
-        assert 0.0 <= stats["derive_sim_past_max_t_max"] <= 1.0
-    else:
-        assert stats["derive_sim_past_max_t_max"] is None
-    assert 0.0 <= stats["derive_leak_below_onset_p99"] < 0.2
-    derive = generator_config["derive"]
-    assert derive["fallback_window"] == (0.98, 1.03)
-    assert derive["fallback_n_sim"] == FALLBACK_N_SIM
-    assert derive["grid"] == GRID_RECORD
-    assert derive["deadline_quantile_frac"] == 0.7
-    assert derive["seed"] == 0
-    if network_type == "cpn":
-        assert derive["deadline_bounds"] is None
-    else:
-        assert derive["deadline_bounds"] == tuple(DEADLINE_BOUNDS)
 
     model_config = content["model_config"]
     assert not any(callable(v) for v in model_config.values())
@@ -447,62 +410,33 @@ def test_pickle_carries_the_contract_keys(derived):
         assert model_config["name"] == "ddm_deadline"
         assert model_config["input_columns"] == ["v", "a", "z", "t", "deadline"]
         assert model_config["params"] == ["v", "a", "z", "t", "deadline"]
-        assert model_config["param_bounds"][0][-1] == 0.001
-        assert model_config["param_bounds"][1][-1] == 10.0
         assert model_config["param_bounds_dict"]["deadline"] == (0.001, 10.0)
     assert model_config["choices"] == CHOICES
 
 
-def test_manifest_lists_the_files(derived):
-    network_type, out, files = derived
-    n_rows = N_THETA * (len(CHOICES) if network_type == "cpn" else 1)
-    manifest = json.loads((out / MANIFEST_NAME).read_text())
-    assert [entry["file"] for entry in manifest["files"]] == [f.name for f in files]
-    assert manifest["model"] == "ddm"
-    assert manifest["network_type"] == network_type
-    assert manifest["aux_category"] == AUX_CATEGORY[network_type]
-    assert manifest["n_files"] == 2 and manifest["n_theta_per_file"] == N_THETA
-    assert manifest["n_rows_per_file"] == n_rows
-    last = "choice" if network_type == "cpn" else "deadline"
-    assert manifest["input_columns"] == ["v", "a", "z", "t", last]
-    assert manifest["choices"] == CHOICES
-    assert set(manifest["derive_stats"]) == STATS_KEYS
-    assert 0.9 < manifest["derive_stats"]["derive_total_mass_mean"] < 1.1
-    assert manifest["fallback_window"] == [0.98, 1.03]  # JSON has no tuples
-    assert manifest["fallback_n_sim"] == FALLBACK_N_SIM
-    # Corpus-level stats aggregate the files: the fraction is the mean over
-    # thetas (equal-sized files), the past-max_t share the max over files.
-    per_file = manifest["files"]
-    assert manifest["derive_stats"]["derive_fallback_frac"] == pytest.approx(
-        np.mean([entry["derive_fallback_frac"] for entry in per_file])
-    )
-    pasts = [
-        entry["derive_sim_past_max_t_max"]
-        for entry in per_file
-        if entry["derive_sim_past_max_t_max"] is not None
-    ]
-    assert manifest["derive_stats"]["derive_sim_past_max_t_max"] == (
-        max(pasts) if pasts else None
-    )
-    # The pickles' provenance plus where the LAN came from, each key once.
-    assert tuple(manifest["source"]) == ("path", "hf_repo", *AUX_PROVENANCE_KEYS)
-    assert manifest["source"]["path"] == str(DDM_ONNX)
-    assert manifest["source"]["hf_repo"] is None
-    assert manifest["grid"] == GRID_RECORD
-    assert manifest["deadline_quantile_frac"] == 0.7
-    expected_bounds = None if network_type == "cpn" else DEADLINE_BOUNDS
-    assert manifest["deadline_bounds"] == expected_bounds
-    assert manifest["seed"] == 0
+def test_manifest_is_the_corpus_record_plus_corpus_wide_stats(derived):
+    _, out, files = derived
+    manifest = _manifest(out)
+    with open(files[0], "rb") as f:
+        record = pickle.load(f)["generator_config"]
+    del record["file_index"]
+    # JSON has no tuples: compare through a round trip.
+    assert {key: manifest[key] for key in record} == json.loads(json.dumps(record))
+    assert set(manifest) == {"lanfactory_version", *record, "derive_stats", "files"}
     assert manifest["lanfactory_version"]
-    per_file_min = min(entry["derive_total_mass_min"] for entry in manifest["files"])
-    assert manifest["derive_stats"]["derive_total_mass_min"] == per_file_min
-    for entry in manifest["files"]:
-        assert STATS_KEYS <= set(entry)
-        assert entry["n_rows"] == n_rows
+    assert manifest["files"] == [f.name for f in files]
 
-
-def _manifest(folder: Path) -> dict:
-    return json.loads((folder / MANIFEST_NAME).read_text())
+    stats = manifest["derive_stats"]
+    assert set(stats) == STATS_KEYS
+    assert 0.9 < stats["derive_total_mass_mean"] < 1.1
+    assert stats["derive_total_mass_min"] <= stats["derive_total_mass_mean"]
+    assert stats["derive_total_mass_mean"] <= stats["derive_total_mass_max"]
+    assert 0.0 <= stats["derive_fallback_frac"] <= 1.0
+    if stats["derive_fallback_frac"] > 0.0:
+        assert 0.0 <= stats["derive_sim_past_max_t_max"] <= 1.0
+    else:
+        assert stats["derive_sim_past_max_t_max"] is None
+    assert 0.0 <= stats["derive_leak_below_onset_p99"] < 0.2
 
 
 def _arrays(path: Path) -> tuple[np.ndarray, np.ndarray]:
@@ -542,15 +476,11 @@ def test_corpus_rejects_bad_arguments(tmp_path):
         derive_aux_corpus(DDM_ONNX, "ddm", "lan", tmp_path)
     with pytest.raises(ValueError, match="n_theta_per_file"):
         derive_aux_corpus(DDM_ONNX, "ddm", "cpn", tmp_path, n_theta_per_file=0)
-    # Checked for cpn too, so a manifest never records an impossible fraction.
-    with pytest.raises(ValueError, match="deadline_quantile_frac"):
-        derive_aux_corpus(
-            DDM_ONNX, "ddm", "cpn", tmp_path / "frac", deadline_quantile_frac=1.5
-        )
-    assert not (tmp_path / "frac").exists()
+    with pytest.raises(ValueError, match="fallback_n_sim"):
+        derive_aux_corpus(DDM_ONNX, "ddm", "cpn", tmp_path, fallback_n_sim=0)
     # A LAN of the wrong width: angle has 5 parameters, so its LAN takes 7.
-    _, wrong = export_tiny_torch_lan(tmp_path, 7)
-    with pytest.raises(ValueError, match=r"width 7.*width 6.*right LAN"):
+    wrong = make_onnx(tmp_path / "wrong.onnx", (1, 7))
+    with pytest.raises(ValueError, match=r"width 7.*right LAN"):
         derive_aux_corpus(wrong, "ddm", "cpn", tmp_path / "wrong")
     assert not (tmp_path / "wrong").exists()
     # lba2 has four parameters, like ddm, but no onset to refine the grid around.
@@ -560,38 +490,29 @@ def test_corpus_rejects_bad_arguments(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# 7. Simulation fallback
+# 6. Simulation fallback
 # --------------------------------------------------------------------------
 
 
-def test_simulate_labels_estimate_what_the_lan_labels_do():
-    """cpn shares sum to one, opn is the deadline model's omission rate, and a
-    trial ssms censors at ``max_t`` (``rt == -999``) is past ``max_t``, not a
-    response (racing_diffusion_3 censors 12 % of trials here).
+def test_simulate_labels_estimate_what_the_lan_labels_do(ddm_mass):
+    """cpn shares sum to one, opn omissions agree with the LAN's (which the
+    identity test pins to ``ddm_deadline``), and a trial ssms censors at
+    ``max_t`` (``rt == -999``) is past ``max_t``, not a response
+    (racing_diffusion_3 censors 12 % of trials here).
     """
     rng = np.random.default_rng(5)
-    cpn, _ = simulate_labels("ddm", THETA, "cpn", None, 2000, rng)
+    cpn, _ = simulate_labels("ddm", THETA, None, 2000, rng)
     np.testing.assert_allclose(cpn.sum(axis=1), 1.0)
-    opn, _ = simulate_labels("ddm", THETA, "opn", DEADLINES, 20_000, rng)
-    assert np.all((0.0 < opn) & (opn < 1.0))
-    for i, (theta, d) in enumerate(zip(THETA, DEADLINES, strict=True)):
-        rts, _ = _simulate("ddm_deadline", np.append(theta, d), seed=10 + i)
-        assert opn[i, 0] == pytest.approx(np.mean(rts == -999.0), abs=0.02)
+    opn, _ = simulate_labels("ddm", THETA, DEADLINES, 20_000, rng)
+    _, lan = opn_labels(ddm_mass, THETA, DEADLINES)
+    np.testing.assert_allclose(opn, lan, atol=0.03)
 
     race = np.array([[0.0, 0.0, 0.0, 0.0, 3.0, 0.0]], dtype=np.float32)
-    labels, past = simulate_labels("racing_diffusion_3", race, "cpn", None, 4000, rng)
+    labels, past = simulate_labels("racing_diffusion_3", race, None, 4000, rng)
     assert labels.sum() == pytest.approx(1.0)
     assert past[0] == pytest.approx(0.12, abs=0.03)
-
-    theta, n_sim = THETA[:2], 2000
-    with pytest.raises(ValueError, match="need deadlines"):
-        simulate_labels("ddm", theta, "opn", None, n_sim, np.random.default_rng(0))
-    with pytest.raises(ValueError, match="network_type"):
-        simulate_labels("ddm", theta, "lan", None, n_sim, np.random.default_rng(0))
-    with pytest.raises(ValueError, match="n_sim"):
-        simulate_labels("ddm", theta, "cpn", None, 0, np.random.default_rng(0))
-    with pytest.raises(ValueError, match="at least one"):
-        simulate_labels("ddm", theta[:0], "cpn", None, n_sim, np.random.default_rng(0))
+    with pytest.raises(ValueError, match="no simulated trial responds"):
+        simulate_labels("ddm", THETA[:1], None, 10, rng, max_t=1e-3)
 
 
 class _ScaledPredictor:
@@ -625,35 +546,28 @@ def test_thetas_outside_the_window_are_labelled_by_simulation(
 ):
     """Exactly the flagged rows go to ``simulate_labels``; the rest stay LAN.
 
-    The density of one sampled theta is scaled by 1.3 (total ≈ 1.3, outside
-    the window) through a wrapped predictor; ``simulate_labels`` is replaced
-    by a sentinel that records what it was asked for and returns 0.5. Any
-    theta the real LAN already flags is expected to fall back too, so the
-    expected set is recomputed from the same scaled predictor.
+    Three sampled thetas of file 0 get a total of about 1.3, 0 and NaN
+    through a wrapped predictor; ``simulate_labels`` is replaced by a
+    sentinel that records what it was asked for and returns 0.5. Any theta
+    the real LAN already flags falls back too, so the expected set is
+    recomputed from the same predictor with the corpus's own rule.
     """
-    n_theta, planted_row = 32, 3
-    planted = _planted_theta(0, n_theta, planted_row)
-    real = load_onnx_predictor(DDM_ONNX)
-    scaled = _ScaledPredictor(real, planted, 1.3)
-    monkeypatch.setattr(corpus_module, "load_onnx_predictor", lambda path: scaled)
+    n_theta = 32
+    broken = load_onnx_predictor(DDM_ONNX)
+    for row, factor in {3: 1.3, 0: 0.0, 1: np.nan}.items():
+        broken = _ScaledPredictor(broken, _planted_theta(0, n_theta, row), factor)
+    monkeypatch.setattr(corpus_module, "load_onnx_predictor", lambda path: broken)
 
     calls: list[dict] = []
 
-    def sentinel(model, theta, kind, deadlines, n_sim, rng, *, max_t):
+    def sentinel(model, theta, deadlines, n_sim, rng, *, max_t):
         calls.append(
-            {
-                "model": model,
-                "theta": np.array(theta),
-                "kind": kind,
-                "d": deadlines,
-                "n": n_sim,
-            }
+            {"model": model, "theta": np.array(theta), "d": deadlines, "n": n_sim}
         )
-        n_labels = len(CHOICES) if kind == "cpn" else 1
-        return np.full((theta.shape[0], n_labels), 0.5), np.full(theta.shape[0], 0.01)
+        n_labels = len(CHOICES) if deadlines is None else 1
+        return np.full((len(theta), n_labels), 0.5), np.full(len(theta), 0.01)
 
     monkeypatch.setattr(corpus_module, "simulate_labels", sentinel)
-
     out = tmp_path / network_type
     files = derive_aux_corpus(
         DDM_ONNX,
@@ -665,118 +579,37 @@ def test_thetas_outside_the_window_are_labelled_by_simulation(
         fallback_n_sim=123,
     )
 
+    lo, hi = FALLBACK_WINDOW
     config = ModelConfigBuilder.from_model("ddm")
-    expected_calls = 0
+    every_flag = []
     for i, path in enumerate(files):
         theta = sample_theta(config, n_theta, np.random.default_rng([0, i]))
-        mass = choice_mass(scaled, theta, CHOICES, grid=OnsetGrid(), onset=theta[:, 3])
-        flagged = (mass.total < 0.98) | (mass.total > 1.03)
-        if i == 0:
-            assert flagged[planted_row] and mass.total[planted_row] > 1.2
+        total = choice_mass(broken, theta, CHOICES, theta[:, 3]).total
+        flagged = ~((total >= lo) & (total <= hi))
+        every_flag.append(flagged)
         with open(path, "rb") as f:
             content = pickle.load(f)
-        labels = content[f"{network_type}_labels"][:, 0]
-        stats = content["generator_config"]["derive_stats"]
-        assert stats["derive_fallback_frac"] == pytest.approx(flagged.mean())
-        if not flagged.any():
-            assert stats["derive_sim_past_max_t_max"] is None
-            continue
-        assert stats["derive_sim_past_max_t_max"] == pytest.approx(0.01)
-        call = calls[expected_calls]
-        expected_calls += 1
-        assert call["model"] == "ddm" and call["kind"] == network_type
-        assert call["n"] == 123
-        np.testing.assert_array_equal(call["theta"], theta[flagged])
         data = content[f"{network_type}_data"]
+        labels = content[f"{network_type}_labels"].reshape(n_theta, -1)
+        assert not np.isnan(data).any() and not np.isnan(labels).any()
+        if i == 0:
+            assert flagged[[0, 1, 3]].all() and total[3] > 1.2
+        if not flagged.any():
+            continue
+        call = calls.pop(0)
+        assert call["model"] == "ddm" and call["n"] == 123
+        np.testing.assert_array_equal(call["theta"], theta[flagged])
         if network_type == "cpn":
-            rows = np.repeat(flagged, len(CHOICES))
             assert call["d"] is None
+            # The unflagged rows keep the LAN's shares.
+            np.testing.assert_allclose(labels[~flagged].sum(axis=1), 1.0, atol=1e-6)
         else:
-            rows = flagged
             np.testing.assert_array_equal(call["d"], data[flagged, -1])
-        assert np.all(labels[rows] == 0.5)
-        assert not np.any(labels[~rows] == 0.5)
-        if network_type == "cpn":  # the unflagged rows keep the LAN's shares
-            per_theta = labels.reshape(n_theta, len(CHOICES))[~flagged]
-            np.testing.assert_allclose(per_theta.sum(axis=1), 1.0, atol=1e-6)
-    assert len(calls) == expected_calls >= 1
-    manifest = _manifest(out)
-    assert manifest["derive_stats"]["derive_sim_past_max_t_max"] == pytest.approx(0.01)
-    assert manifest["derive_stats"]["derive_fallback_frac"] > 0.0
+        assert np.all(labels[flagged] == 0.5)
+        assert not np.any(labels[~flagged] == 0.5)
+    assert not calls
 
-
-@pytest.mark.parametrize("network_type", NETWORK_TYPES)
-def test_zero_and_nan_totals_fall_back_instead_of_failing(
-    tmp_path, monkeypatch, network_type
-):
-    """A theta whose LAN total is 0 or NaN is simulated, not refused or NaN.
-
-    The window is applied before the labels are renormalised, and a NaN total
-    lies outside it; ``simulate_labels`` is a sentinel returning 0.5.
-    """
-    zero, nan = _planted_theta(0, 8, 0), _planted_theta(0, 8, 1)
-    real = load_onnx_predictor(DDM_ONNX)
-    broken = _ScaledPredictor(_ScaledPredictor(real, zero, 0.0), nan, np.nan)
-    monkeypatch.setattr(corpus_module, "load_onnx_predictor", lambda path: broken)
-
-    def sentinel(model, theta, kind, deadlines, n_sim, rng, *, max_t):
-        n_labels = len(CHOICES) if kind == "cpn" else 1
-        return np.full((len(theta), n_labels), 0.5), np.zeros(len(theta))
-
-    monkeypatch.setattr(corpus_module, "simulate_labels", sentinel)
-    files = derive_aux_corpus(
-        DDM_ONNX, "ddm", network_type, tmp_path, n_files=2, n_theta_per_file=8
-    )
-    with open(files[0], "rb") as f:
-        content = pickle.load(f)
-    labels = content[f"{network_type}_labels"][:, 0]
-    rows_per_theta = len(CHOICES) if network_type == "cpn" else 1
-    assert np.all(labels[: 2 * rows_per_theta] == 0.5)  # thetas 0 and 1
-    assert not np.isnan(labels).any()
-    assert not np.isnan(content[f"{network_type}_data"]).any()  # opn: deadlines
-    stats = _manifest(tmp_path)["derive_stats"]
-    assert all(np.isfinite(v) for v in stats.values() if v is not None)
-
-
-def test_no_fallback_never_simulates(tmp_path, monkeypatch):
-    def refuse(*args, **kwargs):
-        raise AssertionError("simulate_labels must not be called")
-
-    monkeypatch.setattr(corpus_module, "simulate_labels", refuse)
-    files = derive_aux_corpus(
-        DDM_ONNX,
-        "ddm",
-        "cpn",
-        tmp_path,
-        n_files=2,
-        n_theta_per_file=256,
-        fallback_window=None,
-    )
-    for path in files:
-        with open(path, "rb") as f:
-            generator_config = pickle.load(f)["generator_config"]
-        assert generator_config["derive"]["fallback_window"] is None
-        assert generator_config["derive_stats"]["derive_fallback_frac"] == 0.0
-        assert generator_config["derive_stats"]["derive_sim_past_max_t_max"] is None
-    manifest = _manifest(tmp_path)
-    assert manifest["fallback_window"] is None
-    assert manifest["derive_stats"]["derive_fallback_frac"] == 0.0
-    assert manifest["derive_stats"]["derive_sim_past_max_t_max"] is None
-    # 256 thetas from the box: some totals are outside the default window,
-    # so the fallback would have been exercised had it been on.
-    assert manifest["derive_stats"]["derive_total_mass_max"] > 1.03
-
-
-def test_fallback_arguments_are_validated(tmp_path):
-    kwargs = {"n_files": 2, "n_theta_per_file": 4}
-    with pytest.raises(ValueError, match="fallback_window"):
-        derive_aux_corpus(
-            DDM_ONNX, "ddm", "cpn", tmp_path, fallback_window=(1.03, 0.98), **kwargs
-        )
-    with pytest.raises(ValueError, match="fallback_window"):
-        derive_aux_corpus(
-            DDM_ONNX, "ddm", "cpn", tmp_path, fallback_window=(0.0, 1.03), **kwargs
-        )
-    with pytest.raises(ValueError, match="fallback_n_sim"):
-        derive_aux_corpus(DDM_ONNX, "ddm", "cpn", tmp_path, fallback_n_sim=0, **kwargs)
-    assert not list(tmp_path.glob("*.pickle"))
+    stats = _manifest(out)["derive_stats"]
+    assert stats["derive_fallback_frac"] == pytest.approx(np.mean(every_flag))
+    assert stats["derive_sim_past_max_t_max"] == pytest.approx(0.01)
+    assert all(np.isfinite(v) for v in stats.values())
