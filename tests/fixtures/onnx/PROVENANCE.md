@@ -20,7 +20,6 @@ copied unchanged from the Hugging Face Hub.
 | Output | `(1, 1)` log-likelihood |
 | Model | ssms `ddm`; params `v, a, z, t`; choices `[-1, 1]` |
 
-Used by `tests/derive` to check that the masses `lanfactory.derive` integrates
-from a real LAN match ssms simulations, and to exercise `derive_aux_corpus` and
-the `derive-aux` CLI on a production network. The file is a fixture: never
-modify it in place — replace it and update this table.
+Used by `tests/derive` to exercise `lanfactory.derive` on a production network.
+The file is a fixture: never modify it in place — replace it and update this
+table.

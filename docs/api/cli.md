@@ -139,11 +139,9 @@ The option names follow the Hub commands.
 | `--output-folder PATH` | required | Destination folder; created if absent |
 | `--n-files INTEGER` | `100` | Number of pickles to write; at least 2 |
 | `--n-theta-per-file INTEGER` | `4096` | Parameter vectors per file; rows per file for `opn`, times the number of choices for `cpn` |
-| `--deadline-quantile-frac FLOAT` | `0.7` | Share of `opn` deadlines drawn from the LAN's own RT quantiles; the rest are uniform on the deadline bounds |
-| `--seed INTEGER` | `0` | Base seed; file `i` is generated from `[seed, i]`, and the fallback's simulator seeds are drawn from the same generator |
+| `--seed INTEGER` | `0` | Base seed; each file depends only on it and its index |
 | `--source-run-uuid TEXT` | parsed from the filename | Training run uuid recorded in the provenance |
-| `--source-hf-repo TEXT` | unset | Hub repository the LAN was downloaded from |
-| `--source-hf-revision TEXT` | unset | Hub revision of that download, recorded as `source_lan_hf_commit` |
+| `--source-hf-revision TEXT` | unset | Hub revision the LAN was downloaded at, recorded as `source_lan_hf_commit` |
 
 For task-oriented workflows, see [Track training with MLflow](../using_mlflow.md)
 and [Share trained networks on Hugging Face Hub](../using_huggingface.md). The

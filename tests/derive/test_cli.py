@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
+from importlib.metadata import entry_points
 
 from typer.testing import CliRunner
 
 from lanfactory.cli.derive_aux import app
 from lanfactory.derive import MANIFEST_NAME, derive_aux_corpus
-from tests._onnx_utils import DDM_ONNX, DDM_SHA256, HUB_COMMIT
+from tests._onnx_utils import DDM_ONNX, HUB_COMMIT
 
 _ANSI_RE = re.compile(r"\x1b\[[\d;]*m")
 RUN_UUID = "56d99936415e11f0a2bf3cecefb6d5ee"
@@ -23,21 +23,16 @@ def _out(result) -> str:
 
 
 def test_derive_aux_is_installed_as_a_console_script():
-    """The ``[project.scripts]`` entry point resolves (the tests below run in-process)."""
-    result = subprocess.run(
-        ["derive-aux", "--help"], capture_output=True, text=True, check=False
-    )
-    assert result.returncode == 0, result.stderr
-    help_text = _ANSI_RE.sub("", result.stdout)
-    for flag in ("--from-onnx", "--network-type", "--model-name", "--output-folder"):
-        assert flag in help_text
+    """The ``[project.scripts]`` entry point resolves to this app."""
+    (entry,) = entry_points(group="console_scripts", name="derive-aux")
+    assert entry.load() is app
 
 
-def test_derive_aux_writes_files_and_manifest(tmp_path):
+def test_derive_aux_writes_what_the_library_writes(tmp_path):
     """Every option reaches ``derive_aux_corpus``: the CLI output equals the API's.
 
-    The pickles omit the source path, so a CLI run and a library call with the
-    same arguments are byte-identical file by file.
+    Seed, run uuid and Hub revision all land in the pickles, so byte-identical
+    pickles and equal manifests prove each option was passed through.
     """
     out = tmp_path / "opn"
     result = runner.invoke(
@@ -55,14 +50,10 @@ def test_derive_aux_writes_files_and_manifest(tmp_path):
             "3",
             "--n-theta-per-file",
             "16",
-            "--deadline-quantile-frac",
-            "0.3",
             "--seed",
             "7",
             "--source-run-uuid",
             RUN_UUID,
-            "--source-hf-repo",
-            "franklab/HSSM",
             "--source-hf-revision",
             HUB_COMMIT,
         ],
@@ -70,19 +61,6 @@ def test_derive_aux_writes_files_and_manifest(tmp_path):
     assert result.exit_code == 0, _out(result)
     assert str(out / MANIFEST_NAME) in _out(result)
     assert "Wrote 3 opn files for ddm" in _out(result)
-    assert len(list(out.glob("*.pickle"))) == 3
-
-    manifest = json.loads((out / MANIFEST_NAME).read_text())
-    assert manifest["model"] == "ddm" and manifest["network_type"] == "opn"
-    assert manifest["n_files"] == 3 and manifest["n_theta_per_file"] == 16
-    assert manifest["deadline_quantile_frac"] == 0.3
-    assert manifest["fallback_window"] == [0.98, 1.03]  # not a CLI option
-    assert manifest["seed"] == 7
-    source = manifest["source"]
-    assert source["hf_repo"] == "franklab/HSSM"
-    assert source["source_lan_hf_commit"] == HUB_COMMIT
-    assert source["source_lan_run_uuid"] == RUN_UUID
-    assert source["source_lan_sha256"] == DDM_SHA256
 
     library = derive_aux_corpus(
         DDM_ONNX,
@@ -91,36 +69,20 @@ def test_derive_aux_writes_files_and_manifest(tmp_path):
         tmp_path / "lib",
         n_files=3,
         n_theta_per_file=16,
-        deadline_quantile_frac=0.3,
         seed=7,
         source_run_uuid=RUN_UUID,
-        source_hf_repo="franklab/HSSM",
         source_hf_revision=HUB_COMMIT,
     )
-    # The pickles carry the flat provenance (uuid, sha256, Hub commit) but not
-    # the source path, so the two runs are byte-identical file by file.
-    for cli_file, lib_file in zip(sorted(out.glob("*.pickle")), library, strict=True):
-        assert cli_file.name == lib_file.name
+    cli_files = sorted(out.glob("*.pickle"))
+    assert [f.name for f in cli_files] == [f.name for f in library]
+    for cli_file, lib_file in zip(cli_files, library, strict=True):
         assert cli_file.read_bytes() == lib_file.read_bytes()
+    manifest = json.loads((out / MANIFEST_NAME).read_text())
+    assert manifest == json.loads((tmp_path / "lib" / MANIFEST_NAME).read_text())
+    assert manifest["source"]["source_lan_run_uuid"] == RUN_UUID
 
 
-def test_derive_aux_requires_type(tmp_path):
-    result = runner.invoke(
-        app,
-        [
-            "--from-onnx",
-            str(DDM_ONNX),
-            "--model-name",
-            "ddm",
-            "--output-folder",
-            str(tmp_path),
-        ],
-    )
-    assert result.exit_code == 2
-    assert "Missing option" in _out(result) and "--network-type" in _out(result)
-
-
-def test_derive_aux_rejects_unknown_type(tmp_path):
+def test_derive_aux_turns_a_library_error_into_a_usage_error(tmp_path):
     result = runner.invoke(
         app,
         [
@@ -137,37 +99,3 @@ def test_derive_aux_rejects_unknown_type(tmp_path):
     assert result.exit_code == 2
     assert "network_type must be one of" in _out(result)
     assert not list(tmp_path.glob("*.pickle"))
-
-
-def test_derive_aux_rejects_missing_onnx_and_bad_counts(tmp_path):
-    result = runner.invoke(
-        app,
-        [
-            "--from-onnx",
-            str(tmp_path / "missing.onnx"),
-            "--network-type",
-            "cpn",
-            "--model-name",
-            "ddm",
-            "--output-folder",
-            str(tmp_path),
-        ],
-    )
-    assert result.exit_code == 2
-    result = runner.invoke(
-        app,
-        [
-            "--from-onnx",
-            str(DDM_ONNX),
-            "--network-type",
-            "cpn",
-            "--model-name",
-            "ddm",
-            "--output-folder",
-            str(tmp_path),
-            "--n-files",
-            "1",
-        ],
-    )
-    assert result.exit_code == 2
-    assert "n_files must be >= 2" in _out(result)

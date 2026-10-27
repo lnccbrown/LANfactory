@@ -56,25 +56,16 @@ def main(
         help="Parameter vectors per file (rows per file for opn; "
         "times the number of choices for cpn).",
     ),
-    deadline_quantile_frac: float = typer.Option(
-        0.7,
-        "--deadline-quantile-frac",
-        help="Share of opn deadlines drawn from the LAN's own RT quantiles; "
-        "the rest are uniform on the deadline bounds.",
-    ),
     seed: int = typer.Option(0, "--seed", help="Base random seed."),
     source_run_uuid: str = typer.Option(
         None,
         "--source-run-uuid",
         help="Training run uuid of the LAN (parsed from the filename when absent).",
     ),
-    source_hf_repo: str = typer.Option(
-        None, "--source-hf-repo", help="Hub repository the LAN was downloaded from."
-    ),
     source_hf_revision: str = typer.Option(
         None,
         "--source-hf-revision",
-        help="Hub revision (commit, tag, or branch) of that download.",
+        help="Hub revision (commit, tag, or branch) the LAN was downloaded at.",
     ),
 ):
     """Derive a cpn / opn training corpus from a trained LAN.
@@ -96,10 +87,8 @@ def main(
             output_folder,
             n_files=n_files,
             n_theta_per_file=n_theta_per_file,
-            deadline_quantile_frac=deadline_quantile_frac,
             seed=seed,
             source_run_uuid=source_run_uuid,
-            source_hf_repo=source_hf_repo,
             source_hf_revision=source_hf_revision,
         )
     except ValueError as e:
