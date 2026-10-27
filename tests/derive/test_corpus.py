@@ -27,7 +27,6 @@ from lanfactory.derive import (
     NETWORK_TYPES,
     ChoiceMass,
     OnsetGrid,
-    SourceLAN,
     choice_mass,
     cpn_labels,
     derive_aux_corpus,
@@ -38,6 +37,7 @@ from lanfactory.derive import (
     simulate_labels,
 )
 from lanfactory.derive import corpus as corpus_module
+from lanfactory.derive.corpus import _provenance, _sha256
 from lanfactory.trainers.torch_mlp import DatasetTorch
 from tests._onnx_utils import export_tiny_torch_lan
 from tests.derive.conftest import DDM_ONNX, DDM_SHA256
@@ -65,16 +65,17 @@ THETA = np.array(
 # (roughly 30-60 %) rather than pinned at 0 or 1.
 DEADLINES = np.array([1.5, 1.3, 2.0, 1.5, 2.0])
 N_SIM = 100_000
-PROVENANCE_KEYS = {
+# The provenance keys LAN_pipeline_minimal's publish step requires
+# (AUX_PROVENANCE_KEYS in publish/publish_network.py), copied, not imported.
+AUX_PROVENANCE_KEYS = (
     "derivation_method",
     "aux_category",
     "source_lan_run_uuid",
     "source_lan_sha256",
     "source_lan_hf_commit",
-    "source_lan_run_id",
     "integration_grid",
     "integration_max_t",
-}
+)
 STATS_KEYS = {
     "derive_total_mass_mean",
     "derive_total_mass_min",
@@ -115,7 +116,7 @@ def _simulate(model: str, theta: np.ndarray, seed: int) -> tuple[np.ndarray, ...
 
 def test_fixture_is_the_production_ddm_lan():
     """The on-disk file is the pinned production network."""
-    assert SourceLAN.from_onnx(DDM_ONNX).sha256 == DDM_SHA256
+    assert _sha256(DDM_ONNX) == DDM_SHA256
     assert load_onnx_predictor(DDM_ONNX).input_width == 6
 
 
@@ -333,42 +334,31 @@ def test_sample_deadlines_covers_the_box_and_concentrates(box_mass):
 
 
 # --------------------------------------------------------------------------
-# 5. SourceLAN
+# 5. Provenance
 # --------------------------------------------------------------------------
 
 
-def test_source_lan_hashes_and_parses_run_uuid(tmp_path):
-    bare = SourceLAN.from_onnx(DDM_ONNX)
-    assert bare.sha256 == DDM_SHA256 and bare.run_uuid is None
-    assert bare.hf_repo is None and bare.hf_revision is None
-
-    run_uuid = "56d99936415e11f0a2bf3cecefb6d5ee"
-    torch_style = tmp_path / f"ddm_lan_{run_uuid}_model.onnx"
-    jax_style = tmp_path / f"{run_uuid}_lan_ddm__model.onnx"  # jaxtrain's spelling
-    shutil.copy(DDM_ONNX, torch_style)
-    shutil.copy(DDM_ONNX, jax_style)
-    assert SourceLAN.from_onnx(torch_style).run_uuid == run_uuid
-    assert SourceLAN.from_onnx(jax_style).run_uuid == run_uuid
-    assert SourceLAN.from_onnx(torch_style, run_uuid="explicit").run_uuid == "explicit"
-    # The parsed uuid reaches the provenance record under its contract key.
-    parsed = SourceLAN.from_onnx(torch_style).provenance("cpn", OnsetGrid())
-    assert parsed["source_lan_run_uuid"] == run_uuid
-    assert parsed["aux_category"] == "choice"
-
-    hub = SourceLAN.from_onnx(DDM_ONNX, hf_repo="franklab/HSSM", hf_revision="abc")
-    record = hub.provenance("opn", OnsetGrid(max_t=15.0))
-    assert set(record) == PROVENANCE_KEYS
+def test_provenance_hashes_and_parses_run_uuid(tmp_path):
+    record = _provenance(DDM_ONNX, "opn", OnsetGrid(max_t=15.0), None, "abc")
+    assert tuple(record) == AUX_PROVENANCE_KEYS
     assert record["derivation_method"] == DERIVATION_METHOD == "derived-from-lan"
     assert record["aux_category"] == "omission"
     assert record["source_lan_run_uuid"] is None  # a bare ddm.onnx has no uuid
     assert record["source_lan_sha256"] == DDM_SHA256
     assert record["source_lan_hf_commit"] == "abc"
-    assert record["source_lan_run_id"] is None
     assert record["integration_grid"] == 1160
     assert record["integration_max_t"] == 15.0
     assert AUX_CATEGORY == {"cpn": "choice", "opn": "omission"}
-    with pytest.raises(ValueError, match="network_type"):
-        hub.provenance("lan", OnsetGrid())
+
+    run_uuid = "56d99936415e11f0a2bf3cecefb6d5ee"
+    torch_style = tmp_path / f"ddm_lan_{run_uuid}_model.onnx"
+    jax_style = tmp_path / f"{run_uuid}_lan_ddm__model.onnx"  # jaxtrain's spelling
+    for path in (torch_style, jax_style):
+        shutil.copy(DDM_ONNX, path)
+        parsed = _provenance(path, "cpn", OnsetGrid(), None, None)
+        assert parsed["source_lan_run_uuid"] == run_uuid
+    explicit = _provenance(torch_style, "cpn", OnsetGrid(), "explicit", None)
+    assert explicit["source_lan_run_uuid"] == "explicit"
 
 
 # --------------------------------------------------------------------------
@@ -432,7 +422,7 @@ def test_pickle_carries_the_contract_keys(derived):
     assert generator_config["n_files"] == 2
     assert generator_config["n_theta_per_file"] == N_THETA
     assert generator_config["file_index"] == 1
-    assert set(generator_config["source"]) == PROVENANCE_KEYS
+    assert tuple(generator_config["source"]) == AUX_PROVENANCE_KEYS
     assert generator_config["source"]["aux_category"] == AUX_CATEGORY[network_type]
     assert generator_config["source"]["source_lan_sha256"] == DDM_SHA256
     assert generator_config["source"]["source_lan_run_uuid"] is None
@@ -509,10 +499,10 @@ def test_manifest_lists_the_files(derived):
     assert manifest["derive_stats"]["derive_sim_past_max_t_max"] == (
         max(pasts) if pasts else None
     )
-    assert PROVENANCE_KEYS <= set(manifest["source"])
+    # The pickles' provenance plus where the LAN came from, each key once.
+    assert tuple(manifest["source"]) == ("path", "hf_repo", *AUX_PROVENANCE_KEYS)
     assert manifest["source"]["path"] == str(DDM_ONNX)
-    assert manifest["source"]["sha256"] == manifest["source"]["source_lan_sha256"]
-    assert manifest["source"]["run_uuid"] is None
+    assert manifest["source"]["hf_repo"] is None
     assert manifest["grid"] == GRID_RECORD
     assert manifest["deadline_quantile_frac"] == 0.7
     expected_bounds = None if network_type == "cpn" else DEADLINE_BOUNDS

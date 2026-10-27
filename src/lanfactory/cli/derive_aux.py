@@ -15,12 +15,7 @@ from pathlib import Path
 
 import typer
 
-from lanfactory.derive import (
-    MANIFEST_NAME,
-    NETWORK_TYPES,
-    SourceLAN,
-    derive_aux_corpus,
-)
+from lanfactory.derive import MANIFEST_NAME, NETWORK_TYPES, derive_aux_corpus
 
 app = typer.Typer()
 
@@ -93,12 +88,6 @@ def main(
         derive-aux --from-onnx ddm.onnx --network-type cpn --model-name ddm
         --output-folder data/cpn/ddm
     """
-    source = SourceLAN.from_onnx(
-        from_onnx,
-        run_uuid=source_run_uuid,
-        hf_repo=source_hf_repo,
-        hf_revision=source_hf_revision,
-    )
     try:
         files = derive_aux_corpus(
             from_onnx,
@@ -109,7 +98,9 @@ def main(
             n_theta_per_file=n_theta_per_file,
             deadline_quantile_frac=deadline_quantile_frac,
             seed=seed,
-            source=source,
+            source_run_uuid=source_run_uuid,
+            source_hf_repo=source_hf_repo,
+            source_hf_revision=source_hf_revision,
         )
     except ValueError as e:
         raise typer.BadParameter(str(e)) from e

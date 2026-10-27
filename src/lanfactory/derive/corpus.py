@@ -42,7 +42,7 @@ import json
 import pickle
 import re
 from collections.abc import Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from pathlib import Path
 
 import numpy as np
@@ -65,7 +65,6 @@ __all__ = [
     "DERIVATION_METHOD",
     "MANIFEST_NAME",
     "NETWORK_TYPES",
-    "SourceLAN",
     "cpn_labels",
     "derive_aux_corpus",
     "opn_labels",
@@ -445,102 +444,30 @@ def _run_uuid_from_name(path: Path) -> str | None:
     return None
 
 
-@dataclass(frozen=True)
-class SourceLAN:
-    """Identity of the LAN a corpus was derived from.
+def _provenance(
+    onnx_path: Path,
+    network_type: str,
+    grid: OnsetGrid,
+    run_uuid: str | None,
+    hf_revision: str | None,
+) -> dict:
+    """The flat provenance record downstream tools read by key.
 
-    Build with :meth:`from_onnx`. Attributes are what a downstream consumer
-    needs to find the exact network again: the file hash always, the
-    trainer's run uuid and the Hub coordinates when known.
-
-    Attributes
-    ----------
-    path : Path
-        The ONNX artifact the masses came from.
-    sha256 : str
-        Hex digest of the file, computed by streaming it.
-    run_uuid : str | None
-        The training run's uuid, parsed from the trainer's filename
-        conventions when present.
-    hf_repo : str | None
-        Hub repository the artifact was downloaded from, if any.
-    hf_revision : str | None
-        Hub revision (commit, tag, or branch) of that download, if any.
+    ``source_lan_run_uuid`` is ``run_uuid``, parsed from the trainer's file
+    name when ``None``; ``integration_grid`` is the number of grid points per
+    parameter vector.
     """
-
-    path: Path
-    sha256: str
-    run_uuid: str | None = None
-    hf_repo: str | None = None
-    hf_revision: str | None = None
-
-    @classmethod
-    def from_onnx(
-        cls,
-        path: str | Path,
-        *,
-        run_uuid: str | None = None,
-        hf_repo: str | None = None,
-        hf_revision: str | None = None,
-    ) -> SourceLAN:
-        """Hash an ONNX file and record where it came from.
-
-        Parameters
-        ----------
-        path
-            The ONNX artifact.
-        run_uuid
-            Training run uuid; parsed from the filename when omitted.
-        hf_repo
-            Hub repository, if the artifact was downloaded.
-        hf_revision
-            Hub revision of that download.
-
-        Returns
-        -------
-        SourceLAN
-        """
-        path = Path(path)
-        return cls(
-            path=path,
-            sha256=_sha256(path),
-            run_uuid=run_uuid if run_uuid is not None else _run_uuid_from_name(path),
-            hf_repo=hf_repo,
-            hf_revision=hf_revision,
-        )
-
-    def provenance(self, network_type: str, grid: OnsetGrid) -> dict:
-        """The flat provenance record other tools read by key.
-
-        Parameters
-        ----------
-        network_type
-            One of :data:`NETWORK_TYPES`; selects ``aux_category``.
-        grid
-            The integration grid the masses were computed on.
-
-        Returns
-        -------
-        dict
-            Exactly the keys ``derivation_method``, ``aux_category``,
-            ``source_lan_run_uuid``, ``source_lan_sha256``,
-            ``source_lan_hf_commit``, ``source_lan_run_id``,
-            ``integration_grid``, ``integration_max_t``. ``source_lan_run_id``
-            (an MLflow run id) is ``None`` here and is filled in by the caller
-            that knows it; ``integration_grid`` is the number of grid points
-            per parameter vector.
-        """
-        _check_network_type(network_type)
-        return {
-            "derivation_method": DERIVATION_METHOD,
-            "aux_category": AUX_CATEGORY[network_type],
-            "source_lan_run_uuid": self.run_uuid,
-            "source_lan_sha256": self.sha256,
-            "source_lan_hf_commit": self.hf_revision,
-            "source_lan_run_id": None,
-            "integration_grid": grid.n_points,
-            "integration_max_t": grid.max_t,
-        }
+    return {
+        "derivation_method": DERIVATION_METHOD,
+        "aux_category": AUX_CATEGORY[network_type],
+        "source_lan_run_uuid": (
+            run_uuid if run_uuid is not None else _run_uuid_from_name(onnx_path)
+        ),
+        "source_lan_sha256": _sha256(onnx_path),
+        "source_lan_hf_commit": hf_revision,
+        "integration_grid": grid.n_points,
+        "integration_max_t": grid.max_t,
+    }
 
 
 # --------------------------------------------------------------------------
@@ -625,7 +552,9 @@ def derive_aux_corpus(
     fallback_window: tuple[float, float] | None = (0.98, 1.03),
     fallback_n_sim: int = 20_000,
     seed: int = 0,
-    source: SourceLAN | None = None,
+    source_run_uuid: str | None = None,
+    source_hf_repo: str | None = None,
+    source_hf_revision: str | None = None,
 ) -> list[Path]:
     """Write a cpn / opn training corpus derived from a LAN.
 
@@ -682,9 +611,14 @@ def derive_aux_corpus(
         Trials simulated per fallback theta.
     seed
         Base seed.
-    source
-        Provenance of the LAN; :meth:`SourceLAN.from_onnx` on ``onnx_path``
-        when omitted.
+    source_run_uuid
+        Training run uuid of the LAN; parsed from the trainer's file name
+        conventions when omitted.
+    source_hf_repo
+        Hub repository the LAN was downloaded from, if any.
+    source_hf_revision
+        Hub revision (commit, tag, or branch) of that download, if any;
+        recorded as ``source_lan_hf_commit``.
 
     Returns
     -------
@@ -753,9 +687,9 @@ def derive_aux_corpus(
         deadline_bounds = (float(lo), float(hi))
     model_config["input_columns"] = input_columns
 
-    if source is None:
-        source = SourceLAN.from_onnx(onnx_path)
-    provenance = source.provenance(network_type, grid)
+    provenance = _provenance(
+        onnx_path, network_type, grid, source_run_uuid, source_hf_revision
+    )
     derive_settings = {
         "grid": grid_record,
         "integration_grid": grid.n_points,
@@ -860,13 +794,7 @@ def derive_aux_corpus(
         "deadline_bounds": deadline_bounds,
         "fallback_window": fallback_window,
         "fallback_n_sim": fallback_n_sim,
-        "source": {
-            **{
-                k: (str(v) if isinstance(v, Path) else v)
-                for k, v in asdict(source).items()
-            },
-            **provenance,
-        },
+        "source": {"path": str(onnx_path), "hf_repo": source_hf_repo, **provenance},
         "derive_stats": _derive_stats(
             np.concatenate(totals),
             np.concatenate(flags),

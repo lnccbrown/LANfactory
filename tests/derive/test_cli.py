@@ -9,7 +9,7 @@ import subprocess
 from typer.testing import CliRunner
 
 from lanfactory.cli.derive_aux import app
-from lanfactory.derive import MANIFEST_NAME, SourceLAN, derive_aux_corpus
+from lanfactory.derive import MANIFEST_NAME, derive_aux_corpus
 from tests.derive.conftest import DDM_ONNX, DDM_SHA256, HUB_COMMIT
 
 _ANSI_RE = re.compile(r"\x1b\[[\d;]*m")
@@ -80,9 +80,9 @@ def test_derive_aux_writes_files_and_manifest(tmp_path):
     assert manifest["seed"] == 7
     source = manifest["source"]
     assert source["hf_repo"] == "franklab/HSSM"
-    assert source["hf_revision"] == source["source_lan_hf_commit"] == HUB_COMMIT
-    assert source["run_uuid"] == source["source_lan_run_uuid"] == RUN_UUID
-    assert source["sha256"] == source["source_lan_sha256"] == DDM_SHA256
+    assert source["source_lan_hf_commit"] == HUB_COMMIT
+    assert source["source_lan_run_uuid"] == RUN_UUID
+    assert source["source_lan_sha256"] == DDM_SHA256
 
     library = derive_aux_corpus(
         DDM_ONNX,
@@ -93,12 +93,9 @@ def test_derive_aux_writes_files_and_manifest(tmp_path):
         n_theta_per_file=16,
         deadline_quantile_frac=0.3,
         seed=7,
-        source=SourceLAN.from_onnx(
-            DDM_ONNX,
-            run_uuid=RUN_UUID,
-            hf_repo="franklab/HSSM",
-            hf_revision=HUB_COMMIT,
-        ),
+        source_run_uuid=RUN_UUID,
+        source_hf_repo="franklab/HSSM",
+        source_hf_revision=HUB_COMMIT,
     )
     # The pickles carry the flat provenance (uuid, sha256, Hub commit) but not
     # the source path, so the two runs are byte-identical file by file.

@@ -67,13 +67,13 @@ flat keys `derive_total_mass_mean`, `derive_total_mass_min`,
 [network types](../network_types.md#renormalisation-the-window-and-the-fallback)
 page gives the measurements behind the policy.
 
-**Provenance.** `generator_config["source"]` is the flat dict returned by
-`SourceLAN.provenance`, with exactly the keys `derivation_method`
-(`"derived-from-lan"`), `aux_category` (`choice` / `omission`),
-`source_lan_run_uuid`, `source_lan_sha256`, `source_lan_hf_commit`,
-`source_lan_run_id` (`None`; filled in by the tool that knows the MLflow
-run), `integration_grid`, `integration_max_t`. Downstream tools read these
-by name.
+**Provenance.** `generator_config["source"]` is a flat dict with exactly the
+keys `derivation_method` (`"derived-from-lan"`), `aux_category` (`choice` /
+`omission`), `source_lan_run_uuid` (`source_run_uuid`, else parsed from the
+trainer's file name), `source_lan_sha256`, `source_lan_hf_commit`
+(`source_hf_revision`), `integration_grid`, `integration_max_t`; the
+manifest's `source` adds the LAN's `path` and `hf_repo`. Downstream tools
+read these by name.
 
 ::: lanfactory.derive.derive_aux_corpus
 
@@ -86,8 +86,6 @@ by name.
 ::: lanfactory.derive.opn_labels
 
 ::: lanfactory.derive.simulate_labels
-
-::: lanfactory.derive.SourceLAN
 
 ::: lanfactory.derive.NETWORK_TYPES
 
