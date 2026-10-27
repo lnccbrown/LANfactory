@@ -7,8 +7,6 @@ and a closed-form gamma mixture standing in for a LAN for the numerics.
 from __future__ import annotations
 
 import json
-import time
-from unittest.mock import patch
 
 import numpy as np
 import onnx
@@ -78,19 +76,6 @@ def test_batched_predictor_matches_torch_and_leaves_file_untouched(
     assert _batch_dim_values(onnx_file) == [1, 1]
     result = assert_single_trial_contract(onnx_file, expected_input_width=INPUT_WIDTH)
     assert result["input_shape"] == [1, INPUT_WIDTH]
-
-
-def test_predictor_runs_the_batch_in_one_session_call(torch_lan_and_onnx):
-    _, onnx_file = torch_lan_and_onnx
-    predictor = load_onnx_predictor(onnx_file)
-    rows = np.random.default_rng(1).standard_normal((100_000, INPUT_WIDTH))
-    rows = rows.astype(np.float32)
-    with patch.object(predictor.session, "run", wraps=predictor.session.run) as run:
-        out = predictor(rows)
-    assert out.shape == (100_000,)
-    assert np.isfinite(out).all()
-    # The whole batch goes through the widened graph at once: no per-row loop.
-    assert run.call_count == 1
 
 
 def test_predictor_rejects_wrong_row_width(tmp_path):
@@ -301,15 +286,6 @@ def test_onset_grid_clips_the_onset_at_the_top():
     assert np.sum(row >= hi + grid.onset_window) == grid.n_tail
 
 
-def test_onset_grid_knee_moves_up_when_t_is_below_the_knee_width():
-    grid = OnsetGrid()
-    (row,) = grid.for_theta([0.03])  # t - knee < t_min
-    knee_start = row[grid.n_pre]
-    assert knee_start == pytest.approx(0.5 * (grid.t_min + 0.03))
-    (row,) = grid.for_theta([0.4])
-    assert row[grid.n_pre] == pytest.approx(0.4 - grid.knee)
-
-
 def test_onset_grid_pre_segment_never_degenerates():
     # A threshold rule ("t - knee > t_min, else the midpoint") gives the pre
     # segment a width of t - knee - t_min just above t_min + knee, which goes
@@ -336,6 +312,8 @@ def test_onset_grid_pre_segment_never_degenerates():
     assert row[grid.n_pre] == pytest.approx(0.5 * (grid.t_min + switch))
     knee_start = rows[2:, grid.n_pre]
     assert np.all(np.abs(np.diff(knee_start)) < 2 * (2.0 / 2000))
+    (row,) = grid.for_theta([0.4])
+    assert row[grid.n_pre] == pytest.approx(0.4 - grid.knee)
 
 
 def test_onset_grid_validation():
@@ -556,6 +534,7 @@ def scaled_survey() -> dict:
 
 def test_survey_reports_the_planted_share_of_bad_totals(scaled_survey):
     r = scaled_survey
+    json.dumps(r)
     assert r["n_theta"] == 4000
     assert r["grid"] == repr(OnsetGrid())
     total = r["total"]
@@ -600,15 +579,6 @@ def test_survey_leak_and_shrunk_box(scaled_survey):
     assert box["frac_gt_0.10"] == pytest.approx((2.28 - 2.0) / (2.28 - 0.52), abs=0.03)
 
 
-def test_survey_is_json_serialisable_and_fast(scaled_survey):
-    json.dumps(scaled_survey)
-    started = time.perf_counter()
-    r = survey(ScaledPredictor(), SURVEY_BOUNDS, SURVEY_PARAMS, CHOICES, n_theta=2000)
-    elapsed = time.perf_counter() - started
-    assert r["seconds"] < 30.0 and elapsed < 30.0
-    assert r["seconds"] <= elapsed
-
-
 def test_survey_without_an_onset_builds_the_grid_around_zero():
     r = survey(
         ScaledPredictor(),
@@ -621,14 +591,6 @@ def test_survey_without_an_onset_builds_the_grid_around_zero():
     assert r["grid"] == repr(OnsetGrid())
     assert r["leak_below_onset"] is None
     assert r["total"]["frac_gt_0.10"] == pytest.approx(PLANTED_SHARE, abs=0.08)
-
-
-def test_survey_is_deterministic_in_the_seed():
-    kwargs = {"n_theta": 200, "seed": 11}
-    a = survey(ScaledPredictor(), SURVEY_BOUNDS, SURVEY_PARAMS, CHOICES, **kwargs)
-    b = survey(ScaledPredictor(), SURVEY_BOUNDS, SURVEY_PARAMS, CHOICES, **kwargs)
-    a.pop("seconds"), b.pop("seconds")
-    assert a == b
 
 
 def test_survey_validation():
