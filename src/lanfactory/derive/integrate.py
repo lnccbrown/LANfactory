@@ -183,6 +183,9 @@ def load_onnx_predictor(path: str | Path) -> OnnxPredictor:
         if len(dims) >= 2:
             # Assigning dim_param clears dim_value (they share a protobuf oneof).
             dims[0].dim_param = "N"
+    # jax2onnx pins intermediate shapes at batch 1; let onnxruntime re-infer
+    # them rather than warn (VerifyOutputSizes) on every batched call.
+    del model.graph.value_info[:]
     session = ort.InferenceSession(model.SerializeToString())
     return OnnxPredictor(session)
 
