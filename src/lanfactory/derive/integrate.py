@@ -548,7 +548,7 @@ def choice_mass(
     predictor: Predictor,
     theta: ArrayLike,
     choices: Sequence[float] | NDArray,
-    grid: IntegrationGrid | OnsetGrid = IntegrationGrid(),
+    grid: IntegrationGrid | OnsetGrid = IntegrationGrid(),  # noqa: B008 - frozen
     chunk_size: int = 512,
     *,
     onset: ArrayLike | None = None,

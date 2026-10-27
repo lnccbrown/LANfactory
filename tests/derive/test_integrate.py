@@ -761,7 +761,7 @@ def test_survey_without_an_onset_uses_the_uniform_grid():
 
 
 def test_survey_is_deterministic_in_the_seed():
-    kwargs = dict(n_theta=200, seed=11)
+    kwargs = {"n_theta": 200, "seed": 11}
     a = survey(ScaledPredictor(), SURVEY_BOUNDS, SURVEY_PARAMS, CHOICES, **kwargs)
     b = survey(ScaledPredictor(), SURVEY_BOUNDS, SURVEY_PARAMS, CHOICES, **kwargs)
     a.pop("seconds"), b.pop("seconds")
