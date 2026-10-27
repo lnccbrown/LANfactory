@@ -36,13 +36,13 @@ mlflow = pytest.importorskip("mlflow")
 N_PARAMS = 4  # ddm: v, a, z, t
 N_THETA = 64
 # The trainer requires the batch size to divide the rows per file: a derived
-# cpn corpus has one row per choice (two for ddm), opn / gonogo one per theta.
-ROWS_PER_FILE = {"cpn": 2 * N_THETA, "opn": N_THETA, "gonogo": N_THETA}
-# The fallback simulates every theta whose total is off the window and the
-# survey draws a manifest record: both are capped so the corpus is built in
-# seconds — the round trip checks what the trainer reads, not the labels.
+# cpn corpus has one row per choice (two for ddm), opn one per theta.
+ROWS_PER_FILE = {"cpn": 2 * N_THETA, "opn": N_THETA}
+# The fallback simulates every theta whose total is off the window: it is
+# capped so the corpus is built in seconds — the round trip checks what the
+# trainer reads, not the labels.
 FALLBACK_N_SIM = 500
-SURVEY_N_THETA = 200
+
 
 @pytest.fixture(autouse=True)
 def cleanup_mlflow():
@@ -99,7 +99,7 @@ def _training_yaml(path: Path, network_type: str, corpus: Path) -> Path:
     return path
 
 
-@pytest.mark.parametrize("network_type", ["cpn", "opn", "gonogo"])
+@pytest.mark.parametrize("network_type", ["cpn", "opn"])
 def test_derive_train_export_round_trip(tmp_path, network_type):
     corpus = tmp_path / "corpus"
     files = derive_aux_corpus(
@@ -110,7 +110,6 @@ def test_derive_train_export_round_trip(tmp_path, network_type):
         n_files=2,
         n_theta_per_file=N_THETA,
         fallback_n_sim=FALLBACK_N_SIM,
-        survey_n_theta=SURVEY_N_THETA,
     )
     config_path = _training_yaml(
         tmp_path / f"{network_type}.yaml", network_type, corpus

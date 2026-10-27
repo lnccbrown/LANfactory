@@ -21,8 +21,9 @@ import pytest
 
 import lanfactory
 from lanfactory.cli.utils import _DERIVED_PROVENANCE_PARAMS, log_training_run_identity
-from lanfactory.derive import IntegrationGrid, SourceLAN
-from lanfactory.derive.corpus import _derive_stats
+from lanfactory.derive import OnsetGrid
+from lanfactory.derive.corpus import _derive_stats, _provenance
+from tests.derive.conftest import DDM_ONNX, DDM_SHA256
 
 mlflow = pytest.importorskip("mlflow")
 
@@ -58,20 +59,18 @@ MODEL_CONFIG = {
 
 
 # What derive_aux_corpus writes into every pickle's generator_config. Both
-# blocks are taken from their producers, SourceLAN.provenance and
-# _derive_stats, rather than transcribed, so a key renamed there fails these
-# tests instead of being silently logged under the stale name. The source is
-# a bare ddm.onnx (no run uuid, no Hub commit, no MLflow run id) on a uniform
-# grid (1000 points to 20 s); the statistics come from three totals
-# (mean 0.984, none flagged, so nothing fell back and the past-max_t share is
-# None — the statistic the logger must turn into "") and a constant leak.
+# blocks are taken from their producers, _provenance and _derive_stats,
+# rather than transcribed, so a key renamed there fails these tests instead
+# of being silently logged under the stale name. The source is a bare
+# ddm.onnx (no run uuid, no Hub commit) on the default onset grid; the
+# statistics come from three totals (mean 0.984, none flagged, so nothing
+# fell back and the past-max_t share is None — the statistic the logger must
+# turn into "") and a constant leak.
 DERIVED_GENERATOR_CONFIG = {
     "generator_approach": "derived",
     "model": "ddm",
     "network_type": "opn",
-    "source": SourceLAN(path=Path("ddm.onnx"), sha256="09f685c1" * 8).provenance(
-        "opn", IntegrationGrid()
-    ),
+    "source": _provenance(DDM_ONNX, "opn", OnsetGrid(), None, None),
     "derive_stats": _derive_stats(
         total=np.array([0.95, 1.0, 1.002]),
         flagged=np.zeros(3, dtype=bool),
@@ -253,8 +252,8 @@ class TestLogTrainingRunIdentity:
         }
         assert p["derivation_method"] == "derived-from-lan"
         assert p["aux_category"] == "omission"
-        assert p["source_lan_sha256"] == "09f685c1" * 8
-        assert p["integration_grid"] == "1000"
+        assert p["source_lan_sha256"] == DDM_SHA256
+        assert p["integration_grid"] == str(OnsetGrid().n_points)
         assert p["integration_max_t"] == "20.0"
         assert p["source_lan_run_uuid"] == ""
         assert p["source_lan_hf_commit"] == ""
