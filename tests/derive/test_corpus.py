@@ -622,12 +622,12 @@ def _arrays(path: Path) -> tuple[np.ndarray, np.ndarray]:
 
 
 def test_corpus_is_reproducible_per_file(tmp_path):
-    kwargs = dict(
-        n_files=2,
-        n_theta_per_file=8,
-        fallback_n_sim=FALLBACK_N_SIM,
-        survey_n_theta=SURVEY_N_THETA,
-    )
+    kwargs = {
+        "n_files": 2,
+        "n_theta_per_file": 8,
+        "fallback_n_sim": FALLBACK_N_SIM,
+        "survey_n_theta": SURVEY_N_THETA,
+    }
     a = derive_aux_corpus(DDM_ONNX, "ddm", "opn", tmp_path / "a", **kwargs)
     # Same arguments: byte-identical files.
     again = derive_aux_corpus(DDM_ONNX, "ddm", "opn", tmp_path / "again", **kwargs)
@@ -826,7 +826,13 @@ def test_thetas_outside_the_window_are_labelled_by_simulation(
 
     def sentinel(model, theta, kind, deadlines, n_sim, rng, *, max_t):
         calls.append(
-            dict(model=model, theta=np.array(theta), kind=kind, d=deadlines, n=n_sim)
+            {
+                "model": model,
+                "theta": np.array(theta),
+                "kind": kind,
+                "d": deadlines,
+                "n": n_sim,
+            }
         )
         n_labels = len(CHOICES) if kind == "cpn" else 1
         return np.full((theta.shape[0], n_labels), 0.5), np.full(theta.shape[0], 0.01)
@@ -916,7 +922,7 @@ def test_no_fallback_never_simulates(tmp_path, monkeypatch):
 
 
 def test_fallback_arguments_are_validated(tmp_path):
-    kwargs = dict(n_files=2, n_theta_per_file=4, survey_n_theta=SURVEY_N_THETA)
+    kwargs = {"n_files": 2, "n_theta_per_file": 4, "survey_n_theta": SURVEY_N_THETA}
     with pytest.raises(ValueError, match="fallback_window"):
         derive_aux_corpus(
             DDM_ONNX, "ddm", "cpn", tmp_path, fallback_window=(1.03, 0.98), **kwargs

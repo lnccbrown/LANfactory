@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Command-line interface for deriving auxiliary-network corpora from a LAN.
 
 Integrates a trained LAN's density over reaction time and writes a cpn, opn or

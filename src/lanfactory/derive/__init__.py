@@ -26,10 +26,10 @@ from .integrate import (
 
 __all__ = [
     "AUX_CATEGORY",
-    "ChoiceMass",
     "DERIVATION_METHOD",
     "MANIFEST_NAME",
     "NETWORK_TYPES",
+    "ChoiceMass",
     "OnnxPredictor",
     "OnsetGrid",
     "Predictor",

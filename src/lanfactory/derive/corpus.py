@@ -668,7 +668,7 @@ def _plain(config: dict) -> dict:
             continue
         try:
             pickle.dumps(value)
-        except Exception:  # noqa: BLE001 - keep provenance, drop the object
+        except Exception:  # keep provenance, drop the object
             out[key] = repr(value)
         else:
             out[key] = value
