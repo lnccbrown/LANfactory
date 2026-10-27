@@ -486,6 +486,7 @@ class TestUnpicklableModelConfig:
 
     def test_lambda_fields_are_stringified_and_data_details_saves(self, tmp_path):
         import cloudpickle
+
         from lanfactory.trainers.torch_mlp import ModelTrainerTorchMLP
 
         config_with_lambda = dict(MODEL_CONFIG)

@@ -2,11 +2,21 @@
 
 import pickle
 
-import pytest
 import jax
 import jax.numpy as jnp
+import numpy as np
+import pytest
 
-from lanfactory.trainers.jax_mlp import JaxMLPFactory, JaxMLP
+from lanfactory.trainers.jax_mlp import JaxMLP, JaxMLPFactory
+
+# Independent of JaxMLP.activations_dict, so the alignment test below checks
+# the model against plain math rather than against itself.
+REFERENCE_ACTIVATIONS = {
+    "tanh": jnp.tanh,
+    "relu": jax.nn.relu,
+    "sigmoid": jax.nn.sigmoid,
+    "linear": lambda z: z,
+}
 
 
 def test_mlp_jax_factory_with_dict():
@@ -86,6 +96,61 @@ def test_mlp_jax_forward_pass():
     assert isinstance(output, jnp.ndarray)
 
 
+@pytest.mark.parametrize(
+    "activations",
+    [
+        ["tanh", "tanh", "linear"],  # production default
+        ["tanh", "linear", "linear"],  # issue #105: IndexError
+        ["linear", "tanh", "linear"],
+        ["relu", "linear", "sigmoid"],
+        # Over-long: jaxtrain appends the output "linear" to a YAML that
+        # already lists it. Must keep working (hence no zip(strict=True)).
+        ["tanh", "tanh", "linear", "linear"],
+        # Over-long with a hidden "linear": main ran these without an error
+        # but applied shifted activations (issue #105's silent case).
+        ["linear", "tanh", "linear", "tanh"],
+        ["tanh", "linear", "linear", "sigmoid"],
+    ],
+    ids="-".join,
+)
+def test_mlp_jax_activations_stay_layer_aligned(activations):
+    """Each layer applies its own activation, "linear" hidden layers included."""
+    layer_sizes = [10, 10, 1]
+    model = JaxMLP(
+        layer_sizes=layer_sizes,
+        activations=activations,
+        train_output_type="logprob",
+        train=True,
+    )
+    x = jax.random.normal(jax.random.PRNGKey(1), (5, 6))
+    params = model.init(jax.random.PRNGKey(0), x)
+
+    expected = x
+    # One activation per layer; entries past the last layer are ignored.
+    for i in range(len(layer_sizes)):
+        layer = params["params"][f"layers_{i}"]
+        expected = REFERENCE_ACTIVATIONS[activations[i]](
+            expected @ layer["kernel"] + layer["bias"]
+        )
+
+    output = model.apply(params, x)
+
+    assert output.shape == (5, 1)
+    np.testing.assert_allclose(output, expected, rtol=1e-6, atol=1e-6)
+
+
+def test_mlp_jax_too_few_activations_raises():
+    """Fewer activations than layers is a clear ValueError, not an IndexError."""
+    # A jaxtrain YAML missing one hidden activation: the CLI appends the
+    # output "linear", leaving 3 activations for 4 layers.
+    model = JaxMLP(
+        layer_sizes=[10, 10, 10, 1],
+        activations=["tanh", "tanh", "linear"],
+    )
+    with pytest.raises(ValueError, match="got 3 activations for 4 layers"):
+        model.init(jax.random.PRNGKey(0), jnp.ones((1, 6)))
+
+
 def test_mlp_jax_with_different_activations():
     """Test JaxMLP with different activation functions."""
     model = JaxMLP(
@@ -128,7 +193,7 @@ def test_mlp_jax_forward_with_non_linear_output_activation():
     x = jax.random.normal(key, (5, 5))
 
     # Initialize model state
-    key1, key2 = jax.random.split(key)
+    key1, _key2 = jax.random.split(key)
     state = model.init(key1, x)
 
     # Forward pass
@@ -152,7 +217,7 @@ def test_mlp_jax_inference_mode_with_logits():
     x = jax.random.normal(key, (5, 5))
 
     # Initialize model state
-    key1, key2 = jax.random.split(key)
+    key1, _key2 = jax.random.split(key)
     state = model.init(key1, x)
 
     # Forward pass in inference mode
@@ -163,8 +228,9 @@ def test_mlp_jax_inference_mode_with_logits():
 
 def test_mlp_jax_load_state_from_file_error():
     """Test JaxMLP load_state_from_file raises error when file_path is None."""
-    from lanfactory.trainers.jax_mlp import JaxMLPFactory
     import pytest
+
+    from lanfactory.trainers.jax_mlp import JaxMLPFactory
 
     network_config = {
         "layer_sizes": [10, 10, 1],
@@ -180,8 +246,9 @@ def test_mlp_jax_load_state_from_file_error():
 
 def test_mlp_jax_load_state_from_file_without_input_dim(tmp_path):
     """Test JaxMLP load_state_from_file without providing input_dim."""
-    from lanfactory.trainers.jax_mlp import JaxMLPFactory
     import flax.serialization
+
+    from lanfactory.trainers.jax_mlp import JaxMLPFactory
 
     network_config = {
         "layer_sizes": [10, 10, 1],
@@ -242,8 +309,9 @@ def test_mlp_jax_make_forward_partial_with_dict_state(tmp_path):
 
 def test_mlp_jax_make_forward_partial_without_jit(tmp_path):
     """Test JaxMLP make_forward_partial without JIT compilation."""
-    from lanfactory.trainers.jax_mlp import JaxMLPFactory
     import flax.serialization
+
+    from lanfactory.trainers.jax_mlp import JaxMLPFactory
 
     network_config = {
         "layer_sizes": [10, 10, 1],
@@ -276,8 +344,9 @@ def test_mlp_jax_make_forward_partial_without_jit(tmp_path):
 
 def test_mlp_jax_make_forward_partial_invalid_state_type():
     """Test JaxMLP make_forward_partial raises error with invalid state type."""
-    from lanfactory.trainers.jax_mlp import JaxMLPFactory
     import pytest
+
+    from lanfactory.trainers.jax_mlp import JaxMLPFactory
 
     network_config = {
         "layer_sizes": [10, 10, 1],
@@ -344,3 +413,26 @@ def test_mlp_jax_with_non_linear_output_activation():
 
     assert output.shape == (5, 1)
     assert isinstance(output, jnp.ndarray)
+
+
+def test_trainer_jax_mlp_non_int_seed_raises_value_error(tmp_path):
+    """train_and_evaluate rejects a non-int seed with ValueError, not TypeError."""
+    from lanfactory.trainers.jax_mlp import ModelTrainerJaxMLP
+
+    network_config = {
+        "layer_sizes": [4, 1],
+        "activations": ["tanh", "linear"],
+        "train_output_type": "logprob",
+    }
+    model = JaxMLPFactory(network_config=network_config, train=True)
+    trainer = ModelTrainerJaxMLP(
+        {"loss": "huber", "n_epochs": 1}, model, None, None, seed=1.5
+    )
+
+    with pytest.raises(ValueError, match="seed argument is not an integer"):
+        trainer.train_and_evaluate(
+            output_folder=tmp_path,
+            network_type="lan",
+            save_outputs=False,
+            export_onnx=False,
+        )
