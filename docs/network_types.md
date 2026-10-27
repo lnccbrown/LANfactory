@@ -121,17 +121,13 @@ recorded in every pickle and in `derive_manifest.json`.
 **Grid.** The density is integrated with the trapezoid rule over
 `[t_min, max_t]` with `max_t = 20` s, ssms' default and the LANs' training
 support; nothing is extrapolated past it. The grid is refined per parameter
-vector around the non-decision time `--onset-param` (default `t`): 32 points
-below `t − 0.05`, 128 on the knee `[t − 0.05, t]`, 600 on `[t, t + 1]` and
-400 on the tail, ~1160 points that match a 16 000-point uniform grid to
-5 × 10⁻⁵. A uniform 1000-point grid was measured to carry 15–25 % quadrature
-error at `a < 0.5` on the Hub ddm LAN, so it is only the fallback for a model
-without that parameter (`--onset-param ''` selects it explicitly, sized by
-`--grid-points`). The LAN leaks a little mass below `t` (mean 0.0035, p99
+vector around the non-decision time `t`: 32 points below `t − 0.05`, 128 on
+the knee `[t − 0.05, t]`, 600 on `[t, t + 1]` and 400 on the tail, ~1160
+points that match a 16 000-point uniform grid to 5 × 10⁻⁵ (a uniform
+1000-point grid was measured to carry 15–25 % quadrature error at `a < 0.5`
+on the Hub ddm LAN). The LAN leaks a little mass below `t` (mean 0.0035, p99
 0.052 on the Hub ddm LAN); integrating from `t` only was tested and rejected,
-and the leak is recorded per file as `derive_leak_below_onset_p99` — on the
-onset grid only (`None` on a uniform grid, where it would mostly be
-quadrature error).
+and the leak is recorded per file as `derive_leak_below_onset_p99`.
 
 **Row layouts.** Every row is `n_params + 1` wide, in ssms parameter order;
 labels are probabilities in `[0, 1]` for the `bcelogit` loss.

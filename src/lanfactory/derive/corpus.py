@@ -46,7 +46,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import logging
 import pickle
 import re
 from collections.abc import Sequence
@@ -63,14 +62,11 @@ from lanfactory import __version__
 
 from .integrate import (
     ChoiceMass,
-    IntegrationGrid,
     OnsetGrid,
     choice_mass,
     load_onnx_predictor,
     survey,
 )
-
-logger = logging.getLogger(__name__)
 
 __all__ = [
     "AUX_CATEGORY",
@@ -81,7 +77,6 @@ __all__ = [
     "cpn_labels",
     "derive_aux_corpus",
     "gonogo_labels",
-    "grid_description",
     "opn_labels",
     "sample_deadlines",
     "sample_theta",
@@ -610,7 +605,7 @@ class SourceLAN:
             hf_revision=hf_revision,
         )
 
-    def provenance(self, network_type: str, grid: IntegrationGrid | OnsetGrid) -> dict:
+    def provenance(self, network_type: str, grid: OnsetGrid) -> dict:
         """The flat provenance record other tools read by key.
 
         Parameters
@@ -629,7 +624,7 @@ class SourceLAN:
             ``integration_grid``, ``integration_max_t``. ``source_lan_run_id``
             (an MLflow run id) is ``None`` here and is filled in by the caller
             that knows it; ``integration_grid`` is the number of grid points
-            per parameter vector (see :func:`grid_description`).
+            per parameter vector.
         """
         _check_network_type(network_type)
         return {
@@ -680,86 +675,17 @@ def _plain(config: dict) -> dict:
     return out
 
 
-def grid_description(
-    grid: IntegrationGrid | OnsetGrid, onset_param: str | None
-) -> dict:
-    """The grid as the pickles and the manifest record it.
-
-    Parameters
-    ----------
-    grid
-        The integration grid.
-    onset_param
-        The model's onset parameter when it has one — the :class:`OnsetGrid`
-        is built around it, and the leak statistic is measured at it on that
-        grid; ``None`` when the model has none.
-
-    Returns
-    -------
-    dict
-        ``kind`` (``"onset"`` / ``"uniform"``), ``onset_param``, ``n_points``
-        (points per parameter vector) and the grid's own fields
-        (``max_t``, ``t_min`` and, for an onset grid, its segment sizes).
-    """
-    return {
-        "kind": "onset" if isinstance(grid, OnsetGrid) else "uniform",
-        "onset_param": onset_param,
-        "n_points": grid.n_points,
-        **asdict(grid),
-    }
-
-
-def _resolve_grid(
-    grid: IntegrationGrid | OnsetGrid | None,
-    onset_param: str | None,
-    params: Sequence[str],
-    model: str,
-) -> tuple[IntegrationGrid | OnsetGrid, int | None]:
-    """The grid to integrate on and the column of the onset parameter.
-
-    ``None`` picks :class:`OnsetGrid` when ``onset_param`` names a parameter
-    of the model and falls back to a uniform :class:`IntegrationGrid` (with
-    a warning) otherwise; an explicit :class:`OnsetGrid` requires the onset
-    parameter. The onset column is returned whenever the model has one (the
-    grid record names it on either grid); the leak below it is only measured
-    on an :class:`OnsetGrid`, since a uniform grid's leak is mostly its own
-    quadrature error.
-    """
-    onset_idx = (
-        list(params).index(onset_param)
-        if onset_param is not None and onset_param in params
-        else None
-    )
-    if grid is None:
-        if onset_idx is not None:
-            return OnsetGrid(), onset_idx
-        if onset_param is not None:
-            logger.warning(
-                "model %r has no parameter %r; integrating on the uniform %r",
-                model,
-                onset_param,
-                IntegrationGrid(),
-            )
-        return IntegrationGrid(), onset_idx
-    if isinstance(grid, OnsetGrid) and onset_idx is None:
-        raise ValueError(
-            f"an OnsetGrid needs onset_param to name a parameter of {model!r} "
-            f"({list(params)}), got onset_param={onset_param!r}"
-        )
-    return grid, onset_idx
-
-
 def _derive_stats(
     total: NDArray[np.float64],
     flagged: NDArray[np.bool_],
     past_max_t: NDArray[np.float64] | None,
-    leak: NDArray[np.float64] | None,
+    leak: NDArray[np.float64],
 ) -> dict[str, float | None]:
     """The flat ``derive_stats`` record, for one file or a whole corpus.
 
     ``past_max_t`` is the per-fallback-theta share of base-model trials at or
     beyond ``max_t`` (``None`` or empty when nothing fell back); ``leak`` the
-    per-theta mass below the onset (``None`` without an onset grid).
+    per-theta mass below the onset.
     """
     past = None if past_max_t is None or past_max_t.size == 0 else past_max_t
     return {
@@ -768,9 +694,7 @@ def _derive_stats(
         "derive_total_mass_max": float(total.max()),
         "derive_fallback_frac": float(flagged.mean()),
         "derive_sim_past_max_t_max": None if past is None else float(past.max()),
-        "derive_leak_below_onset_p99": (
-            None if leak is None else float(np.percentile(leak, 99))
-        ),
+        "derive_leak_below_onset_p99": float(np.percentile(leak, 99)),
     }
 
 
@@ -792,8 +716,7 @@ def derive_aux_corpus(
     *,
     n_files: int = 100,
     n_theta_per_file: int = 4096,
-    onset_param: str | None = "t",
-    grid: IntegrationGrid | OnsetGrid | None = None,
+    grid: OnsetGrid = OnsetGrid(),  # noqa: B008 - frozen, so never mutated
     deadline_quantile_frac: float = 0.7,
     fallback_window: tuple[float, float] | None = (0.98, 1.03),
     fallback_n_sim: int = 20_000,
@@ -844,21 +767,11 @@ def derive_aux_corpus(
         Parameter vectors per file. Rows per file are this for opn / gonogo
         and this times the number of choices for cpn; the trainers require
         the batch size to divide the row count.
-    onset_param
-        Name of the model's non-decision-time parameter. Its column is the
-        onset the :class:`OnsetGrid` is refined around and the edge the leak
-        statistic is measured at (on that grid only). ``None``, or a name the
-        model lacks, means no onset grid.
     grid
-        Integration grid. ``None`` (the default) is an :class:`OnsetGrid`
-        when ``onset_param`` names a parameter of ``model`` and a uniform
-        :class:`IntegrationGrid` otherwise, with a logged warning — the
-        uniform grid under-resolves a LAN's onset (see the grid policy in
-        :mod:`.integrate`). An explicit :class:`OnsetGrid` requires
-        ``onset_param``; an explicit :class:`IntegrationGrid` is used as is.
-        The grid of record is written to ``generator_config["derive"]``
-        (``grid`` = ``"onset"`` / ``"uniform"`` and ``grid_config``) and to
-        the manifest (``grid``).
+        Integration grid, refined per parameter vector around the model's
+        non-decision time ``t``, the edge the leak statistic is measured at.
+        It is recorded as ``grid`` in ``generator_config["derive"]`` and in
+        the manifest.
     deadline_quantile_frac
         Passed to :func:`sample_deadlines` (opn / gonogo only).
     fallback_window
@@ -889,9 +802,8 @@ def derive_aux_corpus(
         For an unknown ``network_type``, ``n_files < 2``,
         ``n_theta_per_file < 1``, a ``fallback_window`` that is not
         ``0 < lo < hi``, ``fallback_n_sim < 1``, ``survey_n_theta < 1``,
-        an :class:`OnsetGrid`
-        without an onset parameter, a LAN whose input width is not
-        ``n_params + 2`` for ``model``, or a theta with zero total mass.
+        a model without a non-decision time ``t``, a LAN whose input width is
+        not ``n_params + 2`` for ``model``, or a theta with zero total mass.
     """
     _check_network_type(network_type)
     if n_files < 2:
@@ -919,8 +831,13 @@ def derive_aux_corpus(
     params = list(base_config["params"])
     choices = list(base_config["choices"])
     n_params = len(params)
-    grid, onset_idx = _resolve_grid(grid, onset_param, params, model)
-    grid_record = grid_description(grid, onset_param if onset_idx is not None else None)
+    if "t" not in params:
+        raise ValueError(
+            f"model {model!r} has no non-decision time 't' (params {params}); "
+            "the integration grid is refined around it"
+        )
+    onset_idx = params.index("t")
+    grid_record = {"onset_param": "t", "n_points": grid.n_points, **asdict(grid)}
 
     predictor = load_onnx_predictor(onnx_path)
     if predictor.input_width != n_params + 2:
@@ -947,8 +864,7 @@ def derive_aux_corpus(
         source = SourceLAN.from_onnx(onnx_path)
     provenance = source.provenance(network_type, grid)
     derive_settings = {
-        "grid": grid_record["kind"],
-        "grid_config": grid_record,
+        "grid": grid_record,
         "integration_grid": grid.n_points,
         "integration_max_t": grid.max_t,
         "t_min": grid.t_min,
@@ -959,8 +875,7 @@ def derive_aux_corpus(
         "seed": seed,
     }
 
-    # The whole-box statistics of the source LAN, on the grid of record; a
-    # uniform grid measures no leak (survey pairs the onset with the grid).
+    # The whole-box statistics of the source LAN, on the grid of record.
     lan_survey = survey(
         predictor,
         base_config["param_bounds_dict"],
@@ -968,7 +883,6 @@ def derive_aux_corpus(
         choices,
         n_theta=survey_n_theta,
         seed=seed,
-        onset_param=onset_param if isinstance(grid, OnsetGrid) else None,
         grid=grid,
     )
 
@@ -982,7 +896,7 @@ def derive_aux_corpus(
     for i in range(n_files):
         rng = np.random.default_rng([seed, i])
         theta = sample_theta(base_config, n_theta_per_file, rng)
-        onset = theta[:, onset_idx] if isinstance(grid, OnsetGrid) else None
+        onset = theta[:, onset_idx]
         mass = choice_mass(predictor, theta, choices, grid=grid, onset=onset)
         deadlines: NDArray[np.float64] | None = None
         if network_type == "cpn":
@@ -1015,9 +929,7 @@ def derive_aux_corpus(
             else:
                 rows = np.flatnonzero(flagged)
             labels[rows] = _labels(simulated.reshape(-1))
-        # The leak is a property of the onset grid; a uniform grid's leak is
-        # mostly quadrature error, and the survey records none there either.
-        leak = None if onset is None else mass.leak_below(onset)
+        leak = mass.mass_before(onset)
 
         stats = _derive_stats(mass.total, flagged, past_max_t, leak)
         generator_config = {
@@ -1049,8 +961,7 @@ def derive_aux_corpus(
         flags.append(flagged)
         if past_max_t is not None:
             pasts.append(past_max_t)
-        if leak is not None:
-            leaks.append(leak)
+        leaks.append(leak)
 
     manifest = {
         "lanfactory_version": __version__,
@@ -1080,7 +991,7 @@ def derive_aux_corpus(
             np.concatenate(totals),
             np.concatenate(flags),
             np.concatenate(pasts) if pasts else None,
-            np.concatenate(leaks) if leaks else None,
+            np.concatenate(leaks),
         ),
         "lan_survey": lan_survey,
         "files": file_records,

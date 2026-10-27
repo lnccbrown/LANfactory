@@ -65,10 +65,8 @@ than by the LAN; `fallback_window=None` disables it. Each pickle's
 `generator_config["derive_stats"]` and the manifest's `derive_stats` carry the
 flat keys `derive_total_mass_mean`, `derive_total_mass_min`,
 `derive_total_mass_max`, `derive_fallback_frac`, `derive_sim_past_max_t_max`
-(`None` when nothing fell back) and `derive_leak_below_onset_p99` (`None`
-without an onset grid: on a uniform grid the leak would mostly be the grid's
-own quadrature error, and the manifest's `lan_survey` records none there
-either); the manifest also carries the source LAN's
+(`None` when nothing fell back) and `derive_leak_below_onset_p99`; the
+manifest also carries the source LAN's
 whole-box `survey` under `lan_survey`. The
 [network types](../network_types.md#renormalisation-the-window-and-the-fallback)
 page gives the measurements behind the policy.
@@ -96,8 +94,6 @@ by name.
 ::: lanfactory.derive.simulate_labels
 
 ::: lanfactory.derive.SourceLAN
-
-::: lanfactory.derive.grid_description
 
 ::: lanfactory.derive.NETWORK_TYPES
 

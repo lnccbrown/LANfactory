@@ -16,6 +16,7 @@ import re
 import shutil
 import subprocess
 import sys
+from dataclasses import asdict
 from pathlib import Path
 
 import numpy as np
@@ -30,14 +31,12 @@ from lanfactory.derive import (
     MANIFEST_NAME,
     NETWORK_TYPES,
     ChoiceMass,
-    IntegrationGrid,
     OnsetGrid,
     SourceLAN,
     choice_mass,
     cpn_labels,
     derive_aux_corpus,
     gonogo_labels,
-    grid_description,
     load_onnx_predictor,
     opn_labels,
     sample_deadlines,
@@ -92,6 +91,8 @@ STATS_KEYS = {
     "derive_sim_past_max_t_max",
     "derive_leak_below_onset_p99",
 }
+# The grid of record, as the pickles and the manifest carry it.
+GRID_RECORD = {"onset_param": "t", "n_points": 1160, **asdict(OnsetGrid())}
 # Simulation and survey sizes for the corpus tests: small enough to keep
 # them fast (the survey is a manifest record, not a label input).
 FALLBACK_N_SIM = 500
@@ -104,7 +105,6 @@ SURVEY_KEYS = {
     "shrunk_box",
     "leak_below_onset",
     "by_param",
-    "worst_cell",
 }
 
 
@@ -230,7 +230,7 @@ def test_gonogo_decomposes_into_nogo_mass_plus_opn(ddm_mass):
 
 def _synthetic_mass(per_choice_total: list[float], n_points: int = 50) -> ChoiceMass:
     """A ChoiceMass whose per-choice cdf ramps linearly to the given totals."""
-    t = np.linspace(1e-4, 20.0, n_points)
+    t = np.linspace(1e-4, 20.0, n_points)[None, :]
     ramp = np.linspace(0.0, 1.0, n_points)
     cdf = np.stack([np.stack([total * ramp for total in per_choice_total])])
     choices = np.array(CHOICES if len(per_choice_total) == 2 else [0, 1, 2])
@@ -257,7 +257,7 @@ def test_labels_are_renormalised_by_the_total():
     assert gonogo[0, 0] == pytest.approx(0.6 / 1.05)
     assert gonogo[0, 0] == pytest.approx(mass.mass(-1)[0] / 1.05 + opn[0, 0])
     # Part-way down the ramp the omission is the un-reached share of the total.
-    _, opn_half = opn_labels(mass, theta, mass.t[24])
+    _, opn_half = opn_labels(mass, theta, mass.t[0, 24])
     assert opn_half[0, 0] == pytest.approx(1.0 - 24 / 49, abs=1e-6)
 
     over = _synthetic_mass([1.05, 0.02])
@@ -287,7 +287,7 @@ def test_gonogo_sums_every_non_maximal_choice():
     assert opn[0, 0] == pytest.approx(0.0, abs=1e-7)
     # Part-way down the ramp every choice term scales, the omission fills up.
     frac = 24 / 49  # ramp value at grid node 24 of 50
-    _, part = gonogo_labels(mass, theta, mass.t[24])
+    _, part = gonogo_labels(mass, theta, mass.t[0, 24])
     assert part[0, 0] == pytest.approx(frac * 0.5 / 0.9 + (1.0 - frac))
     # cpn emits a row per code, in code order, labelled with that code's share.
     data, cpn = cpn_labels(mass, theta, mass.choices)
@@ -301,7 +301,7 @@ def test_deadline_labels_use_the_float32_deadline_the_row_carries():
     A steep synthetic cdf makes the float32 rounding of 1.0005 visible: at the
     float64 deadline the mass before it is exactly 0.5.
     """
-    t = np.array([1e-4, 1.0, 1.001, 20.0])
+    t = np.array([[1e-4, 1.0, 1.001, 20.0]])
     cdf = np.array([[[0.0, 0.0, 1.0, 1.0], [0.0, 0.0, 0.0, 0.0]]])
     mass = ChoiceMass(t=t, choices=np.array(CHOICES), cdf=cdf)
     theta = np.zeros((1, 2), dtype=np.float32)
@@ -382,7 +382,7 @@ def test_sample_theta_matches_ssms_bounds_and_order():
 def box_mass() -> ChoiceMass:
     config = ModelConfigBuilder.from_model("ddm")
     theta = sample_theta(config, 2000, np.random.default_rng(1))
-    return choice_mass(load_onnx_predictor(DDM_ONNX), theta, CHOICES)
+    return choice_mass(load_onnx_predictor(DDM_ONNX), theta, CHOICES, onset=theta[:, 3])
 
 
 def test_sample_deadlines_covers_the_box_and_concentrates(box_mass):
@@ -432,12 +432,12 @@ def test_source_lan_hashes_and_parses_run_uuid(tmp_path):
     assert SourceLAN.from_onnx(jax_style).run_uuid == run_uuid
     assert SourceLAN.from_onnx(torch_style, run_uuid="explicit").run_uuid == "explicit"
     # The parsed uuid reaches the provenance record under its contract key.
-    parsed = SourceLAN.from_onnx(torch_style).provenance("cpn", IntegrationGrid())
+    parsed = SourceLAN.from_onnx(torch_style).provenance("cpn", OnsetGrid())
     assert parsed["source_lan_run_uuid"] == run_uuid
     assert parsed["aux_category"] == "choice"
 
     hub = SourceLAN.from_onnx(DDM_ONNX, hf_repo="franklab/HSSM", hf_revision="abc")
-    record = hub.provenance("opn", IntegrationGrid(n_points=500, max_t=15.0))
+    record = hub.provenance("opn", OnsetGrid(max_t=15.0))
     assert set(record) == PROVENANCE_KEYS
     assert record["derivation_method"] == DERIVATION_METHOD == "derived-from-lan"
     assert record["aux_category"] == "omission"
@@ -445,11 +445,11 @@ def test_source_lan_hashes_and_parses_run_uuid(tmp_path):
     assert record["source_lan_sha256"] == DDM_SHA256
     assert record["source_lan_hf_commit"] == "abc"
     assert record["source_lan_run_id"] is None
-    assert record["integration_grid"] == 500
+    assert record["integration_grid"] == 1160
     assert record["integration_max_t"] == 15.0
     assert AUX_CATEGORY == {"cpn": "choice", "opn": "omission", "gonogo": "nogo"}
     with pytest.raises(ValueError, match="network_type"):
-        hub.provenance("lan", IntegrationGrid())
+        hub.provenance("lan", OnsetGrid())
 
 
 # --------------------------------------------------------------------------
@@ -533,8 +533,7 @@ def test_pickle_carries_the_contract_keys(derived):
     derive = generator_config["derive"]
     assert derive["fallback_window"] == (0.98, 1.03)
     assert derive["fallback_n_sim"] == FALLBACK_N_SIM
-    assert derive["grid"] == "onset"
-    assert derive["grid_config"] == grid_description(OnsetGrid(), "t")
+    assert derive["grid"] == GRID_RECORD
     assert derive["integration_grid"] == OnsetGrid().n_points == 1160
     assert derive["integration_max_t"] == 20.0
     assert derive["t_min"] == 1e-4
@@ -605,8 +604,7 @@ def test_manifest_lists_the_files(derived):
     assert manifest["source"]["path"] == str(DDM_ONNX)
     assert manifest["source"]["sha256"] == manifest["source"]["source_lan_sha256"]
     assert manifest["source"]["run_uuid"] is None
-    assert manifest["grid"] == grid_description(OnsetGrid(), "t")
-    assert manifest["grid"]["kind"] == "onset" and manifest["grid"]["n_points"] == 1160
+    assert manifest["grid"] == GRID_RECORD
     assert manifest["deadline_quantile_frac"] == 0.7
     expected_bounds = None if network_type == "cpn" else DEADLINE_BOUNDS
     assert manifest["deadline_bounds"] == expected_bounds
@@ -621,78 +619,6 @@ def test_manifest_lists_the_files(derived):
 
 def _manifest(folder: Path) -> dict:
     return json.loads((folder / MANIFEST_NAME).read_text())
-
-
-def _generator_config(path: Path) -> dict:
-    with open(path, "rb") as f:
-        return pickle.load(f)["generator_config"]
-
-
-def test_grid_defaults_to_the_onset_grid_and_falls_back_with_a_warning(
-    tmp_path, caplog
-):
-    kwargs = dict(n_files=2, n_theta_per_file=4, survey_n_theta=SURVEY_N_THETA)
-    files = derive_aux_corpus(DDM_ONNX, "ddm", "cpn", tmp_path / "default", **kwargs)
-    manifest = _manifest(tmp_path / "default")
-    assert manifest["grid"] == grid_description(OnsetGrid(), "t")
-    assert isinstance(manifest["derive_stats"]["derive_leak_below_onset_p99"], float)
-    assert isinstance(manifest["lan_survey"]["leak_below_onset"], dict)
-    assert isinstance(
-        _generator_config(files[0])["derive_stats"]["derive_leak_below_onset_p99"],
-        float,
-    )
-
-    with caplog.at_level("WARNING", logger="lanfactory.derive.corpus"):
-        derive_aux_corpus(
-            DDM_ONNX, "ddm", "cpn", tmp_path / "none", onset_param=None, **kwargs
-        )
-    assert not caplog.records  # asked for no onset grid: nothing to warn about
-    assert _manifest(tmp_path / "none")["grid"] == grid_description(
-        IntegrationGrid(), None
-    )
-
-    with caplog.at_level("WARNING", logger="lanfactory.derive.corpus"):
-        derive_aux_corpus(
-            DDM_ONNX, "ddm", "cpn", tmp_path / "ndt", onset_param="ndt", **kwargs
-        )
-    assert any("no parameter 'ndt'" in r.getMessage() for r in caplog.records)
-    manifest = _manifest(tmp_path / "ndt")
-    grid = manifest["grid"]
-    assert grid["kind"] == "uniform" and grid["onset_param"] is None
-    assert manifest["lan_survey"]["grid"] == repr(IntegrationGrid())
-    assert manifest["lan_survey"]["leak_below_onset"] is None
-    assert manifest["derive_stats"]["derive_leak_below_onset_p99"] is None
-
-    # An explicit uniform grid is used as is; the onset column is still named
-    # in the grid record, but the leak — a property of the onset grid — is
-    # not measured, in the pickles, the manifest or its survey alike.
-    files = derive_aux_corpus(
-        DDM_ONNX,
-        "ddm",
-        "cpn",
-        tmp_path / "explicit",
-        grid=IntegrationGrid(n_points=300),
-        **kwargs,
-    )
-    manifest = _manifest(tmp_path / "explicit")
-    assert manifest["grid"] == grid_description(IntegrationGrid(n_points=300), "t")
-    assert manifest["derive_stats"]["derive_leak_below_onset_p99"] is None
-    assert manifest["lan_survey"]["leak_below_onset"] is None
-    for path in files:
-        stats = _generator_config(path)["derive_stats"]
-        assert stats["derive_leak_below_onset_p99"] is None
-
-    with pytest.raises(ValueError, match="OnsetGrid needs onset_param"):
-        derive_aux_corpus(
-            DDM_ONNX,
-            "ddm",
-            "cpn",
-            tmp_path / "bad",
-            onset_param=None,
-            grid=OnsetGrid(),
-            **kwargs,
-        )
-    assert not (tmp_path / "bad").exists()
 
 
 def _arrays(path: Path) -> tuple[np.ndarray, np.ndarray]:
@@ -781,6 +707,10 @@ def test_corpus_rejects_bad_arguments(tmp_path):
     with pytest.raises(ValueError, match=r"width 7.*width 6.*right LAN"):
         derive_aux_corpus(wrong, "ddm", "cpn", tmp_path / "wrong")
     assert not (tmp_path / "wrong").exists()
+    # lba2 has four parameters, like ddm, but no onset to refine the grid around.
+    with pytest.raises(ValueError, match="no non-decision time 't'"):
+        derive_aux_corpus(DDM_ONNX, "lba2", "cpn", tmp_path / "lba2")
+    assert not (tmp_path / "lba2").exists()
 
 
 # --------------------------------------------------------------------------

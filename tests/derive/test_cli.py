@@ -9,14 +9,7 @@ import subprocess
 from typer.testing import CliRunner
 
 from lanfactory.cli.derive_aux import app
-from lanfactory.derive import (
-    MANIFEST_NAME,
-    IntegrationGrid,
-    OnsetGrid,
-    SourceLAN,
-    derive_aux_corpus,
-    grid_description,
-)
+from lanfactory.derive import MANIFEST_NAME, SourceLAN, derive_aux_corpus
 from tests.derive.conftest import DDM_ONNX
 
 _ANSI_RE = re.compile(r"\x1b\[[\d;]*m")
@@ -63,10 +56,6 @@ def test_derive_aux_writes_files_and_manifest(tmp_path, ddm_provenance):
             "3",
             "--n-theta-per-file",
             "16",
-            "--grid-points",
-            "200",
-            "--max-t",
-            "15",
             "--deadline-quantile-frac",
             "0.3",
             "--fallback-window",
@@ -94,8 +83,6 @@ def test_derive_aux_writes_files_and_manifest(tmp_path, ddm_provenance):
     manifest = json.loads((out / MANIFEST_NAME).read_text())
     assert manifest["model"] == "ddm" and manifest["network_type"] == "opn"
     assert manifest["n_files"] == 3 and manifest["n_theta_per_file"] == 16
-    assert manifest["grid"] == grid_description(OnsetGrid(max_t=15.0), "t")
-    assert manifest["grid"]["kind"] == "onset" and manifest["grid"]["max_t"] == 15.0
     assert manifest["deadline_quantile_frac"] == 0.3
     assert manifest["fallback_window"] == [0.9, 1.1]
     assert manifest["fallback_n_sim"] == 200
@@ -114,7 +101,6 @@ def test_derive_aux_writes_files_and_manifest(tmp_path, ddm_provenance):
         tmp_path / "lib",
         n_files=3,
         n_theta_per_file=16,
-        grid=OnsetGrid(max_t=15.0),
         deadline_quantile_frac=0.3,
         fallback_window=(0.9, 1.1),
         fallback_n_sim=200,
@@ -192,7 +178,7 @@ def test_derive_aux_rejects_unknown_type(tmp_path):
         ],
     )
     assert result.exit_code == 2
-    assert "--network-type must be one of" in _out(result)
+    assert "network_type must be one of" in _out(result)
     assert not list(tmp_path.glob("*.pickle"))
 
 
@@ -228,68 +214,6 @@ def test_derive_aux_rejects_missing_onnx_and_bad_counts(tmp_path):
     )
     assert result.exit_code == 2
     assert "n_files must be >= 2" in _out(result)
-
-
-def test_derive_aux_empty_onset_param_selects_the_uniform_grid(tmp_path):
-    """``--onset-param ''`` integrates on ``--grid-points`` uniform points."""
-    result = runner.invoke(
-        app,
-        [
-            "--from-onnx",
-            str(DDM_ONNX),
-            "--network-type",
-            "cpn",
-            "--model-name",
-            "ddm",
-            "--output-folder",
-            str(tmp_path / "uniform"),
-            "--n-files",
-            "2",
-            "--n-theta-per-file",
-            "8",
-            "--survey-n-theta",
-            "32",
-            "--onset-param",
-            "",
-            "--grid-points",
-            "200",
-        ],
-    )
-    assert result.exit_code == 0, _out(result)
-    manifest = json.loads((tmp_path / "uniform" / MANIFEST_NAME).read_text())
-    assert manifest["grid"] == grid_description(IntegrationGrid(n_points=200), None)
-    assert manifest["grid"]["kind"] == "uniform"
-
-
-def test_derive_aux_warns_and_uses_the_uniform_grid_without_the_onset_param(
-    tmp_path,
-):
-    result = runner.invoke(
-        app,
-        [
-            "--from-onnx",
-            str(DDM_ONNX),
-            "--network-type",
-            "cpn",
-            "--model-name",
-            "ddm",
-            "--output-folder",
-            str(tmp_path / "missing"),
-            "--n-files",
-            "2",
-            "--n-theta-per-file",
-            "8",
-            "--survey-n-theta",
-            "32",
-            "--onset-param",
-            "ndt",
-        ],
-    )
-    assert result.exit_code == 0, _out(result)
-    assert "no parameter 'ndt'" in _out(result)
-    manifest = json.loads((tmp_path / "missing" / MANIFEST_NAME).read_text())
-    assert manifest["grid"]["kind"] == "uniform"
-    assert manifest["grid"]["onset_param"] is None
 
 
 def test_derive_aux_no_fallback_disables_the_window(tmp_path):
