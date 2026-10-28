@@ -21,6 +21,7 @@ import pytest
 
 import lanfactory
 from lanfactory.cli.utils import log_training_run_identity
+from lanfactory.derive import MANIFEST_NAME
 
 mlflow = pytest.importorskip("mlflow")
 
@@ -191,17 +192,21 @@ class TestLogTrainingRunIdentity:
         assert p["input_dim"] == "6"
         assert "param_bounds_json" not in p
 
-    @pytest.mark.parametrize("no_folder", [False, True], ids=["no-manifest", "none"])
-    def test_derived_corpus_without_manifest(self, tmp_tracking, tmp_path, no_folder):
-        """Pickles copied without their manifest still name the source LAN."""
+    @pytest.mark.parametrize("case", ["no-manifest", "no-folder", "malformed"])
+    def test_derived_corpus_without_manifest(self, tmp_tracking, tmp_path, case):
+        """Without a readable manifest, the run still names the source LAN."""
         source = {"source_lan_sha256": "abc"}
         dataset = SimpleNamespace(
             data_generator_config={"generator_approach": "derived", "source": source}
         )
-        overrides = {"training_data_folder": None} if no_folder else {}
+        overrides = {"training_data_folder": None} if case == "no-folder" else {}
+        if case == "malformed":
+            (tmp_path / "data").mkdir()
+            (tmp_path / "data" / MANIFEST_NAME).write_text("{", encoding="utf-8")
         run = self._log_and_fetch(tmp_tracking, tmp_path, dataset=dataset, **overrides)
         assert run.data.params["source_lan_sha256"] == "abc"
         assert run.data.tags["data_origin"] == "derived"
+        assert run.data.tags["run_uuid"] == "abc123"
         assert not any(key.startswith("derive_") for key in run.data.tags)
 
     def test_simulated_corpus_has_no_provenance(self, tmp_tracking, tmp_path):

@@ -291,8 +291,12 @@ def log_training_run_identity(
             if training_data_folder is not None:
                 manifest = Path(training_data_folder) / MANIFEST_NAME
                 if manifest.is_file():
-                    stats = json.loads(manifest.read_text(encoding="utf-8"))
-                    derive_tags.update(stats["derive_stats"])
+                    # Caught here: a bad manifest costs the stats, not the identity.
+                    try:
+                        stats = json.loads(manifest.read_text(encoding="utf-8"))
+                        derive_tags.update(stats["derive_stats"])
+                    except (OSError, ValueError, KeyError, TypeError) as e:
+                        logger.warning("Skipping derive stats in %s: %s", manifest, e)
 
         mlflow.log_params(params)
 
