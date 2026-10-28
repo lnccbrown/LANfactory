@@ -225,11 +225,25 @@ class OnsetGrid:
         -------
         NDArray[np.float64]
             ``(n_theta, n_points)`` strictly increasing rows.
+
+        Raises
+        ------
+        ValueError
+            If ``onset`` is not 1-D or not finite, or if ``max_t`` leaves no
+            room for ``onset_window`` above ``t_min``.
         """
         t = np.asarray(onset, dtype=np.float64)
         if t.ndim != 1:
             raise ValueError(f"onset must be (n_theta,), got shape {t.shape}")
-        t = np.clip(t, self.t_min + 1e-3, self.max_t - self.onset_window - 1e-3)
+        if not np.all(np.isfinite(t)):
+            raise ValueError("onset must be finite; pass 0 for a model without one")
+        lo, hi = self.t_min + 1e-3, self.max_t - self.onset_window - 1e-3
+        if lo >= hi:
+            raise ValueError(
+                f"max_t={self.max_t} leaves no room for onset_window="
+                f"{self.onset_window} above t_min={self.t_min}"
+            )
+        t = np.clip(t, lo, hi)
         t_min = np.full_like(t, self.t_min)
         # max(), not a threshold at t_min + knee: the pre segment's width stays
         # continuous in t, so its points never crowd into a sliver that the
@@ -333,7 +347,7 @@ class ChoiceMass:
             invert (a zero or non-finite total).
         """
         u_arr = np.asarray(u, dtype=np.float64)
-        if np.any((u_arr <= 0.0) | (u_arr >= 1.0)):
+        if not np.all((u_arr > 0.0) & (u_arr < 1.0)):  # also rejects NaN
             raise ValueError(f"u must lie in the open interval (0, 1), got {u!r}")
         total = self.total
         q = _interp_rows(u_arr * total, self.cdf, self.t)
@@ -394,8 +408,6 @@ def choice_mass(
     choice_arr = np.asarray(choices)
     n_choices = choice_arr.shape[0]
     onset_arr = np.broadcast_to(np.asarray(onset, dtype=np.float64), (n_theta,))
-    if not np.all(np.isfinite(onset_arr)):
-        raise ValueError("onset must be finite; pass 0 for a model without one")
     t = grid.for_theta(onset_arr)
     n_points = t.shape[1]
 

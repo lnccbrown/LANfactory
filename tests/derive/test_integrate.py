@@ -161,7 +161,7 @@ def test_wrong_input_width_names_expected_and_actual():
 
 
 def test_quantile_rejects_u_outside_open_unit_interval(gamma_mass):
-    for u in (0.0, 1.0, -0.1, 1.5):
+    for u in (0.0, 1.0, -0.1, 1.5, np.nan):
         with pytest.raises(ValueError, match=r"\(0, 1\)"):
             gamma_mass.quantile(u)
 
@@ -187,6 +187,10 @@ def test_inputs_of_the_wrong_shape_are_rejected():
         choice_mass(GammaMixturePredictor(), THETA, CHOICES, None)
     with pytest.raises(ValueError, match=r"\(n_theta,\)"):
         OnsetGrid().for_theta(np.zeros((2, 2)))
+    with pytest.raises(ValueError, match="onset must be finite"):
+        OnsetGrid().for_theta([0.4, np.nan])
+    with pytest.raises(ValueError, match="no room for onset_window"):
+        OnsetGrid(max_t=0.5).for_theta([0.1])
 
 
 # --------------------------------------------------------------------------
