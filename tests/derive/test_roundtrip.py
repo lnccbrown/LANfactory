@@ -12,7 +12,6 @@ from __future__ import annotations
 import contextlib
 import json
 import pickle
-import shutil
 from pathlib import Path
 
 import numpy as np
@@ -46,9 +45,6 @@ def cleanup_mlflow():
     yield
     if mlflow.active_run() is not None:
         mlflow.end_run()
-    mlruns = Path.cwd() / "mlruns"
-    if mlruns.exists():
-        shutil.rmtree(mlruns)
     with contextlib.suppress(Exception):
         mlflow.set_tracking_uri(original_uri)
 
@@ -155,8 +151,10 @@ def test_derive_train_export_round_trip(tmp_path, network_type):
     assert tags["data_origin"] == "derived"
     assert tags["run_uuid"] in onnx_path.name  # the MLflow <-> disk join key
     manifest = json.loads((corpus / MANIFEST_NAME).read_text(encoding="utf-8"))
-    expected = {**pickled["generator_config"]["source"], **manifest["derive_stats"]}
-    logged = {**params, **tags}
-    assert {key: logged[key] for key in expected} == {
-        key: str(value) for key, value in expected.items()
-    }
+    for logged, expected in (
+        (params, pickled["generator_config"]["source"]),
+        (tags, manifest["derive_stats"]),
+    ):
+        assert {key: logged[key] for key in expected} == {
+            key: str(value) for key, value in expected.items()
+        }
