@@ -1,10 +1,11 @@
 # Command-line reference
 
-LANfactory installs six commands. The tables below describe the complete
+LANfactory installs seven commands. The tables below describe the complete
 command-line surface; run `COMMAND --help` to inspect the version installed in
 your environment. Training commands consume LANfactory configuration files,
-export commands convert saved trainer artifacts, and Hub commands move reviewed
-artifacts to or from a Hugging Face repository.
+export commands convert saved trainer artifacts, Hub commands move reviewed
+artifacts to or from a Hugging Face repository, and `derive-aux` turns a
+trained LAN into an auxiliary-network training corpus.
 
 ## `jaxtrain`
 
@@ -120,6 +121,27 @@ Retrieve one `{network-type}/{model-name}/` folder from a Hub repository.
 | `--token TEXT` | `HF_TOKEN` or unset | Explicit token or environment fallback for private repositories |
 | `--force` | off | Replace an existing destination |
 | `--log-level LEVEL`, `-l LEVEL` | `WARNING` | Logging threshold |
+
+## `derive-aux`
+
+Derive a CPN or OPN training corpus from a trained LAN by
+integrating its density over reaction time (see
+[Deriving auxiliary networks](../network_types.md#deriving-auxiliary-networks-from-a-trained-lan)).
+Writes `--n-files` pickles plus `derive_manifest.json` to `--output-folder`,
+in the layout `torchtrain` and `jaxtrain` read, and prints the manifest path.
+The option names follow the Hub commands.
+
+| Option | Required/default | Contract |
+| --- | --- | --- |
+| `--from-onnx PATH` | required | The trained LAN; a `(1, n_params + 2)` ONNX artifact |
+| `--network-type TEXT` | required | Auxiliary network type to derive: `cpn` or `opn` |
+| `--model-name TEXT` | required | ssms model name the LAN was trained for (e.g. `ddm`) |
+| `--output-folder PATH` | required | Destination folder; created if absent |
+| `--n-files INTEGER` | `100` | Number of pickles to write; at least 2 |
+| `--n-theta-per-file INTEGER` | `4096` | Parameter vectors per file; rows per file for `opn`, times the number of choices for `cpn` |
+| `--seed INTEGER` | `0` | Base seed; each file depends only on it and its index |
+| `--source-run-uuid TEXT` | parsed from the filename | Training run uuid recorded in the provenance |
+| `--source-hf-revision TEXT` | unset | Hub revision the LAN was downloaded at, recorded as `source_lan_hf_commit` |
 
 For task-oriented workflows, see [Track training with MLflow](../using_mlflow.md)
 and [Share trained networks on Hugging Face Hub](../using_huggingface.md). The
