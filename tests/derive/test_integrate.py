@@ -189,13 +189,33 @@ def test_inputs_of_the_wrong_shape_are_rejected():
         OnsetGrid().for_theta(np.zeros((2, 2)))
     with pytest.raises(ValueError, match="onset must be finite"):
         OnsetGrid().for_theta([0.4, np.nan])
-    with pytest.raises(ValueError, match="no room for onset_window"):
-        OnsetGrid(max_t=0.5).for_theta([0.1])
 
 
 # --------------------------------------------------------------------------
 # 4. OnsetGrid
 # --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("bad", "match"),
+    [
+        ({"n_pre": 0}, "every segment needs a point"),
+        ({"n_tail": 0}, "every segment needs a point"),
+        ({"knee": -0.05}, "must be positive"),
+        ({"knee": 0.0}, "must be positive"),
+        ({"knee": np.nan}, "must be positive"),
+        ({"onset_window": -0.5}, "must be positive"),
+        ({"t_min": 0.0}, "must be positive"),
+        ({"max_t": 0.5}, "no room for onset_window"),
+        ({"max_t": np.inf}, "no room for onset_window"),
+        ({"max_t": np.nan}, "no room for onset_window"),
+    ],
+)
+def test_onset_grid_rejects_geometry_that_breaks_its_rows(bad, match):
+    # Each would give rows that run backwards, repeat a point, start at
+    # rt <= 0, drop a segment or never reach a finite max_t.
+    with pytest.raises(ValueError, match=match):
+        OnsetGrid(**bad)
 
 
 def test_onset_grid_rows_are_sorted_unique_rectangular_and_contain_t():

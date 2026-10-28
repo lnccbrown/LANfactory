@@ -174,9 +174,8 @@ class OnsetGrid:
     ``t``: ``[t_min, knee)``, ``[knee, t)``, ``[t, t + onset_window)`` and
     ``[t + onset_window, max_t]``. The points concentrate where the density
     moves while the whole support is still integrated. Every row has
-    :attr:`n_points` points and contains ``t_min``, ``t`` and ``max_t``
-    exactly; it is strictly increasing as long as every segment has positive
-    length, as with the defaults.
+    :attr:`n_points` points, contains ``t_min``, ``t`` and ``max_t`` exactly
+    and is strictly increasing.
 
     Parameters
     ----------
@@ -193,6 +192,13 @@ class OnsetGrid:
     t_min
         Lower edge in seconds, positive so no network is fed ``rt = 0``.
 
+    Raises
+    ------
+    ValueError
+        If a segment has no points, if ``knee``, ``onset_window`` or ``t_min``
+        is not positive, or if ``max_t`` is not finite or leaves no room for
+        ``onset_window`` above ``t_min``.
+
     Notes
     -----
     Onsets are clipped to ``[t_min + 1e-3, max_t - onset_window - 1e-3]`` so
@@ -207,6 +213,25 @@ class OnsetGrid:
     n_tail: int = 400
     max_t: float = 20.0
     t_min: float = 1e-4
+
+    def __post_init__(self) -> None:
+        if min(self.n_pre, self.n_knee, self.n_onset, self.n_tail) < 1:
+            raise ValueError(
+                "every segment needs a point, got n_pre, n_knee, n_onset, "
+                f"n_tail = {self.n_pre}, {self.n_knee}, {self.n_onset}, {self.n_tail}"
+            )
+        # Both checks are written so that a NaN fails them.
+        if not all(x > 0.0 for x in (self.knee, self.onset_window, self.t_min)):
+            raise ValueError(
+                "knee, onset_window and t_min must be positive, got "
+                f"{self.knee}, {self.onset_window}, {self.t_min}"
+            )
+        # The clip interval of the Notes is not empty, and max_t is finite.
+        if not self.t_min + 1e-3 < self.max_t - self.onset_window - 1e-3 < np.inf:
+            raise ValueError(
+                f"max_t={self.max_t} leaves no room for onset_window="
+                f"{self.onset_window} above t_min={self.t_min}"
+            )
 
     @property
     def n_points(self) -> int:
@@ -229,21 +254,14 @@ class OnsetGrid:
         Raises
         ------
         ValueError
-            If ``onset`` is not 1-D or not finite, or if ``max_t`` leaves no
-            room for ``onset_window`` above ``t_min``.
+            If ``onset`` is not 1-D or not finite.
         """
         t = np.asarray(onset, dtype=np.float64)
         if t.ndim != 1:
             raise ValueError(f"onset must be (n_theta,), got shape {t.shape}")
         if not np.all(np.isfinite(t)):
             raise ValueError("onset must be finite; pass 0 for a model without one")
-        lo, hi = self.t_min + 1e-3, self.max_t - self.onset_window - 1e-3
-        if lo >= hi:
-            raise ValueError(
-                f"max_t={self.max_t} leaves no room for onset_window="
-                f"{self.onset_window} above t_min={self.t_min}"
-            )
-        t = np.clip(t, lo, hi)
+        t = np.clip(t, self.t_min + 1e-3, self.max_t - self.onset_window - 1e-3)
         t_min = np.full_like(t, self.t_min)
         # max(), not a threshold at t_min + knee: the pre segment's width stays
         # continuous in t, so its points never crowd into a sliver that the
