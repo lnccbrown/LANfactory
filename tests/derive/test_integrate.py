@@ -482,6 +482,8 @@ def test_survey_counts_a_nan_total_as_failed():
     assert total["frac_gt_0.02"] == pytest.approx(PLANTED_SHARE, abs=0.08)
     assert total["p99_abs_dev"] == np.inf
     assert total["p50_abs_dev"] < 1e-3
+    a_bins = r["by_param"]["a"]
+    assert a_bins[-1]["max_abs_dev"] == np.inf and a_bins[0]["max_abs_dev"] < 1e-3
 
 
 def test_survey_validation():

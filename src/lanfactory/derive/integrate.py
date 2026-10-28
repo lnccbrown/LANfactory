@@ -432,11 +432,12 @@ def choice_mass(
     return ChoiceMass(t=t, cdf=cdf, by_choice=by_choice)
 
 
-def _dev_stats(dev: NDArray[np.float64]) -> dict[str, float]:
+def _dev_stats(
+    dev: NDArray[np.float64], abs_dev: NDArray[np.float64]
+) -> dict[str, float]:
     """Summary of ``total - 1`` over the surveyed parameter vectors."""
-    # A NaN total is a failed integral: infinitely far from one. "higher" takes
-    # an order statistic, so an infinite percentile stays inf, not NaN.
-    abs_dev = np.where(np.isnan(dev), np.inf, np.abs(dev))
+    # "higher" takes an order statistic, so an infinite percentile stays inf,
+    # not the NaN that interpolating between two infs gives.
     p50, p90, p99 = np.percentile(abs_dev, [50, 90, 99], method="higher")
     return {
         "mean": float(1.0 + dev.mean()),
@@ -546,19 +547,22 @@ def survey(
     seconds = time.perf_counter() - started
 
     dev = total - 1.0
+    # A NaN total is a failed integral: infinitely far from one.
+    abs_dev = np.where(np.isnan(dev), np.inf, np.abs(dev))
     by_param: dict[str, list[dict[str, float | int | None]]] = {}
     for j, name in enumerate(params):
         edges = np.linspace(lo[j], hi[j], 11)
         index = _bin_index(theta[:, j], lo[j], hi[j], 10)
         bins = []
         for b in range(10):
-            in_bin = dev[index == b]
+            mask = index == b
+            in_bin = dev[mask]
             bins.append(
                 {
                     "lo": float(edges[b]),
                     "hi": float(edges[b + 1]),
                     "mean_dev": float(in_bin.mean()) if in_bin.size else None,
-                    "max_abs_dev": float(np.abs(in_bin).max()) if in_bin.size else None,
+                    "max_abs_dev": float(abs_dev[mask].max()) if in_bin.size else None,
                     "n": int(in_bin.size),
                 }
             )
@@ -568,7 +572,7 @@ def survey(
         "n_theta": int(n_theta),
         "grid": repr(OnsetGrid()),
         "seconds": float(seconds),
-        "total": _dev_stats(dev),
+        "total": _dev_stats(dev, abs_dev),
         "leak_below_onset": (
             None
             if leak is None
