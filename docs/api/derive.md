@@ -33,6 +33,8 @@ page explains what is derived, the row layouts, the renormalisation and the
 fallback, the recorded statistics and provenance, and how to train on the
 result.
 
+A run trained on a derived corpus logs its provenance to MLflow: see [Derived corpora](../using_mlflow.md#derived-corpora).
+
 ::: lanfactory.derive.derive_aux_corpus
 
 ::: lanfactory.derive.NETWORK_TYPES

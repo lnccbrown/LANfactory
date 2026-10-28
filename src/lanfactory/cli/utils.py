@@ -228,6 +228,11 @@ def log_training_run_identity(
     is the configured *cap*, and reusing that param key with the effective
     value would make MLflow reject the trainer's entire param batch.
 
+    **Derived corpora.** Every run is tagged ``data_origin`` (``derived`` or
+    ``simulated``); a ``derive-aux`` corpus adds ``generator_config["source"]``
+    as params and its manifest's corpus-wide ``derive_stats`` as tags. See
+    *Derived corpora* in ``docs/using_mlflow.md``.
+
     Best-effort: failures are logged, never raised — training must not die on
     a tracking hiccup. No-op when no MLflow run is active.
     """
@@ -269,6 +274,30 @@ def log_training_run_identity(
                         bounds_json.encode()
                     ).hexdigest()
 
+        # A derived corpus (lanfactory.derive) names the LAN it was integrated
+        # from; that is provenance of this network too. The isinstance guard:
+        # DatasetTorch's default data_generator_config is the string "None".
+        generator_config = getattr(dataset, "data_generator_config", None)
+        derived = (
+            isinstance(generator_config, dict)
+            and generator_config.get("generator_approach") == "derived"
+        )
+        derive_tags = {"data_origin": "derived" if derived else "simulated"}
+        if derived:
+            from lanfactory.derive import MANIFEST_NAME
+
+            params.update(generator_config["source"])
+            # The corpus-wide statistics live in the manifest beside the pickles.
+            if training_data_folder is not None:
+                manifest = Path(training_data_folder) / MANIFEST_NAME
+                if manifest.is_file():
+                    # Caught here: a bad manifest costs the stats, not the identity.
+                    try:
+                        stats = json.loads(manifest.read_text(encoding="utf-8"))
+                        derive_tags.update(stats["derive_stats"])
+                    except (OSError, ValueError, KeyError, TypeError) as e:
+                        logger.warning("Skipping derive stats in %s: %s", manifest, e)
+
         mlflow.log_params(params)
 
         tags = {
@@ -276,6 +305,7 @@ def log_training_run_identity(
             "phase": "train",
             "run_uuid": run_uuid,
             "n_training_files_used": str(n_training_files),
+            **derive_tags,
         }
         if training_data_folder is not None:
             tags["training_data_folder"] = str(training_data_folder)

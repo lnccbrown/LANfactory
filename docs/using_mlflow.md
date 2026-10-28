@@ -42,6 +42,22 @@ mlflow ui
 - Artifacts: trained model state, training history, config files
 - Lineage: link to data generation experiment (optional)
 
+### Derived corpora
+
+Every training run is tagged `data_origin` (`simulated` or `derived`); a run
+on a [`derive-aux`](api/derive.md#derived-corpora) corpus also carries the
+corpus's `source` block as params and its manifest's `derive_stats` as
+`derive_*` tags; MLflow stores every value as text, `None` as `"None"`.
+
+| kind | keys |
+| --- | --- |
+| params | `derivation_method`, `aux_category`, `source_lan_run_uuid`, `source_lan_sha256`, `source_lan_hf_commit`, `integration_grid`, `integration_max_t` |
+| tags | `data_origin`, `derive_total_mass_mean`, `derive_total_mass_min`, `derive_total_mass_max`, `derive_fallback_frac`, `derive_sim_past_max_t_max`, `derive_leak_below_onset_p99` |
+
+```python
+runs = mlflow.search_runs(filter_string="tags.data_origin = 'derived'")
+```
+
 ## 📖 Usage Examples
 
 ### Example 1: Basic JAX Training
