@@ -522,6 +522,8 @@ def derive_aux_corpus(
             "the integration grid is refined around it"
         )
     onset_idx = params.index("t")
+    # ssms' st models declare that their reaction times start below t.
+    edge_shift = base_config.get("ndt_edge_shift")
     predictor = load_onnx_predictor(onnx_path)
 
     if network_type == "cpn":
@@ -562,6 +564,9 @@ def derive_aux_corpus(
         rng = np.random.default_rng([seed, i])
         theta = sample_theta(base_config, n_theta_per_file, rng)
         onset = theta[:, onset_idx]
+        if edge_shift is not None:
+            shift = theta[:, params.index(edge_shift["param"])]
+            onset = onset - edge_shift["scale"] * shift
         mass = choice_mass(predictor, theta, choices, onset, GRID)
         # Outside the window, a zero or NaN total among them, the LAN is not
         # trusted: those rows get placeholder labels, simulated below.

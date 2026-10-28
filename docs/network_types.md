@@ -122,9 +122,10 @@ trainer's file name), `source_lan_sha256`, `source_lan_hf_commit`
 again in `derive_manifest.json`.
 
 **Grid.** The density is integrated over `[t_min, 20 s]` on a grid refined
-per parameter vector around the non-decision time `t`; the
+per parameter vector around the onset: the non-decision time `t`, or
+`t - st` for the models whose ssms config declares an `ndt_edge_shift`. The
 [API reference](api/derive.md) states the grid and tail policies. The LAN
-leaks a little mass below `t` (mean 0.0035, p99 0.052 on the Hub ddm LAN);
+leaks a little mass below its onset (mean 0.0035, p99 0.052 on the Hub ddm LAN);
 that leak is part of what it predicts, so it is kept, and recorded as
 `derive_leak_below_onset_p99`.
 
