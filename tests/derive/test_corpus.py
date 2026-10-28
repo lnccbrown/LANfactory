@@ -17,6 +17,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from scipy.stats import gamma
 from ssms.basic_simulators.simulator import simulator
 from ssms.config import ModelConfigBuilder
 
@@ -613,3 +614,41 @@ def test_thetas_outside_the_window_are_labelled_by_simulation(
     assert stats["derive_fallback_frac"] == pytest.approx(np.mean(every_flag))
     assert stats["derive_sim_past_max_t_max"] == pytest.approx(0.01)
     assert all(np.isfinite(v) for v in stats.values())
+
+
+class _StDensity:
+    """A perfect ddm_st-like LAN: rows ``[v, a, z, t, st, rt, choice]``.
+
+    The first passage is a sharp gamma, the non-decision time ``t ± st``, so
+    reaction times start at ``t - st`` and nothing leaks below that.
+    """
+
+    input_width = 7
+
+    def __call__(self, batch: np.ndarray) -> np.ndarray:
+        t, st, rt, choice = np.asarray(batch, dtype=np.float64)[:, 3:].T
+        g = gamma.cdf(rt - t + st, 2, scale=0.03) - gamma.cdf(
+            rt - t - st, 2, scale=0.03
+        )
+        with np.errstate(divide="ignore"):
+            return np.log(np.where(choice == 1, 0.7, 0.3) * g / (2 * st))
+
+
+def test_corpus_builds_the_grid_where_the_config_says_rts_start(tmp_path, monkeypatch):
+    # Built around t, ddm_st's own mass in [t - st, t] read as LAN leak:
+    # p99 0.38 for this density.
+    config = ModelConfigBuilder.from_model("ddm_st")
+    assert config["ndt_edge_shift"] == {"param": "st", "scale": 1.0}
+    monkeypatch.setattr(corpus_module, "load_onnx_predictor", lambda path: _StDensity())
+    derive_aux_corpus(
+        DDM_ONNX,
+        "ddm_st",
+        "cpn",
+        tmp_path,
+        n_files=2,
+        n_theta_per_file=64,
+        fallback_n_sim=10,
+    )
+    stats = _manifest(tmp_path)["derive_stats"]
+    assert stats["derive_leak_below_onset_p99"] < 1e-3
+    assert stats["derive_fallback_frac"] == 0.0
