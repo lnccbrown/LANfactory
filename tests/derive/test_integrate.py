@@ -134,7 +134,7 @@ def test_mass_error_shrinks_with_grid_resolution():
         )
 
     coarse, default, fine = (max_err(k) for k in (0.25, 1, 4))
-    assert coarse > default > fine
+    assert coarse / default > 10 and default / fine > 10  # 16 at second order
 
 
 def test_quantile_accepts_a_fraction_per_theta(gamma_mass):
@@ -453,6 +453,25 @@ def test_survey_leak_below_onset(scaled_survey):
     # a sliver of the true density sits below the clipped onset: at most
     # ~1e-9 (one pre-segment interval of the trapezoid, spacing ~1.6e-5 s).
     assert leak["p99"] == 0.0 and leak["mean"] < 1e-9 and leak["max"] < 1e-9
+
+
+class LeakyPredictor:
+    """Rows ``[a, t, rt, choice]``: ScaledPredictor's gamma, unscaled, from t - 50 ms."""
+
+    input_width = 4
+
+    def __call__(self, batch: np.ndarray) -> np.ndarray:
+        _, t, rt, choice = np.asarray(batch, dtype=np.float64).T
+        return log_density(choice, rt - t + 0.05, 2.0, 0.2)
+
+
+def test_survey_leak_below_onset_measures_mass_before_t():
+    r = survey(LeakyPredictor(), SURVEY_BOUNDS, SURVEY_PARAMS, CHOICES, n_theta=300)
+    leak = r["leak_below_onset"]
+    # Every onset past 50 ms leaks the gamma's first 50 ms; the few below it
+    # (t < 0.05, the density cut at t_min) leak less.
+    assert leak["p99"] == pytest.approx(gamma.cdf(0.05, a=2.0, scale=0.2), abs=1e-5)
+    assert leak["mean"] < leak["p99"]
 
 
 def test_survey_without_an_onset_builds_the_grid_around_zero():
