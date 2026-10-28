@@ -1,6 +1,11 @@
 """Shared helpers for the ONNX export tests."""
 
+from pathlib import Path
+
 import onnx
+
+# franklab/HSSM's root ddm.onnx, copied unchanged (see fixtures/onnx/PROVENANCE.md).
+DDM_ONNX = Path(__file__).parent / "fixtures" / "onnx" / "ddm.onnx"
 
 
 def max_int64_abs(onnx_model: onnx.ModelProto) -> int:

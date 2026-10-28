@@ -154,3 +154,7 @@ def test_network_inspector_exports_are_referenced() -> None:
         "src/lanfactory/network_inspectors/__init__.py",
         "docs/api/network_inspectors.md",
     )
+
+
+def test_derive_exports_are_referenced() -> None:
+    _assert_documented("src/lanfactory/derive/__init__.py", "docs/api/derive.md")
