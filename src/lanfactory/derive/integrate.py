@@ -9,13 +9,14 @@ Grid policy
 -----------
 The density is integrated with the trapezoid rule over the LANs' training
 support ``[t_min, max_t]`` (``max_t = 20`` s, ssms' default) and is never
-evaluated past it. It rises from zero within milliseconds of the
-non-decision time ``t``, so the one grid, :class:`OnsetGrid`, is refined per
-parameter vector around ``t``: on the Hub ddm LAN its 1160 points agree with a
+evaluated past it. It rises from zero within milliseconds of its onset, so the
+one grid, :class:`OnsetGrid`, is refined per parameter vector around the
+onset: the non-decision time ``t``, or ``t - scale * theta[param]`` for a
+model whose ssms config declares an ``ndt_edge_shift``. On the Hub ddm LAN its 1160 points agree with a
 16 000-point uniform grid to ``1e-3`` (p99; ``3.5e-3`` at worst), where a
 uniform 1000-point grid is off by up to 25 % at ``a < 0.5``. The grid starts
-at ``t_min``, not at ``t``: the
-mass a LAN leaks below ``t`` is part of what it predicts. A model without an
+at ``t_min``, not at the onset: the
+mass a LAN leaks below its onset is part of what it predicts. A model without an
 onset parameter passes ``onset = 0``.
 
 Tail policy
@@ -28,10 +29,10 @@ deficit; renormalising is the corpus's job.
 from __future__ import annotations
 
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
@@ -397,7 +398,8 @@ def choice_mass(
         The choice codes the LAN was trained on, e.g. ``[-1, 1]``.
     onset
         Scalar or ``(n_theta,)`` onset (non-decision) times the grid is built
-        around, e.g. ``theta[:, t_idx]``; 0 for a model without one.
+        around, e.g. ``theta[:, t_idx]``, less the config's ``ndt_edge_shift``
+        where it declares one; 0 for a model without an onset.
     grid
         Reaction-time grid (see the module's grid policy).
 
@@ -485,6 +487,7 @@ def survey(
     n_theta: int = 20_000,
     seed: int = 0,
     onset_param: str | None = "t",
+    ndt_edge_shift: Mapping[str, Any] | None = None,
 ) -> dict:
     """Whole-box statistics of a LAN's integrated mass.
 
@@ -512,6 +515,10 @@ def survey(
         Name of the non-decision-time parameter: the onset the grid is built
         around and the edge ``leak_below_onset`` is measured at. ``None``
         builds the grid around onset 0 and reports no leak.
+    ndt_edge_shift
+        The model config's ``ndt_edge_shift``, ``{"param": name, "scale": s}``,
+        for a model whose reaction times start below ``t``: the onset becomes
+        ``t - s * theta[name]``. ``None`` for every other model.
 
     Returns
     -------
@@ -528,8 +535,9 @@ def survey(
     ------
     ValueError
         If ``params`` is empty or names a parameter without bounds, if
-        ``onset_param`` is not in ``params``, if a bound has ``hi < lo``, or
-        if ``n_theta < 1``.
+        ``onset_param`` is not in ``params``, if ``ndt_edge_shift`` comes
+        without ``onset_param`` or names a parameter not in ``params``, if a
+        bound has ``hi < lo``, or if ``n_theta < 1``.
     """
     params = list(params)
     n_params = len(params)
@@ -540,6 +548,13 @@ def survey(
         raise ValueError(f"param_bounds lacks bounds for {missing}")
     if onset_param is not None and onset_param not in params:
         raise ValueError(f"onset_param {onset_param!r} is not in params {params}")
+    if ndt_edge_shift is not None and (
+        onset_param is None or ndt_edge_shift["param"] not in params
+    ):
+        raise ValueError(
+            f"ndt_edge_shift {dict(ndt_edge_shift)} needs onset_param and a "
+            f"param in {params}"
+        )
     if n_theta < 1:
         raise ValueError(f"n_theta must be >= 1, got {n_theta}")
 
@@ -550,18 +565,20 @@ def survey(
     rng = np.random.default_rng(seed)
     theta = rng.uniform(lo, hi, size=(n_theta, n_params))
     onset_idx = params.index(onset_param) if onset_param is not None else None
+    onset = theta[:, onset_idx] if onset_idx is not None else np.zeros(n_theta)
+    if ndt_edge_shift is not None:
+        shift = theta[:, params.index(ndt_edge_shift["param"])]
+        onset = onset - ndt_edge_shift["scale"] * shift
 
     total = np.empty(n_theta)
     leak = np.empty(n_theta) if onset_idx is not None else None
     started = time.perf_counter()
     for start in range(0, n_theta, _CHUNK):
-        chunk = theta[start : start + _CHUNK]
-        stop = start + len(chunk)
-        onset = chunk[:, onset_idx] if onset_idx is not None else 0.0
-        mass = choice_mass(predictor, chunk, choices, onset)
+        stop = min(start + _CHUNK, n_theta)
+        mass = choice_mass(predictor, theta[start:stop], choices, onset[start:stop])
         total[start:stop] = mass.total
         if leak is not None:
-            leak[start:stop] = mass.mass_before(onset)
+            leak[start:stop] = mass.mass_before(onset[start:stop])
     seconds = time.perf_counter() - started
 
     dev = total - 1.0
