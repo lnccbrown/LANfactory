@@ -113,7 +113,7 @@ dev = [
 docs = [
     "mkdocs==1.6.1",
     "mkdocs-material==9.7.7",
-    "mkdocstrings==1.0.6",
+    "mkdocstrings==1.0.8",
     "mkdocstrings-python==2.0.9",
     "mkdocs-jupyter==0.26.3",
     "mkdocs-autorefs==1.4.4",
