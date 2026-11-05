@@ -1,6 +1,6 @@
 # Command-line reference
 
-LANfactory installs six commands. The tables below describe the complete
+LANfactory installs seven commands. The tables below describe the complete
 command-line surface; run `COMMAND --help` to inspect the version installed in
 your environment. Training commands consume LANfactory configuration files,
 export commands convert saved trainer artifacts, and Hub commands move reviewed

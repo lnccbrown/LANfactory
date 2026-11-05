@@ -66,7 +66,7 @@ mlflow = ["mlflow>=3.14.0"]
 hf = ["huggingface-hub>=0.20.0"]
 sbi = ["sbi>=0.26", "nflows>=0.14"]
 bayesflow = ["bayesflow>=2.0.8", "keras>=3.12"]
-ui = ["streamlit>=1.40.0"]
+ui = ["streamlit>=1.52.0"]
 all = ["lanfactory[mlflow,hf,sbi,bayesflow,ui]"]
 
 [dependency-groups]
@@ -102,7 +102,7 @@ dev = [
     "keras>=3.12",
     "sbi>=0.26",
     "marimo>=0.23",
-    "streamlit>=1.40.0",
+    "streamlit>=1.52.0",
 ]
 docs = [
     "mkdocs==1.6.1",

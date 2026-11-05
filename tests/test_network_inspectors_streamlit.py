@@ -63,3 +63,68 @@ def test_resolve_model_paths_finds_nested_artifacts(tmp_path):
 def test_resolve_model_paths_reports_missing_model(tmp_path):
     with pytest.raises(FileNotFoundError, match="Model directory not found"):
         _resolve_model_paths(str(tmp_path), "ddm")
+
+
+RUN_A = "a" * 32
+RUN_B = "b" * 32
+
+
+def test_model_directories_skips_non_lan_network_types(tmp_path):
+    for network_type in ("cpn", "opn"):
+        _add_model_artifacts(
+            tmp_path / network_type / "ddm",
+            "ddm_state_dict.pt",
+            "ddm_network_config.pickle",
+        )
+    _add_model_artifacts(
+        tmp_path / "lan" / "ddm",
+        "ddm_train_state_dict.pt",
+        "ddm_network_config.pickle",
+    )
+
+    assert _model_directories(str(tmp_path)) == {"ddm": tmp_path / "lan" / "ddm"}
+
+
+def test_model_directories_bounds_scan_depth(tmp_path):
+    _add_model_artifacts(
+        tmp_path / "a" / "b" / "c" / "ddm",
+        "ddm_state_dict.pt",
+        "ddm_network_config.pickle",
+    )
+
+    assert _model_directories(str(tmp_path)) == {}
+
+
+def test_resolve_model_paths_pairs_artifacts_by_run_uuid(tmp_path):
+    model_dir = tmp_path / "lan" / "ddm"
+    model_dir.mkdir(parents=True)
+    # Orphan config from a failed run sorts first and must not be chosen.
+    (model_dir / f"{RUN_A}_lan_ddm_network_config.pickle").touch()
+    (model_dir / f"{RUN_B}_lan_ddm_network_config.pickle").touch()
+    (model_dir / f"ddm_lan_{RUN_B}_train_state_dict.pt").touch()
+
+    state_path, config_path = _resolve_model_paths(str(tmp_path), "ddm")
+
+    assert state_path == model_dir / f"ddm_lan_{RUN_B}_train_state_dict.pt"
+    assert config_path == model_dir / f"{RUN_B}_lan_ddm_network_config.pickle"
+
+
+def test_resolve_model_paths_rejects_unmatched_run_uuids(tmp_path):
+    model_dir = tmp_path / "ddm"
+    _add_model_artifacts(
+        model_dir,
+        f"ddm_lan_{RUN_A}_train_state_dict.pt",
+        f"{RUN_B}_lan_ddm_network_config.pickle",
+    )
+
+    with pytest.raises(FileNotFoundError, match="same training run"):
+        _resolve_model_paths(str(tmp_path), "ddm")
+
+
+def test_resolve_model_paths_rejects_ambiguous_legacy_artifacts(tmp_path):
+    model_dir = tmp_path / "ddm"
+    _add_model_artifacts(model_dir, "one_state_dict.pt", "one_network_config.pickle")
+    (model_dir / "two_network_config.pickle").touch()
+
+    with pytest.raises(FileNotFoundError, match="same training run"):
+        _resolve_model_paths(str(tmp_path), "ddm")

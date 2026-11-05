@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import re
 import sys
+from collections.abc import Iterator
 from importlib.resources import files
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import ssms
@@ -53,6 +56,32 @@ def _available_models(base_dir: str) -> list[str]:
     return sorted(_model_directories(base_dir))
 
 
+# torchtrain writes ``<base>/<network_type>/<model>/``; flat ``<base>/<model>/``
+# layouts are also supported, so two levels below the base is enough. A small
+# margin keeps the scan cheap even when the base dir is something like ``~``.
+_MAX_SCAN_DEPTH = 3
+# Network types whose artifacts share model names with LANs but are not
+# loadable as LANs (different input dimension / output head).
+_NON_LAN_NETWORK_TYPES = frozenset({"cpn", "opn", "gonogo"})
+# torchtrain embeds a ``uuid.uuid1().hex`` run id in every artifact filename.
+_RUN_UUID_PATTERN = re.compile(r"(?<![0-9a-f])[0-9a-f]{32}(?![0-9a-f])")
+
+
+def _iter_directories(root: Path, max_depth: int) -> Iterator[Path]:
+    """Yield subdirectories of ``root`` up to ``max_depth`` levels deep."""
+    frontier = [root]
+    for _ in range(max_depth):
+        next_frontier: list[Path] = []
+        for directory in frontier:
+            try:
+                children = [child for child in directory.iterdir() if child.is_dir()]
+            except OSError:
+                continue
+            next_frontier.extend(children)
+        yield from next_frontier
+        frontier = next_frontier
+
+
 def _model_directories(base_dir: str) -> dict[str, Path]:
     model_root = Path(base_dir).expanduser()
     if not model_root.exists() or not model_root.is_dir():
@@ -60,8 +89,11 @@ def _model_directories(base_dir: str) -> dict[str, Path]:
 
     valid_ssms_models = set(ssms.config.model_config.keys())
     model_directories: dict[str, Path] = {}
-    for model_dir in sorted(path for path in model_root.rglob("*") if path.is_dir()):
+    for model_dir in sorted(_iter_directories(model_root, _MAX_SCAN_DEPTH)):
         if model_dir.name not in valid_ssms_models:
+            continue
+        relative_parents = model_dir.relative_to(model_root).parts[:-1]
+        if _NON_LAN_NETWORK_TYPES.intersection(relative_parents):
             continue
         has_state = any(model_dir.glob("*state_dict*"))
         has_cfg = any(model_dir.glob("*network_config*"))
@@ -69,6 +101,54 @@ def _model_directories(base_dir: str) -> dict[str, Path]:
             model_directories.setdefault(model_dir.name, model_dir)
 
     return model_directories
+
+
+def _run_uuid(path: Path) -> str | None:
+    match = _RUN_UUID_PATTERN.search(path.name)
+    return match.group(0) if match else None
+
+
+def _pair_run_artifacts(model_dir: Path) -> tuple[Path, Path]:
+    """Return the (state dict, network config) pair from the same training run.
+
+    Artifacts are matched by the run UUID torchtrain embeds in both filenames;
+    when several runs match, the most recently written checkpoint wins. Files
+    without a run UUID are accepted only when they are the sole candidates.
+    """
+    state_candidates = sorted(model_dir.glob("*state_dict*"))
+    config_candidates = sorted(model_dir.glob("*network_config*"))
+
+    if not state_candidates:
+        raise FileNotFoundError(f"No state dict file found in {model_dir}.")
+    if not config_candidates:
+        raise FileNotFoundError(f"No network config file found in {model_dir}.")
+
+    configs_by_uuid = {
+        run_uuid: config
+        for config in config_candidates
+        if (run_uuid := _run_uuid(config)) is not None
+    }
+    matched = [
+        (state, configs_by_uuid[run_uuid])
+        for state in state_candidates
+        if (run_uuid := _run_uuid(state)) in configs_by_uuid
+    ]
+    if matched:
+        return max(matched, key=lambda pair: pair[0].stat().st_mtime)
+
+    if (
+        len(state_candidates) == 1
+        and len(config_candidates) == 1
+        and _run_uuid(state_candidates[0]) is None
+        and _run_uuid(config_candidates[0]) is None
+    ):
+        return state_candidates[0], config_candidates[0]
+
+    raise FileNotFoundError(
+        f"Could not match a state dict to a network config from the same "
+        f"training run in {model_dir}. Keep exactly one pair of artifacts, or "
+        "use torchtrain's run-UUID filenames so they can be paired."
+    )
 
 
 def _resolve_model_paths(base_dir: str, model: str) -> tuple[Path, Path]:
@@ -82,15 +162,7 @@ def _resolve_model_paths(base_dir: str, model: str) -> tuple[Path, Path]:
             f"Detected models in this base dir: {available_str}."
         )
 
-    state_candidates = sorted(model_dir.glob("*state_dict*"))
-    config_candidates = sorted(model_dir.glob("*network_config*"))
-
-    if not state_candidates:
-        raise FileNotFoundError(f"No state dict file found in {model_dir}.")
-    if not config_candidates:
-        raise FileNotFoundError(f"No network config file found in {model_dir}.")
-
-    return state_candidates[0], config_candidates[0]
+    return _pair_run_artifacts(model_dir)
 
 
 @st.cache_resource(show_spinner=False)
@@ -222,7 +294,10 @@ def _kde_tab(model: str, predictor) -> None:
             "KDE vs LAN chart. X-axis is signed reaction time and y-axis is "
             "likelihood. Black curves are KDE estimates and green curves are LAN outputs."
         )
-        st.pyplot(fig, clear_figure=True, use_container_width=True)
+        try:
+            st.pyplot(fig, clear_figure=True, use_container_width=True)
+        finally:
+            plt.close(fig)
 
 
 def _manifold_tab(model: str, predictor) -> None:

@@ -153,20 +153,24 @@ This filtered tree shows only the artifact names used by the UI:
 tree -P '*state_dict*|*network_config*' --prune data/torch_models
 ```
 
-The exact layout may include a network-type directory, for example:
+`torchtrain` writes each run under `<networks-path-base>/<network_type>/<model>`,
+so both tutorial models land below `lan/`:
 
 ```text
 data/torch_models/
-├── angle/
-│   ├── ...state_dict.pt
-│   └── ...network_config.pickle
 └── lan/
+    ├── angle/
+    │   ├── <run-uuid>_lan_angle_network_config.pickle
+    │   └── angle_lan_<run-uuid>_train_state_dict.pt
     └── ddm/
-        ├── ...train_state_dict.pt
-        └── ...network_config.pickle
+        ├── <run-uuid>_lan_ddm_network_config.pickle
+        └── ddm_lan_<run-uuid>_train_state_dict.pt
 ```
 
-The UI searches recursively, so both layouts are supported.
+The UI searches up to three directory levels below the base directory, so a
+flat `<base>/<model>/` layout also works. It skips `cpn/`, `opn/`, and
+`gonogo/` subtrees, and pairs each state dict with the network config from
+the same training run by its run UUID.
 
 ## Launch the UI
 
