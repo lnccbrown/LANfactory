@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import ssms
 import streamlit as st
+from ssms.dataset_generators.parameter_samplers import UniformParameterSampler
 
 if __package__ in (None, ""):
     # Support direct execution with:
@@ -180,10 +181,34 @@ def _resolve_model_paths(base_dir: str, model: str) -> tuple[Path, Path]:
     return _pair_run_artifacts(model_dir)
 
 
-@st.cache_resource(show_spinner=False)
 def _load_predictor(base_dir: str, model: str):
-    spec = ModelSpec.from_model(model)
+    """Load the predictor for the newest run, re-resolving artifacts every call.
+
+    Resolution happens outside the resource cache and the cache key includes
+    the artifact paths and modification times, so a newly finished training run
+    (or a replaced checkpoint) is picked up instead of serving stale weights.
+    """
     state_dict_path, network_config_path = _resolve_model_paths(base_dir, model)
+    return _load_predictor_cached(
+        model=model,
+        state_dict_path=str(state_dict_path),
+        network_config_path=str(network_config_path),
+        artifact_mtimes=(
+            state_dict_path.stat().st_mtime_ns,
+            network_config_path.stat().st_mtime_ns,
+        ),
+    )
+
+
+@st.cache_resource(show_spinner=False, max_entries=8)
+def _load_predictor_cached(
+    model: str,
+    state_dict_path: str,
+    network_config_path: str,
+    artifact_mtimes: tuple[int, int],
+):
+    del artifact_mtimes  # only part of the cache key
+    spec = ModelSpec.from_model(model)
     input_dim = len(spec.params) + 2
     return get_torch_mlp(
         model_file_path=state_dict_path,
@@ -201,10 +226,34 @@ def _default_base_dir() -> str:
 
 
 def _make_parameter_df(model: str, n_rows: int, seed: int) -> pd.DataFrame:
-    params = ssms.config.model_config[model]["params"]
-    lb, ub = ssms.config.model_config[model]["param_bounds"]
-    rng = np.random.default_rng(seed)
-    return pd.DataFrame(rng.uniform(lb, ub, size=(n_rows, len(params))), columns=params)
+    """Sample parameter vectors within the model bounds.
+
+    Uses ``param_bounds_dict`` with ssms's dependency-aware sampler because some
+    models bound one parameter by another (e.g. ``full_ddm_rv`` has
+    ``st <= t``), which the positional ``param_bounds`` cannot express.
+    """
+    config = ssms.config.model_config[model]
+    sampler = UniformParameterSampler(
+        param_space=config["param_bounds_dict"], constraints=[]
+    )
+    samples = sampler.sample(n_samples=n_rows, rng=np.random.default_rng(seed))
+    return pd.DataFrame({param: samples[param] for param in config["params"]})
+
+
+def _sweep_bounds(model: str, param: str) -> tuple[float, float]:
+    """Return numeric bounds for ``param``, resolving named endpoints.
+
+    An endpoint may name another parameter (``full_ddm_rv``: ``st`` in
+    ``(0.001, "t")``); it is resolved against the model's default vector.
+    """
+    config = ssms.config.model_config[model]
+    defaults = dict(zip(config["params"], config["default_params"], strict=True))
+    lower, upper = config["param_bounds_dict"][param]
+
+    def resolve(endpoint: float | str) -> float:
+        return float(defaults[endpoint] if isinstance(endpoint, str) else endpoint)
+
+    return resolve(lower), resolve(upper)
 
 
 def _kde_tab(model: str, predictor) -> None:
@@ -319,14 +368,11 @@ def _manifold_tab(model: str, predictor) -> None:
     st.subheader("LAN Manifold")
     params = ssms.config.model_config[model]["params"]
     defaults = ssms.config.model_config[model]["default_params"]
-    lb, ub = ssms.config.model_config[model]["param_bounds"]
 
     selected_vary_param = st.session_state.get("manifold_vary_param", params[0])
     if selected_vary_param not in params:
         selected_vary_param = params[0]
-    vary_idx = params.index(selected_vary_param)
-    p_min = float(lb[vary_idx])
-    p_max = float(ub[vary_idx])
+    p_min, p_max = _sweep_bounds(model, selected_vary_param)
 
     with st.expander("Manifold Grid", expanded=True):
         n_rt_steps = st.slider(

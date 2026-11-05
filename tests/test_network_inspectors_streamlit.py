@@ -1,13 +1,21 @@
 """Tests for network inspector Streamlit model discovery helpers."""
 
+import os
 from pathlib import Path
 
+import numpy as np
 import pytest
+import ssms
 
+from lanfactory.network_inspectors import streamlit_app
 from lanfactory.network_inspectors.streamlit_app import (
     _available_models,
+    _load_predictor,
+    _load_predictor_cached,
+    _make_parameter_df,
     _model_directories,
     _resolve_model_paths,
+    _sweep_bounds,
 )
 
 
@@ -147,3 +155,53 @@ def test_model_directories_prefers_pairable_directory(tmp_path):
     assert _model_directories(str(tmp_path)) == {"ddm": nested}
     _, config_path = _resolve_model_paths(str(tmp_path), "ddm")
     assert config_path == nested / f"{RUN_A}_lan_ddm_network_config.pickle"
+
+
+def test_load_predictor_picks_up_newer_run(tmp_path, monkeypatch):
+    loaded = []
+    monkeypatch.setattr(
+        streamlit_app,
+        "get_torch_mlp",
+        lambda model_file_path, **_: loaded.append(model_file_path) or len(loaded),
+    )
+    _load_predictor_cached.clear()
+    model_dir = tmp_path / "lan" / "ddm"
+    _add_model_artifacts(
+        model_dir,
+        f"ddm_lan_{RUN_A}_train_state_dict.pt",
+        f"{RUN_A}_lan_ddm_network_config.pickle",
+    )
+
+    first = _load_predictor(str(tmp_path), "ddm")
+    assert _load_predictor(str(tmp_path), "ddm") == first  # cached
+
+    newer_state = model_dir / f"ddm_lan_{RUN_B}_train_state_dict.pt"
+    newer_state.touch()
+    (model_dir / f"{RUN_B}_lan_ddm_network_config.pickle").touch()
+    future = newer_state.stat().st_mtime + 10
+    os.utime(newer_state, (future, future))
+
+    assert _load_predictor(str(tmp_path), "ddm") != first
+    assert loaded[-1] == str(newer_state)
+    _load_predictor_cached.clear()
+
+
+@pytest.mark.parametrize("model", sorted(ssms.config.model_config))
+def test_make_parameter_df_respects_bounds_for_every_model(model):
+    config = ssms.config.model_config[model]
+    df = _make_parameter_df(model=model, n_rows=50, seed=0)
+
+    assert list(df.columns) == list(config["params"])
+    for param in config["params"]:
+        lower, upper = config["param_bounds_dict"][param]
+        lower = df[lower] if isinstance(lower, str) else lower
+        upper = df[upper] if isinstance(upper, str) else upper
+        assert np.all((df[param] >= lower - 1e-6) & (df[param] <= upper + 1e-6))
+
+
+def test_sweep_bounds_resolves_dependent_endpoint():
+    config = ssms.config.model_config["full_ddm_rv"]
+    t_default = config["default_params"][config["params"].index("t")]
+
+    assert _sweep_bounds("full_ddm_rv", "st") == pytest.approx((0.001, t_default))
+    assert _sweep_bounds("full_ddm_rv", "v") == pytest.approx((-3.0, 3.0))
