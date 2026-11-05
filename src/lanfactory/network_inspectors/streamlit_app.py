@@ -20,6 +20,7 @@ if __package__ in (None, ""):
     if src_root_str not in sys.path:
         sys.path.insert(0, src_root_str)
 
+from lanfactory.network_inspectors import ui_config as ui
 from lanfactory.network_inspectors.api import (
     compute_kde_vs_lan_likelihoods,
     compute_lan_manifold,
@@ -104,77 +105,21 @@ def _default_base_dir() -> str:
 
 def _kde_tab(model: str, predictor) -> None:
     st.subheader("KDE vs LAN Likelihoods")
-    seed = st.number_input(
-        "Random seed",
-        min_value=0,
-        max_value=2_000_000,
-        value=123,
-        width=160,
-        help="Controls reproducible generation of parameter vectors.",
-    )
+    seed = st.number_input(**ui.SEED.kwargs())
     parameter_col, samples_col, reps_col = st.columns(3)
-    n_parameter_sets = parameter_col.slider(
-        "Parameter sets",
-        min_value=1,
-        max_value=20,
-        value=6,
-        help="Number of parameter vectors sampled from the model bounds.",
-    )
-    n_samples = samples_col.slider(
-        "Simulator samples",
-        min_value=100,
-        max_value=5000,
-        value=1000,
-        step=200,
-        help="Number of samples used per simulated dataset.",
-    )
-    n_reps = reps_col.slider(
-        "KDE repetitions",
-        min_value=1,
-        max_value=30,
-        value=8,
-        help="How many KDE estimates are overlaid for each parameter set.",
-    )
+    n_parameter_sets = parameter_col.slider(**ui.PARAMETER_SETS.kwargs())
+    n_samples = samples_col.slider(**ui.SIMULATOR_SAMPLES.kwargs())
+    n_reps = reps_col.slider(**ui.KDE_REPETITIONS.kwargs())
 
     grid_col, plot_col = st.columns(2)
     with grid_col, grid_col.expander("KDE Grid", expanded=True):
-        n_points_2c = st.slider(
-            "KDE grid points (2-choice)",
-            min_value=200,
-            max_value=5000,
-            value=2000,
-            help="Number of reaction-time grid points used for KDE/LAN comparison.",
-        )
-        rt_step_2c = st.number_input(
-            "KDE grid step (2-choice)",
-            value=0.0025,
-            min_value=1e-6,
-            step=0.0025,
-            help="Reaction-time spacing in the KDE/LAN evaluation grid.",
-        )
+        n_points_2c = st.slider(**ui.KDE_GRID_POINTS.kwargs())
+        rt_step_2c = st.number_input(**ui.KDE_GRID_STEP.kwargs())
 
     with plot_col, plot_col.expander("Plot", expanded=True):
-        cols = st.slider(
-            "KDE plot columns",
-            min_value=1,
-            max_value=6,
-            value=3,
-            help="Number of subplot columns for KDE/LAN comparison charts.",
-        )
-        alpha = st.slider(
-            "KDE alpha",
-            min_value=0.01,
-            max_value=0.8,
-            value=0.1,
-            help="Opacity of KDE overlay lines.",
-        )
-        font_scale = st.slider(
-            "KDE font scale",
-            min_value=0.8,
-            max_value=2.5,
-            value=1.3,
-            help="Scale factor for Seaborn text in the KDE chart.",
-        )
+        cols = st.slider(**ui.KDE_PLOT_COLUMNS.kwargs())
+        alpha = st.slider(**ui.KDE_ALPHA.kwargs())
+        font_scale = st.slider(**ui.KDE_FONT_SCALE.kwargs())
 
     grid_spec = GridSpec(
         n_points_2c=n_points_2c,
@@ -221,39 +166,13 @@ def _manifold_tab(model: str, predictor) -> None:
     p_min, p_max = sweep_bounds(model, selected_vary_param)
 
     with st.expander("Manifold Grid", expanded=True):
-        n_rt_steps = st.slider(
-            "Manifold RT steps",
-            min_value=50,
-            max_value=800,
-            value=300,
-            help="Number of reaction-time points for manifold evaluation.",
-        )
-        max_rt = st.slider(
-            "Manifold max RT",
-            min_value=1.0,
-            max_value=10.0,
-            value=5.0,
-            help="Maximum reaction time represented in manifold plots.",
-        )
+        n_rt_steps = st.slider(**ui.MANIFOLD_RT_STEPS.kwargs())
+        max_rt = st.slider(**ui.MANIFOLD_MAX_RT.kwargs())
 
     col_a, col_b, col_c = st.columns(3)
-    sweep_min = col_a.number_input(
-        "Sweep min",
-        value=p_min,
-        help="Minimum value in the parameter sweep range.",
-    )
-    sweep_max = col_b.number_input(
-        "Sweep max",
-        value=p_max,
-        help="Maximum value in the parameter sweep range.",
-    )
-    sweep_steps = col_c.slider(
-        "Sweep steps",
-        min_value=5,
-        max_value=80,
-        value=20,
-        help="Number of points between sweep min and sweep max.",
-    )
+    sweep_min = col_a.number_input(**ui.SWEEP_MIN.kwargs(value=p_min))
+    sweep_max = col_b.number_input(**ui.SWEEP_MAX.kwargs(value=p_max))
+    sweep_steps = col_c.slider(**ui.SWEEP_STEPS.kwargs())
 
     run_manifold = st.button("Run Manifold", use_container_width=True)
 
@@ -265,11 +184,11 @@ def _manifold_tab(model: str, predictor) -> None:
         width="content",
     )
     vary_param = st.selectbox(
-        "Parameter to sweep",
-        options=params,
-        index=params.index(selected_vary_param),
-        key="manifold_vary_param",
-        help="Choose one parameter to vary while others remain fixed.",
+        **ui.SWEEP_PARAMETER.kwargs(
+            options=params,
+            index=params.index(selected_vary_param),
+            key="manifold_vary_param",
+        )
     )
 
     grid_spec = GridSpec(n_rt_steps=n_rt_steps, max_rt=max_rt)
@@ -332,29 +251,25 @@ def run() -> None:
         if "torch_models_base_dir" not in st.session_state:
             st.session_state["torch_models_base_dir"] = _default_base_dir()
 
-        base_dir = st.text_input(
-            "Torch models base directory",
-            key="torch_models_base_dir",
-            help="Folder containing model subfolders, each with state_dict and network_config files.",
-        )
+        base_dir = st.text_input(**ui.BASE_DIR.kwargs(key="torch_models_base_dir"))
         detected_models = available_models(base_dir)
 
         if detected_models:
             default_model = "ddm" if "ddm" in detected_models else detected_models[0]
             model = st.selectbox(
-                "Model",
-                options=detected_models,
-                index=detected_models.index(default_model),
-                help="Choose a model that exists in the selected torch models directory.",
+                **ui.MODEL_DETECTED.kwargs(
+                    options=detected_models,
+                    index=detected_models.index(default_model),
+                )
             )
             st.caption("Models detected on disk: " + ", ".join(detected_models))
         else:
             default_model = "ddm" if "ddm" in all_models else all_models[0]
             model = st.selectbox(
-                "Model",
-                options=all_models,
-                index=all_models.index(default_model),
-                help="Choose a model name. You still need matching files on disk.",
+                **ui.MODEL_ANY.kwargs(
+                    options=all_models,
+                    index=all_models.index(default_model),
+                )
             )
             st.warning(
                 "No valid model folders found in the selected base directory. "

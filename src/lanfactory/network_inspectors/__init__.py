@@ -8,6 +8,7 @@ Modular layout:
     api           -- thin entry points wiring the above together
     discovery     -- locate trained LAN artifacts on disk (UI support)
     parameters    -- parameter sampling and sweep bounds (UI support)
+    ui_config     -- widget labels, ranges, defaults, and help text (UI)
     streamlit_app -- the Streamlit UI (``network-inspectors-ui``)
 """
 
