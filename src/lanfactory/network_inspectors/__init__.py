@@ -1,11 +1,14 @@
 """Compare LAN vs KDE likelihoods and plot LAN manifolds (LANfactory backend).
 
 Modular layout:
-    loaders   -- build LAN predictors from the LANfactory torch backend
-    config    -- ModelSpec / PlotConfig / GridSpec config objects
-    compute   -- headless RT-grid and likelihood computation
-    plotting  -- rendering of the comparison and manifold figures
-    api       -- thin entry points wiring the above together
+    loaders       -- build LAN predictors from the LANfactory torch backend
+    config        -- ModelSpec / PlotConfig / GridSpec config objects
+    compute       -- headless RT-grid and likelihood computation
+    plotting      -- rendering of the comparison and manifold figures
+    api           -- thin entry points wiring the above together
+    discovery     -- locate trained LAN artifacts on disk (UI support)
+    parameters    -- parameter sampling and sweep bounds (UI support)
+    streamlit_app -- the Streamlit UI (``network-inspectors-ui``)
 """
 
 from __future__ import annotations

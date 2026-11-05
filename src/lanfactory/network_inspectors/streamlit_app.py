@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import re
 import sys
-from collections.abc import Iterator
 from importlib.resources import files
 from pathlib import Path
 
@@ -13,7 +11,6 @@ import numpy as np
 import pandas as pd
 import ssms
 import streamlit as st
-from ssms.dataset_generators.parameter_samplers import UniformParameterSampler
 
 if __package__ in (None, ""):
     # Support direct execution with:
@@ -32,7 +29,15 @@ from lanfactory.network_inspectors.config import (
     ModelSpec,
     PlotConfig,
 )
+from lanfactory.network_inspectors.discovery import (
+    available_models,
+    resolve_model_paths,
+)
 from lanfactory.network_inspectors.loaders import get_torch_mlp
+from lanfactory.network_inspectors.parameters import (
+    make_parameter_df,
+    sweep_bounds,
+)
 from lanfactory.network_inspectors.plotting import (
     build_kde_vs_lan_figure,
     build_manifold_figure,
@@ -53,134 +58,6 @@ def _load_stylesheet() -> str:
         )
 
 
-def _available_models(base_dir: str) -> list[str]:
-    return sorted(_model_directories(base_dir))
-
-
-# torchtrain writes ``<base>/<network_type>/<model>/``; flat ``<base>/<model>/``
-# layouts are also supported, so two levels below the base is enough. A small
-# margin keeps the scan cheap even when the base dir is something like ``~``.
-_MAX_SCAN_DEPTH = 3
-# Network types whose artifacts share model names with LANs but are not
-# loadable as LANs (different input dimension / output head).
-_NON_LAN_NETWORK_TYPES = frozenset({"cpn", "opn", "gonogo"})
-# torchtrain embeds a ``uuid.uuid1().hex`` run id in every artifact filename.
-_RUN_UUID_PATTERN = re.compile(r"(?<![0-9a-f])[0-9a-f]{32}(?![0-9a-f])")
-
-
-def _iter_directories(root: Path, max_depth: int) -> Iterator[Path]:
-    """Yield subdirectories of ``root`` up to ``max_depth`` levels deep."""
-    frontier = [root]
-    for _ in range(max_depth):
-        next_frontier: list[Path] = []
-        for directory in frontier:
-            try:
-                children = [child for child in directory.iterdir() if child.is_dir()]
-            except OSError:
-                continue
-            next_frontier.extend(children)
-        yield from next_frontier
-        frontier = next_frontier
-
-
-def _model_directories(base_dir: str) -> dict[str, Path]:
-    model_root = Path(base_dir).expanduser()
-    if not model_root.exists() or not model_root.is_dir():
-        return {}
-
-    valid_ssms_models = set(ssms.config.model_config.keys())
-    candidates: dict[str, list[Path]] = {}
-    for model_dir in sorted(_iter_directories(model_root, _MAX_SCAN_DEPTH)):
-        if model_dir.name not in valid_ssms_models:
-            continue
-        relative_parents = model_dir.relative_to(model_root).parts[:-1]
-        if _NON_LAN_NETWORK_TYPES.intersection(relative_parents):
-            continue
-        has_state = any(model_dir.glob("*state_dict*"))
-        has_cfg = any(model_dir.glob("*network_config*"))
-        if has_state and has_cfg:
-            candidates.setdefault(model_dir.name, []).append(model_dir)
-
-    # Prefer a directory whose artifacts pair by run; otherwise keep the first
-    # candidate so resolution reports why it cannot be paired.
-    return {
-        model: next(
-            (model_dir for model_dir in dirs if _is_pairable(model_dir)), dirs[0]
-        )
-        for model, dirs in candidates.items()
-    }
-
-
-def _is_pairable(model_dir: Path) -> bool:
-    try:
-        _pair_run_artifacts(model_dir)
-    except FileNotFoundError:
-        return False
-    return True
-
-
-def _run_uuid(path: Path) -> str | None:
-    match = _RUN_UUID_PATTERN.search(path.name)
-    return match.group(0) if match else None
-
-
-def _pair_run_artifacts(model_dir: Path) -> tuple[Path, Path]:
-    """Return the (state dict, network config) pair from the same training run.
-
-    Artifacts are matched by the run UUID torchtrain embeds in both filenames;
-    when several runs match, the most recently written checkpoint wins. Files
-    without a run UUID are accepted only when they are the sole candidates.
-    """
-    state_candidates = sorted(model_dir.glob("*state_dict*"))
-    config_candidates = sorted(model_dir.glob("*network_config*"))
-
-    if not state_candidates:
-        raise FileNotFoundError(f"No state dict file found in {model_dir}.")
-    if not config_candidates:
-        raise FileNotFoundError(f"No network config file found in {model_dir}.")
-
-    configs_by_uuid = {
-        run_uuid: config
-        for config in config_candidates
-        if (run_uuid := _run_uuid(config)) is not None
-    }
-    matched = [
-        (state, configs_by_uuid[run_uuid])
-        for state in state_candidates
-        if (run_uuid := _run_uuid(state)) in configs_by_uuid
-    ]
-    if matched:
-        return max(matched, key=lambda pair: pair[0].stat().st_mtime)
-
-    if (
-        len(state_candidates) == 1
-        and len(config_candidates) == 1
-        and _run_uuid(state_candidates[0]) is None
-        and _run_uuid(config_candidates[0]) is None
-    ):
-        return state_candidates[0], config_candidates[0]
-
-    raise FileNotFoundError(
-        f"Could not match a state dict to a network config from the same "
-        f"training run in {model_dir}. Keep exactly one pair of artifacts, or "
-        "use torchtrain's run-UUID filenames so they can be paired."
-    )
-
-
-def _resolve_model_paths(base_dir: str, model: str) -> tuple[Path, Path]:
-    model_dir = _model_directories(base_dir).get(model)
-    if model_dir is None:
-        available = _available_models(base_dir)
-        available_str = ", ".join(available) if available else "none detected"
-        raise FileNotFoundError(
-            f"Model directory not found for '{model}' under {base_dir}. "
-            "Set the base directory to your torch_models folder. "
-            f"Detected models in this base dir: {available_str}."
-        )
-
-    return _pair_run_artifacts(model_dir)
-
-
 def _load_predictor(base_dir: str, model: str):
     """Load the predictor for the newest run, re-resolving artifacts every call.
 
@@ -188,7 +65,7 @@ def _load_predictor(base_dir: str, model: str):
     the artifact paths and modification times, so a newly finished training run
     (or a replaced checkpoint) is picked up instead of serving stale weights.
     """
-    state_dict_path, network_config_path = _resolve_model_paths(base_dir, model)
+    state_dict_path, network_config_path = resolve_model_paths(base_dir, model)
     return _load_predictor_cached(
         model=model,
         state_dict_path=str(state_dict_path),
@@ -223,37 +100,6 @@ def _default_base_dir() -> str:
         if candidate.exists():
             return str(candidate)
     return "data/torch_models"
-
-
-def _make_parameter_df(model: str, n_rows: int, seed: int) -> pd.DataFrame:
-    """Sample parameter vectors within the model bounds.
-
-    Uses ``param_bounds_dict`` with ssms's dependency-aware sampler because some
-    models bound one parameter by another (e.g. ``full_ddm_rv`` has
-    ``st <= t``), which the positional ``param_bounds`` cannot express.
-    """
-    config = ssms.config.model_config[model]
-    sampler = UniformParameterSampler(
-        param_space=config["param_bounds_dict"], constraints=[]
-    )
-    samples = sampler.sample(n_samples=n_rows, rng=np.random.default_rng(seed))
-    return pd.DataFrame({param: samples[param] for param in config["params"]})
-
-
-def _sweep_bounds(model: str, param: str) -> tuple[float, float]:
-    """Return numeric bounds for ``param``, resolving named endpoints.
-
-    An endpoint may name another parameter (``full_ddm_rv``: ``st`` in
-    ``(0.001, "t")``); it is resolved against the model's default vector.
-    """
-    config = ssms.config.model_config[model]
-    defaults = dict(zip(config["params"], config["default_params"], strict=True))
-    lower, upper = config["param_bounds_dict"][param]
-
-    def resolve(endpoint: float | str) -> float:
-        return float(defaults[endpoint] if isinstance(endpoint, str) else endpoint)
-
-    return resolve(lower), resolve(upper)
 
 
 def _kde_tab(model: str, predictor) -> None:
@@ -338,7 +184,7 @@ def _kde_tab(model: str, predictor) -> None:
         show=False, save=False, cols=cols, alpha=alpha, font_scale=font_scale
     )
 
-    parameter_df = _make_parameter_df(model=model, n_rows=n_parameter_sets, seed=seed)
+    parameter_df = make_parameter_df(model=model, n_rows=n_parameter_sets, seed=seed)
     st.caption("Generated parameter vectors")
     st.dataframe(parameter_df, width="content")
 
@@ -372,7 +218,7 @@ def _manifold_tab(model: str, predictor) -> None:
     selected_vary_param = st.session_state.get("manifold_vary_param", params[0])
     if selected_vary_param not in params:
         selected_vary_param = params[0]
-    p_min, p_max = _sweep_bounds(model, selected_vary_param)
+    p_min, p_max = sweep_bounds(model, selected_vary_param)
 
     with st.expander("Manifold Grid", expanded=True):
         n_rt_steps = st.slider(
@@ -491,17 +337,17 @@ def run() -> None:
             key="torch_models_base_dir",
             help="Folder containing model subfolders, each with state_dict and network_config files.",
         )
-        available_models = _available_models(base_dir)
+        detected_models = available_models(base_dir)
 
-        if available_models:
-            default_model = "ddm" if "ddm" in available_models else available_models[0]
+        if detected_models:
+            default_model = "ddm" if "ddm" in detected_models else detected_models[0]
             model = st.selectbox(
                 "Model",
-                options=available_models,
-                index=available_models.index(default_model),
+                options=detected_models,
+                index=detected_models.index(default_model),
                 help="Choose a model that exists in the selected torch models directory.",
             )
-            st.caption("Models detected on disk: " + ", ".join(available_models))
+            st.caption("Models detected on disk: " + ", ".join(detected_models))
         else:
             default_model = "ddm" if "ddm" in all_models else all_models[0]
             model = st.selectbox(
