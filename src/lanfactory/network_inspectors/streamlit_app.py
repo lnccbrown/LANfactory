@@ -88,7 +88,7 @@ def _model_directories(base_dir: str) -> dict[str, Path]:
         return {}
 
     valid_ssms_models = set(ssms.config.model_config.keys())
-    model_directories: dict[str, Path] = {}
+    candidates: dict[str, list[Path]] = {}
     for model_dir in sorted(_iter_directories(model_root, _MAX_SCAN_DEPTH)):
         if model_dir.name not in valid_ssms_models:
             continue
@@ -98,9 +98,24 @@ def _model_directories(base_dir: str) -> dict[str, Path]:
         has_state = any(model_dir.glob("*state_dict*"))
         has_cfg = any(model_dir.glob("*network_config*"))
         if has_state and has_cfg:
-            model_directories.setdefault(model_dir.name, model_dir)
+            candidates.setdefault(model_dir.name, []).append(model_dir)
 
-    return model_directories
+    # Prefer a directory whose artifacts pair by run; otherwise keep the first
+    # candidate so resolution reports why it cannot be paired.
+    return {
+        model: next(
+            (model_dir for model_dir in dirs if _is_pairable(model_dir)), dirs[0]
+        )
+        for model, dirs in candidates.items()
+    }
+
+
+def _is_pairable(model_dir: Path) -> bool:
+    try:
+        _pair_run_artifacts(model_dir)
+    except FileNotFoundError:
+        return False
+    return True
 
 
 def _run_uuid(path: Path) -> str | None:

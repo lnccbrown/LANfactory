@@ -128,3 +128,22 @@ def test_resolve_model_paths_rejects_ambiguous_legacy_artifacts(tmp_path):
 
     with pytest.raises(FileNotFoundError, match="same training run"):
         _resolve_model_paths(str(tmp_path), "ddm")
+
+
+def test_model_directories_prefers_pairable_directory(tmp_path):
+    # Flat ddm/ sorts before lan/ddm/ but its artifacts come from different runs.
+    _add_model_artifacts(
+        tmp_path / "ddm",
+        f"ddm_lan_{RUN_A}_train_state_dict.pt",
+        f"{RUN_B}_lan_ddm_network_config.pickle",
+    )
+    nested = tmp_path / "lan" / "ddm"
+    _add_model_artifacts(
+        nested,
+        f"ddm_lan_{RUN_A}_train_state_dict.pt",
+        f"{RUN_A}_lan_ddm_network_config.pickle",
+    )
+
+    assert _model_directories(str(tmp_path)) == {"ddm": nested}
+    _, config_path = _resolve_model_paths(str(tmp_path), "ddm")
+    assert config_path == nested / f"{RUN_A}_lan_ddm_network_config.pickle"
