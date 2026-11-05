@@ -112,10 +112,10 @@ dev = [
 ]
 docs = [
     "mkdocs==1.6.1",
-    "mkdocs-material==9.7.7",
+    "mkdocs-material==9.8.0",
     "mkdocstrings==1.0.8",
     "mkdocstrings-python==2.0.10",
-    "mkdocs-jupyter==0.26.3",
+    "mkdocs-jupyter==0.27.0",
     "mkdocs-autorefs==1.4.4",
     # 1.2.3 depends on ProperDocs, which injects an unrelated migration banner.
     "mkdocs-redirects==1.2.3",
