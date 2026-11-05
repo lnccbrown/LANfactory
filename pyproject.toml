@@ -116,7 +116,7 @@ docs = [
     "mkdocstrings==1.0.8",
     "mkdocstrings-python==2.0.10",
     "mkdocs-jupyter==0.27.0",
-    "mkdocs-autorefs==1.4.4",
+    "mkdocs-autorefs==1.4.5",
     # 1.2.3 depends on ProperDocs, which injects an unrelated migration banner.
     "mkdocs-redirects==1.2.3",
 ]
