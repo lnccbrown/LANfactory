@@ -38,6 +38,7 @@ from lanfactory.network_inspectors.loaders import get_torch_mlp
 from lanfactory.network_inspectors.parameters import (
     make_parameter_df,
     missing_parameters,
+    out_of_bounds,
     sweep_bounds,
 )
 from lanfactory.network_inspectors.plotting import (
@@ -101,6 +102,21 @@ def _load_predictor_cached(
     )
 
 
+_KDE_RESULT = "kde_result"
+_MANIFOLD_RESULT = "manifold_result"
+_STALE_RESULT_NOTE = (
+    "Settings changed since this result was computed. Click Run to update it."
+)
+
+
+def _stored_result(key: str, model: str, predictor) -> dict | None:
+    """Return the stored result if it was computed for this model and network."""
+    result = st.session_state.get(key)
+    if result is None or result["inputs"][:2] != (model, id(predictor)):
+        return None
+    return result
+
+
 def _default_base_dir() -> str:
     candidates = [Path("data/torch_models"), Path("../data/torch_models")]
     for candidate in candidates:
@@ -148,6 +164,18 @@ def _kde_tab(model: str, predictor) -> None:
     st.caption("Generated parameter vectors")
     st.dataframe(parameter_df, width="content")
 
+    # Results live in session state so changing a widget after a run does not
+    # wipe the chart. Plot options apply to the stored result directly; any
+    # other change is flagged until the next run.
+    inputs = (
+        model,
+        id(predictor),
+        seed,
+        n_parameter_sets,
+        n_samples,
+        n_reps,
+        grid_spec,
+    )
     if st.button("Run KDE vs LAN", type="primary", width="stretch"):
         with st.spinner("Computing likelihoods..."):
             comparison = compute_kde_vs_lan_likelihoods(
@@ -158,16 +186,22 @@ def _kde_tab(model: str, predictor) -> None:
                 n_reps=n_reps,
                 grid=grid_spec,
             )
-            fig = build_kde_vs_lan_figure(comparison, plot_cfg)
+        st.session_state[_KDE_RESULT] = {"inputs": inputs, "comparison": comparison}
 
-        st.caption(
-            "KDE vs LAN chart. X-axis is signed reaction time and y-axis is "
-            "likelihood. Gray curves are KDE estimates and indigo curves are LAN outputs."
-        )
-        try:
-            st.pyplot(fig, clear_figure=True, width=ui.KDE_FIGURE_DISPLAY_WIDTH_PX)
-        finally:
-            plt.close(fig)
+    result = _stored_result(_KDE_RESULT, model, predictor)
+    if result is None:
+        return
+    if result["inputs"] != inputs:
+        st.info(_STALE_RESULT_NOTE)
+    fig = build_kde_vs_lan_figure(result["comparison"], plot_cfg)
+    st.caption(
+        "KDE vs LAN chart. X-axis is signed reaction time and y-axis is "
+        "likelihood. Gray curves are KDE estimates and indigo curves are LAN outputs."
+    )
+    try:
+        st.pyplot(fig, clear_figure=True, width=ui.KDE_FIGURE_DISPLAY_WIDTH_PX)
+    finally:
+        plt.close(fig)
 
 
 def _manifold_tab(model: str, predictor) -> None:
@@ -203,10 +237,22 @@ def _manifold_tab(model: str, predictor) -> None:
     sweep_max = col_b.number_input(**ui.SWEEP_MAX.kwargs(value=p_max))
     sweep_steps = col_c.slider(**ui.SWEEP_STEPS.kwargs())
 
+    _warn_out_of_bounds(model, vary_param, base_values, sweep_min, sweep_max)
+
     run_manifold = st.button("Run Manifold", type="primary", width="stretch")
 
     grid_spec = GridSpec(n_rt_steps=n_rt_steps, max_rt=max_rt)
     plot_cfg = PlotConfig(show=False, save=False)
+    inputs = (
+        model,
+        id(predictor),
+        tuple(base_values.items()),
+        vary_param,
+        float(sweep_min),
+        float(sweep_max),
+        sweep_steps,
+        grid_spec,
+    )
 
     if run_manifold:
         if sweep_max <= sweep_min:
@@ -223,18 +269,55 @@ def _manifold_tab(model: str, predictor) -> None:
                     torch_mlp_predict=predictor,
                     grid=grid_spec,
                 )
-                fig = build_manifold_figure(computation, plot_cfg)
         except ValueError as exc:
             st.error(str(exc))
             return
+        st.session_state[_MANIFOLD_RESULT] = {
+            "inputs": inputs,
+            "computation": computation,
+        }
 
-        st.caption(
-            "3D manifold chart. X-axis is signed reaction time, y-axis is the swept "
-            "parameter value, and z-axis is likelihood."
+    result = _stored_result(_MANIFOLD_RESULT, model, predictor)
+    if result is None:
+        return
+    if result["inputs"] != inputs:
+        st.info(_STALE_RESULT_NOTE)
+    computation = result["computation"]
+    fig = build_manifold_figure(computation, plot_cfg)
+    st.caption(
+        "3D manifold chart. X-axis is signed reaction time, y-axis is the swept "
+        "parameter value, and z-axis is likelihood."
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    st.caption("Computed manifold table")
+    st.dataframe(computation.manifold, width="content")
+
+
+def _warn_out_of_bounds(
+    model: str,
+    vary_param: str,
+    base_values: dict[str, float],
+    sweep_min: float,
+    sweep_max: float,
+) -> None:
+    """Warn when the manifold would evaluate the network outside training bounds."""
+    fixed = {k: v for k, v in base_values.items() if k != vary_param}
+    outside = out_of_bounds(model, fixed) if fixed else {}
+    problems = [
+        f"{param} = {base_values[param]:g} (bounds {lo:g} to {hi:g})"
+        for param, (lo, hi) in outside.items()
+    ]
+    lower, upper = sweep_bounds(model, vary_param, base_values)
+    if sweep_min < lower or sweep_max > upper:
+        problems.append(
+            f"{vary_param} sweep {sweep_min:g} to {sweep_max:g} "
+            f"(bounds {lower:g} to {upper:g})"
         )
-        st.plotly_chart(fig, use_container_width=True)
-        st.caption("Computed manifold table")
-        st.dataframe(computation.manifold, width="content")
+    if problems:
+        st.warning(
+            "Outside the training bounds, the network extrapolates and its "
+            "output is not a reliable likelihood: " + "; ".join(problems) + "."
+        )
 
 
 def run() -> None:

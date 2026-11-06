@@ -86,3 +86,67 @@ def test_app_scans_base_directory_once_per_rerun(tmp_path, monkeypatch):
     ]
     assert len(walks) == 1
     _load_predictor_cached.clear()
+
+
+def _app_with_fake_ddm(tmp_path, monkeypatch):
+    from streamlit.testing.v1 import AppTest
+
+    from lanfactory.network_inspectors import loaders
+
+    monkeypatch.setattr(
+        loaders, "get_torch_mlp", lambda **_: lambda batch: batch[:, :1]
+    )
+    _load_predictor_cached.clear()
+    _add_model_artifacts(
+        tmp_path / "lan" / "ddm",
+        f"ddm_lan_{RUN_A}_train_state_dict.pt",
+        f"{RUN_A}_lan_ddm_network_config.pickle",
+    )
+    app = AppTest.from_file(streamlit_app.__file__, default_timeout=120)
+    app.session_state["torch_models_base_dir"] = str(tmp_path)
+    return app.run()
+
+
+def _button(app, label):
+    return next(button for button in app.button if button.label == label)
+
+
+def _slider(app, label):
+    return next(slider for slider in app.slider if slider.label == label)
+
+
+def test_manifold_result_survives_widget_changes(tmp_path, monkeypatch):
+    app = _app_with_fake_ddm(tmp_path, monkeypatch)
+
+    _button(app, "Run Manifold").click().run()
+    assert len(app.get("plotly_chart")) == 1
+    assert not app.info
+
+    _slider(app, "Sweep steps").set_value(5).run()
+
+    assert not app.exception
+    assert len(app.get("plotly_chart")) == 1
+    assert [info.value for info in app.info] == [streamlit_app._STALE_RESULT_NOTE]
+    _load_predictor_cached.clear()
+
+
+def _shows_kde_chart(app):
+    return any(caption.value.startswith("KDE vs LAN chart") for caption in app.caption)
+
+
+def test_kde_plot_options_apply_without_rerunning(tmp_path, monkeypatch):
+    app = _app_with_fake_ddm(tmp_path, monkeypatch)
+    _slider(app, "Parameter sets").set_value(1)
+    _slider(app, "Simulator samples").set_value(_slider(app, "Simulator samples").min)
+    _slider(app, "KDE repetitions").set_value(1)
+    app.run()
+
+    _button(app, "Run KDE vs LAN").click().run()
+    assert not app.exception
+    assert _shows_kde_chart(app)
+
+    _slider(app, "KDE alpha").set_value(0.5).run()
+
+    assert _shows_kde_chart(app)
+    assert not app.info  # plot options do not invalidate the result
+    _load_predictor_cached.clear()

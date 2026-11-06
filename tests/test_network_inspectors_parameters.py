@@ -8,6 +8,7 @@ import ssms
 from lanfactory.network_inspectors.parameters import (
     make_parameter_df,
     missing_parameters,
+    out_of_bounds,
     sweep_bounds,
 )
 
@@ -61,3 +62,25 @@ def test_missing_parameters_accepts_complete_row():
     )
 
     assert missing_parameters(row, ssms.config.model_config["ddm"]["params"]) == []
+
+
+def test_out_of_bounds_reports_parameters_outside_training_bounds():
+    lower, upper = sweep_bounds("ddm", "a")
+
+    outside = out_of_bounds("ddm", {"v": 0.0, "a": upper + 1.0})
+
+    assert outside == {"a": (lower, upper)}
+
+
+def test_out_of_bounds_resolves_dependent_bounds_against_values():
+    defaults = dict(
+        zip(
+            ssms.config.model_config["full_ddm_rv"]["params"],
+            ssms.config.model_config["full_ddm_rv"]["default_params"],
+            strict=True,
+        )
+    )
+    values = {**defaults, "t": 0.3, "st": 0.35}  # st must not exceed t
+
+    assert set(out_of_bounds("full_ddm_rv", values)) == {"st"}
+    assert out_of_bounds("full_ddm_rv", {**values, "st": 0.1}) == {}

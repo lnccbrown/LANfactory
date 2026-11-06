@@ -58,3 +58,20 @@ def missing_parameters(row: pd.DataFrame, params: list[str]) -> list[str]:
     """
     values = pd.to_numeric(row[params].iloc[0], errors="coerce")
     return [param for param in params if not np.isfinite(values[param])]
+
+
+def out_of_bounds(
+    model: str, values: Mapping[str, float]
+) -> dict[str, tuple[float, float]]:
+    """Return the parameters in ``values`` outside the model's training bounds.
+
+    Maps each offending parameter to its ``(lower, upper)`` bounds, resolved
+    against ``values`` so dependent bounds (``full_ddm_rv``: ``st <= t``) use
+    the vector being checked. Outside these bounds the network extrapolates.
+    """
+    outside = {}
+    for param, value in values.items():
+        lower, upper = sweep_bounds(model, param, values)
+        if not lower <= value <= upper:
+            outside[param] = (lower, upper)
+    return outside
