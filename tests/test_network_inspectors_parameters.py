@@ -118,3 +118,21 @@ def test_sweep_bound_problems_reports_sweep_outside_bounds():
     assert sweep_bound_problems("ddm", "a", base, lower, upper + 1) == [
         f"a sweep {lower:g} to {upper + 1:g} (bounds {lower:g} to {upper:g})"
     ]
+
+
+def _defaults(model):
+    config = ssms.config.model_config[model]
+    return dict(zip(config["params"], config["default_params"], strict=True))
+
+
+def test_sweep_bound_problems_flags_broken_lba_ordering():
+    base = {**_defaults("lba2"), "A": 0.3, "b": 0.5}
+
+    assert sweep_bound_problems("lba2", "v0", base, 0.5, 1.0) == []
+    # b swept below A at the low end.
+    assert sweep_bound_problems("lba2", "b", base, 0.2, 0.9) == [
+        "b must exceed A at b = 0.2"
+    ]
+    # Fixed b already below A.
+    flipped = {**base, "A": 0.6}
+    assert "b must exceed A" in sweep_bound_problems("lba2", "v0", flipped, 0.5, 1.0)
