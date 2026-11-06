@@ -37,6 +37,7 @@ from lanfactory.network_inspectors.discovery import (
 from lanfactory.network_inspectors.loaders import get_torch_mlp
 from lanfactory.network_inspectors.parameters import (
     make_parameter_df,
+    missing_parameters,
     sweep_bounds,
 )
 from lanfactory.network_inspectors.plotting import (
@@ -190,6 +191,10 @@ def _manifold_tab(model: str, predictor) -> None:
     vary_param = st.selectbox(
         **ui.SWEEP_PARAMETER.kwargs(options=params, key="manifold_vary_param")
     )
+    missing = missing_parameters(edited_df, params)
+    if missing:
+        st.error(f"Enter a value for: {', '.join(missing)}.")
+        return
     base_values = {param: float(edited_df[param].iloc[0]) for param in params}
     p_min, p_max = sweep_bounds(model, vary_param, base_values)
 

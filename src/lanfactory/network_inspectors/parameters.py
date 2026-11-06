@@ -48,3 +48,13 @@ def sweep_bounds(
         return float(values[endpoint] if isinstance(endpoint, str) else endpoint)
 
     return resolve(lower), resolve(upper)
+
+
+def missing_parameters(row: pd.DataFrame, params: list[str]) -> list[str]:
+    """Return the parameters whose first-row value is empty or not finite.
+
+    ``st.data_editor`` turns a cleared numeric cell into ``NaN`` (or ``None``),
+    which ``float()`` accepts silently and the network would evaluate.
+    """
+    values = pd.to_numeric(row[params].iloc[0], errors="coerce")
+    return [param for param in params if not np.isfinite(values[param])]

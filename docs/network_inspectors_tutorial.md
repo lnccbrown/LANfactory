@@ -186,12 +186,20 @@ uv run network-inspectors-ui
 
 The app listens on `localhost` only. It loads network configs with `pickle`,
 which can run code from an untrusted file, so it must not be reachable by other
-users. On a remote machine such as a cluster login node, forward the port over
-SSH and open `http://localhost:8501` locally:
+users. Listening on `localhost` does not keep out other users logged in to the
+same machine, and SSH forwarding does not change that, so on a shared host such
+as a cluster login node, only run the app if you accept that risk
+([#166](https://github.com/lnccbrown/LANfactory/issues/166)).
+
+To reach the app on a remote machine, forward its port over SSH. Streamlit
+uses port 8501 unless it is taken, in which case it picks the next free port;
+use the port in the launcher's `Local URL` line as the remote port:
 
 ```bash
-ssh -L 8501:localhost:8501 <user>@<host>
+ssh -L 8501:localhost:<port> <user>@<host>
 ```
+
+Then open `http://localhost:8501` locally.
 
 Only point the app at directories of artifacts you trust.
 

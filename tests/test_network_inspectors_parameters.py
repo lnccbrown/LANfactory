@@ -1,10 +1,15 @@
 """Tests for network inspector parameter sampling and sweep bounds."""
 
 import numpy as np
+import pandas as pd
 import pytest
 import ssms
 
-from lanfactory.network_inspectors.parameters import make_parameter_df, sweep_bounds
+from lanfactory.network_inspectors.parameters import (
+    make_parameter_df,
+    missing_parameters,
+    sweep_bounds,
+)
 
 
 @pytest.mark.parametrize("model", sorted(ssms.config.model_config))
@@ -40,3 +45,19 @@ def test_make_parameter_df_applies_sampling_constraints(model, larger, smaller):
 
 def test_sweep_bounds_resolves_against_edited_base_vector():
     assert sweep_bounds("full_ddm_rv", "st", {"t": 1.5}) == pytest.approx((0.001, 1.5))
+
+
+@pytest.mark.parametrize("cleared", [np.nan, None])
+def test_missing_parameters_flags_cleared_cells(cleared):
+    row = pd.DataFrame([{"v": 0.5, "a": cleared, "z": 0.5, "t": 0.3}])
+
+    assert missing_parameters(row, ["v", "a", "z", "t"]) == ["a"]
+
+
+def test_missing_parameters_accepts_complete_row():
+    row = pd.DataFrame(
+        [ssms.config.model_config["ddm"]["default_params"]],
+        columns=ssms.config.model_config["ddm"]["params"],
+    )
+
+    assert missing_parameters(row, ssms.config.model_config["ddm"]["params"]) == []
