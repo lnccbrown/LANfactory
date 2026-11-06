@@ -26,3 +26,13 @@ def test_sweep_bounds_resolves_dependent_endpoint():
 
     assert sweep_bounds("full_ddm_rv", "st") == pytest.approx((0.001, t_default))
     assert sweep_bounds("full_ddm_rv", "v") == pytest.approx((-3.0, 3.0))
+
+
+@pytest.mark.parametrize(
+    ("model", "larger", "smaller"),
+    [("lba2", "b", "A"), ("lba3", "b", "A"), ("lba_angle_3", "a", "z")],
+)
+def test_make_parameter_df_applies_sampling_constraints(model, larger, smaller):
+    df = make_parameter_df(model=model, n_rows=200, seed=0)
+
+    assert np.all(df[larger] >= df[smaller])

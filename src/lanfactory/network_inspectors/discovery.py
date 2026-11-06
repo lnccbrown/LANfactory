@@ -64,22 +64,26 @@ def model_directories(base_dir: str) -> dict[str, Path]:
         if has_state and has_cfg:
             candidates.setdefault(model_dir.name, []).append(model_dir)
 
-    # Prefer a directory whose artifacts pair by run; otherwise keep the first
-    # candidate so resolution reports why it cannot be paired.
-    return {
-        model: next(
-            (model_dir for model_dir in dirs if _is_pairable(model_dir)), dirs[0]
-        )
-        for model, dirs in candidates.items()
-    }
+    return {model: _newest_pairable(dirs) for model, dirs in candidates.items()}
 
 
-def _is_pairable(model_dir: Path) -> bool:
-    try:
-        pair_run_artifacts(model_dir)
-    except FileNotFoundError:
-        return False
-    return True
+def _newest_pairable(dirs: list[Path]) -> Path:
+    """Pick the directory holding the newest pairable checkpoint.
+
+    Mirrors the newest-run rule inside a directory, so an old flat
+    ``<base>/<model>/`` cannot shadow a newer ``<base>/lan/<model>/`` run. When
+    nothing pairs, the first candidate is kept so resolution reports why.
+    """
+    newest: tuple[float, Path] | None = None
+    for model_dir in dirs:
+        try:
+            state_dict_path, _ = pair_run_artifacts(model_dir)
+        except FileNotFoundError:
+            continue
+        mtime = state_dict_path.stat().st_mtime
+        if newest is None or mtime > newest[0]:
+            newest = (mtime, model_dir)
+    return newest[1] if newest is not None else dirs[0]
 
 
 def _run_uuid(path: Path) -> str | None:

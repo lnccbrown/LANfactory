@@ -1,5 +1,6 @@
 """Tests for network inspector model discovery and artifact pairing."""
 
+import os
 from pathlib import Path
 
 import pytest
@@ -147,3 +148,19 @@ def test_model_directories_prefers_pairable_directory(tmp_path):
     assert model_directories(str(tmp_path)) == {"ddm": nested}
     _, config_path = resolve_model_paths(str(tmp_path), "ddm")
     assert config_path == nested / f"{RUN_A}_lan_ddm_network_config.pickle"
+
+
+@pytest.mark.parametrize("newer", ["flat", "nested"])
+def test_model_directories_picks_directory_with_newest_run(tmp_path, newer):
+    dirs = {"flat": tmp_path / "ddm", "nested": tmp_path / "lan" / "ddm"}
+    for run, model_dir in zip((RUN_A, RUN_B), dirs.values(), strict=True):
+        _add_model_artifacts(
+            model_dir,
+            f"ddm_lan_{run}_train_state_dict.pt",
+            f"{run}_lan_ddm_network_config.pickle",
+        )
+    newest_state = next(dirs[newer].glob("*state_dict*"))
+    future = newest_state.stat().st_mtime + 10
+    os.utime(newest_state, (future, future))
+
+    assert model_directories(str(tmp_path)) == {"ddm": dirs[newer]}

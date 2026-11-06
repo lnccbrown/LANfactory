@@ -5,19 +5,23 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import ssms
+from ssms.config import ModelConfigBuilder
 from ssms.dataset_generators.parameter_samplers import UniformParameterSampler
 
 
 def make_parameter_df(model: str, n_rows: int, seed: int) -> pd.DataFrame:
     """Sample parameter vectors within the model bounds.
 
-    Uses ``param_bounds_dict`` with ssms's dependency-aware sampler because some
-    models bound one parameter by another (e.g. ``full_ddm_rv`` has
-    ``st <= t``), which the positional ``param_bounds`` cannot express.
+    Mirrors how ssms samples training data: ``param_bounds_dict`` with the
+    dependency-aware sampler (``full_ddm_rv`` bounds ``st`` by ``t``, which the
+    positional ``param_bounds`` cannot express) plus the model's sampling
+    transforms (e.g. LBA swaps ``b``/``A`` so ``b >= A``). Without them, the
+    inspector would test networks on parameter sets they were never trained on.
     """
     config = ssms.config.model_config[model]
     sampler = UniformParameterSampler(
-        param_space=config["param_bounds_dict"], constraints=[]
+        param_space=config["param_bounds_dict"],
+        constraints=ModelConfigBuilder.get_sampling_transforms(config),
     )
     samples = sampler.sample(n_samples=n_rows, rng=np.random.default_rng(seed))
     return pd.DataFrame({param: samples[param] for param in config["params"]})
