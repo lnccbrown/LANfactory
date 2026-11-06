@@ -33,14 +33,39 @@ h3 {
     color: var(--hssm-text-heading) !important;
 }
 
-div[data-baseweb="tab-list"] button[data-baseweb="tab"] p {
-    font-size: 1.1rem;
-    font-weight: 600;
+/*
+ * Tab selector: large bold labels; the active tab is drawn in the primary
+ * color with a thick underline. Streamlit >= 1.6x renders tabs as
+ * [data-testid="stTab"] / role="tab" with aria-selected; older releases used
+ * BaseWeb (data-baseweb="tab"), so both are targeted.
+ */
+[data-testid="stTabs"] [role="tab"],
+div[data-baseweb="tab-list"] button[data-baseweb="tab"] {
+    min-height: 44px;
+    padding: 0.4rem 1rem !important;
+    border-bottom: 4px solid transparent !important;
 }
 
-/* accent marks the active tab (interaction state). */
+[data-testid="stTabs"] [role="tab"],
+[data-testid="stTabs"] [role="tab"] p,
+div[data-baseweb="tab-list"] button[data-baseweb="tab"] p {
+    font-size: 1.25rem !important;
+    font-weight: 700 !important;
+}
+
+[data-testid="stTabs"] [role="tab"][aria-selected="true"],
+div[data-baseweb="tab-list"] button[data-baseweb="tab"][aria-selected="true"] {
+    border-bottom-color: var(--hssm-primary) !important;
+}
+
+[data-testid="stTabs"] [role="tab"][aria-selected="true"],
+[data-testid="stTabs"] [role="tab"][aria-selected="true"] p,
+div[data-baseweb="tab-list"] button[data-baseweb="tab"][aria-selected="true"] p {
+    color: var(--hssm-primary) !important;
+}
+
 div[data-baseweb="tab-highlight"] {
-    background-color: var(--hssm-accent) !important;
+    background-color: var(--hssm-primary) !important;
 }
 
 /* Focus ring: accent, 3px, on every keyboard-focusable control. */
