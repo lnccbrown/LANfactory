@@ -95,11 +95,19 @@ KDE_ALPHA = WidgetSpec(
 )
 KDE_FONT_SCALE = WidgetSpec(
     label="KDE font scale",
-    help="Scale factor for Seaborn text in the KDE chart.",
-    value=1.3,
-    min_value=0.8,
-    max_value=2.5,
+    help="Scale factor for all text in the KDE chart (title, labels, ticks).",
+    value=1.0,
+    min_value=0.6,
+    max_value=2.0,
 )
+
+# KDE figure size. The width stays at the 10in the figure's font sizes are tuned
+# for; the height follows the number of panel rows instead of a fixed square, and
+# the figure is shown at a fixed pixel width rather than stretched to the page.
+KDE_FIGURE_WIDTH_IN = 10.0
+KDE_PANEL_ROW_HEIGHT_IN = 3.0
+KDE_TITLE_HEIGHT_IN = 1.0
+KDE_FIGURE_DISPLAY_WIDTH_PX = 900
 
 # 3D manifold tab --------------------------------------------------------------
 

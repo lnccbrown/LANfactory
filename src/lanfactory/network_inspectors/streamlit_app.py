@@ -125,15 +125,24 @@ def _kde_tab(model: str, predictor) -> None:
         n_points_2c=n_points_2c,
         rt_step_2c=float(rt_step_2c),
     )
+    n_rows = -(-n_parameter_sets // cols)  # ceil division
     plot_cfg = PlotConfig(
-        show=False, save=False, cols=cols, alpha=alpha, font_scale=font_scale
+        show=False,
+        save=False,
+        cols=cols,
+        alpha=alpha,
+        font_scale=font_scale,
+        figsize=(
+            ui.KDE_FIGURE_WIDTH_IN,
+            n_rows * ui.KDE_PANEL_ROW_HEIGHT_IN + ui.KDE_TITLE_HEIGHT_IN,
+        ),
     )
 
     parameter_df = make_parameter_df(model=model, n_rows=n_parameter_sets, seed=seed)
     st.caption("Generated parameter vectors")
     st.dataframe(parameter_df, width="content")
 
-    if st.button("Run KDE vs LAN", use_container_width=True):
+    if st.button("Run KDE vs LAN", type="primary", width="stretch"):
         with st.spinner("Computing likelihoods..."):
             comparison = compute_kde_vs_lan_likelihoods(
                 parameter_df=parameter_df,
@@ -147,10 +156,10 @@ def _kde_tab(model: str, predictor) -> None:
 
         st.caption(
             "KDE vs LAN chart. X-axis is signed reaction time and y-axis is "
-            "likelihood. Black curves are KDE estimates and green curves are LAN outputs."
+            "likelihood. Gray curves are KDE estimates and indigo curves are LAN outputs."
         )
         try:
-            st.pyplot(fig, clear_figure=True, use_container_width=True)
+            st.pyplot(fig, clear_figure=True, width=ui.KDE_FIGURE_DISPLAY_WIDTH_PX)
         finally:
             plt.close(fig)
 
@@ -174,7 +183,7 @@ def _manifold_tab(model: str, predictor) -> None:
     sweep_max = col_b.number_input(**ui.SWEEP_MAX.kwargs(value=p_max))
     sweep_steps = col_c.slider(**ui.SWEEP_STEPS.kwargs())
 
-    run_manifold = st.button("Run Manifold", use_container_width=True)
+    run_manifold = st.button("Run Manifold", type="primary", width="stretch")
 
     st.caption("Base parameter vector")
     base_parameter_df = pd.DataFrame([defaults], columns=params)

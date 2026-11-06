@@ -1,0 +1,50 @@
+# Streamlit settings for the network inspectors UI.
+#
+# Streamlit reads `.streamlit/config.toml` next to the main script, so this
+# theme applies however the app is launched (`network-inspectors-ui` or
+# `streamlit run`), and it overrides project and global config files.
+#
+# Colors, fonts, and radii follow the HSSM ecosystem design tokens:
+# https://github.com/lnccbrown/hssm_website/blob/main/design-system/tokens.json
+# Token names are noted next to each value. With both [theme.light] and
+# [theme.dark] defined, the app follows the viewer's system setting and offers
+# a light/dark switch in its settings menu.
+
+[client]
+toolbarMode = "minimal"
+
+[theme]
+# IBM Plex is loaded from Google Fonts; offline, the browser falls back to
+# its system UI and monospace fonts.
+font = "IBM Plex Sans:https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+headingFont = "IBM Plex Sans:https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+codeFont = "IBM Plex Mono:https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap"
+baseRadius = "8px"      # radius-card
+buttonRadius = "full"   # radius-pill
+showWidgetBorder = true
+
+[theme.light]
+primaryColor = "#3538a1"                   # primary (indigo)
+backgroundColor = "#ffffff"                # surface
+secondaryBackgroundColor = "#f2f3fb"       # wash
+textColor = "#20303a"                      # ink
+linkColor = "#006bc1"                      # text-link (wave-06)
+borderColor = "#dcdff2"                    # rule
+dataframeBorderColor = "#dcdff2"           # rule
+dataframeHeaderBackgroundColor = "#f2f3fb" # wash
+dataframeHeaderTextColor = "#3538a1"       # text-heading (indigo)
+codeBackgroundColor = "#f2f3fb"            # code-surface
+codeTextColor = "#20303a"                  # code-plain
+
+[theme.dark]
+primaryColor = "#00d8cf"                   # primary (teal)
+backgroundColor = "#080d1a"                # surface
+secondaryBackgroundColor = "#0e1629"       # wash
+textColor = "#e8edf8"                      # ink
+linkColor = "#00e6c3"                      # text-link (mint)
+borderColor = "#344159"                    # rule
+dataframeBorderColor = "#344159"           # rule
+dataframeHeaderBackgroundColor = "#0e1629" # wash
+dataframeHeaderTextColor = "#e8edf8"       # text-heading (ink)
+codeBackgroundColor = "#0b1422"            # code-surface
+codeTextColor = "#e8edf8"                  # code-plain

@@ -1,112 +1,92 @@
+/*
+ * Additions to the Streamlit theme in .streamlit/config.toml, limited to what
+ * the theme options cannot express. Values are HSSM design tokens:
+ * https://github.com/lnccbrown/hssm_website/blob/main/design-system/tokens.json
+ *
+ * Light and dark follow prefers-color-scheme, which matches Streamlit's
+ * default "use system setting" theme choice.
+ */
+
 :root {
-    --lan-focus: #0a66c2;
+    --hssm-text-heading: #3538a1; /* text-heading (indigo) */
+    --hssm-accent: #db0850;       /* accent: interaction states only */
+    --hssm-rule: #dcdff2;         /* rule */
+    --hssm-primary: #3538a1;      /* primary (indigo) */
+    --hssm-primary-hover: #402392; /* primary-hover (wave-02) */
+    --hssm-on-primary: #ffffff;   /* on-primary: 9.4:1 on indigo */
 }
 
-div[role="radiogroup"] {
-    gap: 0.75rem;
+@media (prefers-color-scheme: dark) {
+    :root {
+        --hssm-text-heading: #e8edf8;
+        --hssm-accent: #ff5f7c;
+        --hssm-rule: #344159;
+        --hssm-primary: #00d8cf;       /* teal */
+        --hssm-primary-hover: #00e6c3; /* mint */
+        --hssm-on-primary: #080d1a;    /* navy: 10.8:1 on teal */
+    }
 }
 
-div[role="radiogroup"] > label {
-    border: 2px solid #1f6feb;
-    border-radius: 10px;
-    padding: 0.35rem 0.8rem;
-    background: #f4f8ff;
-    color: #0b1f3a;
-    font-weight: 600;
+h1,
+h2,
+h3 {
+    color: var(--hssm-text-heading) !important;
 }
 
-div[role="radiogroup"] > label * {
-    color: #0b1f3a !important;
-}
-
-div[data-baseweb="tab-list"] button[data-baseweb="tab"] {
+div[data-baseweb="tab-list"] button[data-baseweb="tab"] p {
     font-size: 1.1rem;
-    font-weight: 700;
-}
-
-div[role="radiogroup"] > label:has(input:checked) {
-    background: #dbeafe;
-    color: #052249;
-    border-color: #0a66c2;
-}
-
-div[role="radiogroup"] > label:has(input:checked) * {
-    color: #052249 !important;
-}
-
-div[data-testid="stSidebar"] div[data-testid="stExpander"] {
-    border: 2px solid #1f6feb !important;
-    border-radius: 10px !important;
-    background: #f4f8ff !important;
-    overflow: hidden !important;
-}
-
-div[data-testid="stSidebar"] div[data-testid="stExpander"] details {
-    border: 0 !important;
-    border-radius: 10px !important;
-    background: transparent !important;
-}
-
-div[data-testid="stSidebar"] div[data-testid="stExpander"] summary {
-    background: #f4f8ff !important;
-    color: #0b1f3a !important;
-    font-weight: 600 !important;
-}
-
-div[data-testid="stSidebar"] div[data-testid="stExpander"] summary * {
-    color: #0b1f3a !important;
-}
-
-div[data-testid="stSidebar"] div[data-testid="stExpander"] summary:hover {
-    background: #eaf3ff !important;
-}
-
-div[data-testid="stSidebar"] div[data-testid="stExpander"] details[open],
-div[data-testid="stSidebar"] div[data-testid="stExpander"]:has(details[open]) {
-    background: #dbeafe !important;
-    border-color: #0a66c2 !important;
-}
-
-div[data-testid="stSidebar"] div[data-testid="stExpander"] details[open] summary,
-div[data-testid="stSidebar"] div[data-testid="stExpander"] details[open] summary * {
-    color: #052249 !important;
-}
-
-div.stButton > button {
-    border: 2px solid #1f6feb;
-    border-radius: 10px;
-    background: #f4f8ff;
-    color: #0b1f3a;
     font-weight: 600;
 }
 
-div.stButton > button:hover {
-    background: #eaf3ff;
-    border-color: #0a66c2;
-    color: #052249;
+/* accent marks the active tab (interaction state). */
+div[data-baseweb="tab-highlight"] {
+    background-color: var(--hssm-accent) !important;
 }
 
-div.stButton > button:active {
-    background: #dbeafe;
-    border-color: #0a66c2;
-    color: #052249;
-}
-
-div[role="radiogroup"] > label:has(input:focus-visible),
+/* Focus ring: accent, 3px, on every keyboard-focusable control. */
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
-select:focus-visible {
-    outline: 3px solid var(--lan-focus) !important;
+select:focus-visible,
+[role="slider"]:focus-visible,
+summary:focus-visible {
+    outline: 3px solid var(--hssm-accent) !important;
     outline-offset: 2px !important;
 }
 
-div[data-testid="stDataFrame"] thead tr th,
-div[data-testid="stDataEditor"] thead tr th {
-    background-color: #0b3a75;
-    color: #ffffff;
-    font-weight: 700;
-    border-bottom: 2px solid #072b57;
+/* Figures sit on a white `paper` card in every theme (radius-card + rule). */
+div[data-testid="stImage"] img,
+div[data-testid="stPlotlyChart"] {
+    border: 1px solid var(--hssm-rule);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* Minimum target size for controls (target-min). */
+div.stButton > button {
+    min-height: 44px;
+    font-weight: 600;
+}
+
+/*
+ * Run buttons are the one key action per tab, so they use the filled
+ * `primary` style. The label color is pinned to `on-primary`: the dark theme's
+ * primary is a light teal, which needs dark text rather than white.
+ */
+button[data-testid="stBaseButton-primary"] {
+    background-color: var(--hssm-primary) !important;
+    border-color: var(--hssm-primary) !important;
+    color: var(--hssm-on-primary) !important;
+}
+
+button[data-testid="stBaseButton-primary"] * {
+    color: var(--hssm-on-primary) !important;
+}
+
+button[data-testid="stBaseButton-primary"]:hover,
+button[data-testid="stBaseButton-primary"]:active {
+    background-color: var(--hssm-primary-hover) !important;
+    border-color: var(--hssm-primary-hover) !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -117,75 +97,5 @@ div[data-testid="stDataEditor"] thead tr th {
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
         scroll-behavior: auto !important;
-    }
-}
-
-@media (prefers-color-scheme: dark) {
-    div[role="radiogroup"] > label {
-        background: #14365f;
-        color: #f5f9ff;
-        border-color: #66a3ff;
-    }
-
-    div[role="radiogroup"] > label * {
-        color: #f5f9ff !important;
-    }
-
-    div[role="radiogroup"] > label:has(input:checked) {
-        background: #1f4f86;
-        color: #ffffff;
-        border-color: #9dc4ff;
-    }
-
-    div[role="radiogroup"] > label:has(input:checked) * {
-        color: #ffffff !important;
-    }
-
-    div[data-testid="stSidebar"] div[data-testid="stExpander"] {
-        background: #14365f !important;
-        border-color: #66a3ff !important;
-    }
-
-    div[data-testid="stSidebar"] div[data-testid="stExpander"] details {
-        background: transparent !important;
-    }
-
-    div[data-testid="stSidebar"] div[data-testid="stExpander"] summary,
-    div[data-testid="stSidebar"] div[data-testid="stExpander"] summary * {
-        background: #14365f !important;
-        color: #f5f9ff !important;
-    }
-
-    div[data-testid="stSidebar"] div[data-testid="stExpander"] summary:hover {
-        background: #1b4473 !important;
-    }
-
-    div[data-testid="stSidebar"] div[data-testid="stExpander"] details[open],
-    div[data-testid="stSidebar"] div[data-testid="stExpander"]:has(details[open]) {
-        background: #1f4f86 !important;
-        border-color: #9dc4ff !important;
-    }
-
-    div[data-testid="stSidebar"] div[data-testid="stExpander"] details[open] summary,
-    div[data-testid="stSidebar"] div[data-testid="stExpander"] details[open] summary * {
-        color: #ffffff !important;
-    }
-
-    div.stButton > button {
-        background: #14365f;
-        color: #f5f9ff;
-        border-color: #66a3ff;
-    }
-
-    div.stButton > button:hover {
-        background: #1b4473;
-        color: #ffffff;
-        border-color: #9dc4ff;
-    }
-
-    div.stButton > button:active {
-        background: #1f4f86;
-        color: #ffffff;
-        border-color: #9dc4ff;
     }
 }

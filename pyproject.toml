@@ -143,7 +143,11 @@ line-length = 88
 # `lanfactory`; `.` resolves `tests`. Do not add `tests` itself: `tests/onnx/`
 # would make ruff treat the PyPI `onnx` package as first-party.
 src = [".", "src"]
-extend-exclude = ["notebooks/*", "docs/*", "docs/basic_tutorial/basic_tutorial.ipynb"]
+extend-exclude = [
+    "notebooks/*",
+    "docs/*",
+    "docs/basic_tutorial/basic_tutorial.ipynb",
+]
 
 [tool.ruff.lint]
 ignore = [
@@ -168,10 +172,10 @@ omit = [
     "*/tests/*",
     "*/__init__.py",
     "*/conftest.py",
-    "*/cli/jax_train.py",   # CLI entry points are tested via smoke tests
-    "*/cli/torch_train.py", # CLI entry points are tested via smoke tests
-    "*/cli/upload_hf.py",   # CLI entry points are tested via smoke tests
-    "*/cli/download_hf.py", # CLI entry points are tested via smoke tests
+    "*/cli/jax_train.py",                    # CLI entry points are tested via smoke tests
+    "*/cli/torch_train.py",                  # CLI entry points are tested via smoke tests
+    "*/cli/upload_hf.py",                    # CLI entry points are tested via smoke tests
+    "*/cli/download_hf.py",                  # CLI entry points are tested via smoke tests
     "*/network_inspectors/streamlit_app.py",
 ]
 
@@ -201,4 +205,4 @@ network-inspectors-ui = "lanfactory.cli.network_inspectors_ui:app"
 
 [tool.setuptools.package-data]
 "lanfactory.cli" = ["config_network_training_lan.yaml"]
-"lanfactory.network_inspectors" = ["styles.css"]
+"lanfactory.network_inspectors" = ["styles.css", ".streamlit/config.toml"]

@@ -6,9 +6,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from matplotlib.colors import to_hex
 from matplotlib.figure import Figure
 
-from lanfactory.network_inspectors.config import ModelSpec, PlotConfig
+from lanfactory.network_inspectors.config import (
+    HSSM_PAPER_INK,
+    HSSM_PRIMARY,
+    HSSM_WAVE,
+    ModelSpec,
+    PlotConfig,
+)
 from lanfactory.network_inspectors.contracts import (
     LikelihoodComparison,
     LikelihoodRow,
@@ -96,3 +103,61 @@ def test_build_manifold_figure_returns_interactive_plotly_figure():
 
     assert isinstance(fig, go.Figure)
     assert fig.data[0].type == "surface"
+
+
+def test_kde_vs_lan_figure_uses_configured_colors():
+    grid = np.array([[-1.0, -1.0], [1.0, 1.0]])
+    rows = [
+        LikelihoodRow(
+            params=np.array([0.2, 1.5, 0.5, 0.3], dtype=np.float32),
+            lan=np.array([0.4, 0.6]),
+            kdes=[np.array([0.3, 0.7]), np.array([0.35, 0.65])],
+        )
+    ]
+    comparison = LikelihoodComparison(
+        spec=ModelSpec(name="ddm", params=["v", "a", "z", "t"], choices=[-1, 1]),
+        grid=grid,
+        rows=rows,
+    )
+    cfg = PlotConfig(show=False, save=False)
+
+    fig = build_kde_vs_lan_figure(comparison, cfg)
+    ax = fig.axes[0]
+
+    line_colors = {to_hex(line.get_color()) for line in ax.get_lines()}
+    assert line_colors == {cfg.kde_color, cfg.lan_color}
+    legend_alphas = [handle.get_alpha() for handle in ax.get_legend().legend_handles]
+    assert legend_alphas == [1, 1]
+    plt.close(fig)
+
+
+def test_plot_config_defaults_to_hssm_palette():
+    cfg = PlotConfig()
+
+    assert (cfg.kde_color, cfg.lan_color) == (HSSM_PAPER_INK, HSSM_PRIMARY)
+    assert cfg.manifold_colorscale == list(HSSM_WAVE)
+    assert PlotConfig().manifold_colorscale is not cfg.manifold_colorscale
+
+
+def test_manifold_figure_uses_configured_colorscale():
+    manifold = pd.DataFrame(
+        {
+            "rt": [1.0, 2.0, 1.0, 2.0],
+            "choice": [-1, -1, 1, 1],
+            "vary": [0.1, 0.1, 0.1, 0.1],
+            "likelihood": [0.1, 0.2, 0.3, 0.4],
+        }
+    )
+    computation = ManifoldComputation(
+        spec=ModelSpec(name="ddm", params=["v"], choices=[-1, 1]),
+        vary_name="v",
+        vary_values=np.array([0.1]),
+        grid=np.array([[1.0, -1.0], [2.0, -1.0], [1.0, 1.0], [2.0, 1.0]]),
+        manifold=manifold,
+    )
+    cfg = PlotConfig(show=False, save=False)
+
+    fig = build_manifold_figure(computation, cfg)
+
+    colors = [color for _, color in fig.data[0].colorscale]
+    assert colors == cfg.manifold_colorscale

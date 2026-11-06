@@ -38,15 +38,38 @@ def build_kde_vs_lan_figure(
 
     rows = int(np.ceil(len(results) / cfg.cols))
     per_choice = grid.shape[0] // spec.n_choices
-    sns.set(style="white", palette="muted", color_codes=True, font_scale=cfg.font_scale)
+    ink = cfg.ink_color
+    sns.set(
+        style="white",
+        palette="muted",
+        color_codes=True,
+        font_scale=cfg.font_scale,
+        rc={
+            "text.color": ink,
+            "axes.labelcolor": ink,
+            "axes.edgecolor": ink,
+            "xtick.color": ink,
+            "ytick.color": ink,
+        },
+    )
 
+    # Constrained layout sizes the title and label margins to the text, so the
+    # figure stays legible at any height (a fixed top margin let the title
+    # overlap the panels on short figures).
     fig, ax = plt.subplots(
-        rows, cfg.cols, figsize=cfg.figsize, sharex=True, sharey=False, squeeze=False
+        rows,
+        cfg.cols,
+        figsize=cfg.figsize,
+        sharex=True,
+        sharey=False,
+        squeeze=False,
+        layout="constrained",
     )
 
     fig.suptitle(
         "Likelihoods KDE vs. LAN" + ": " + spec.name.upper().replace("_", "-"),
-        fontsize=30,
+        # Relative sizes follow seaborn's font_scale (cfg.font_scale).
+        fontsize="x-large",
     )
     sns.despine(right=True)
 
@@ -66,7 +89,7 @@ def build_kde_vs_lan_figure(
                 sns.lineplot(
                     x=grid[:, 0] * grid[:, 1],
                     y=kde_like,
-                    color="black",
+                    color=cfg.kde_color,
                     alpha=cfg.alpha,
                     label=label,
                     ax=ax[row_tmp, col_tmp],
@@ -78,7 +101,7 @@ def build_kde_vs_lan_figure(
                     sns.lineplot(
                         x=grid[per_choice * k : per_choice * (k + 1), 0],
                         y=kde_like[per_choice * k : per_choice * (k + 1)],
-                        color="black",
+                        color=cfg.kde_color,
                         alpha=cfg.alpha,
                         label=label,
                         ax=ax[row_tmp, col_tmp],
@@ -88,7 +111,7 @@ def build_kde_vs_lan_figure(
             sns.lineplot(
                 x=grid[:, 0] * grid[:, 1],
                 y=res.lan,
-                color="green",
+                color=cfg.lan_color,
                 label="MLP",
                 alpha=1,
                 ax=ax[row_tmp, col_tmp],
@@ -103,28 +126,31 @@ def build_kde_vs_lan_figure(
                 sns.lineplot(
                     x=grid[per_choice * k : per_choice * (k + 1), 0],
                     y=res.lan[per_choice * k : per_choice * (k + 1)],
-                    color="green",
+                    color=cfg.lan_color,
                     label=label,
                     alpha=1,
                     ax=ax[row_tmp, col_tmp],
                 )
 
         if row_tmp == 0 and col_tmp == 0:
-            ax[row_tmp, col_tmp].legend(
-                loc="upper left", fancybox=True, shadow=True, fontsize=12
+            legend = ax[row_tmp, col_tmp].legend(
+                loc="upper left", fancybox=True, shadow=True, fontsize="small"
             )
+            # Swatches inherit the KDE curves' low alpha; show them opaque.
+            for handle in legend.legend_handles:
+                handle.set_alpha(1)
         else:
             ax[row_tmp, col_tmp].legend().set_visible(False)
 
         if row_tmp == rows - 1:
-            ax[row_tmp, col_tmp].set_xlabel("rt", fontsize=24)
+            ax[row_tmp, col_tmp].set_xlabel("rt")
         else:
             ax[row_tmp, col_tmp].tick_params(color="white")
 
         if col_tmp == 0:
-            ax[row_tmp, col_tmp].set_ylabel("likelihood", fontsize=20)
+            ax[row_tmp, col_tmp].set_ylabel("likelihood")
 
-        ax[row_tmp, col_tmp].set_title(str(i), fontsize=20)
+        ax[row_tmp, col_tmp].set_title(str(i))
         ax[row_tmp, col_tmp].tick_params(axis="y", size=14)
         ax[row_tmp, col_tmp].tick_params(axis="x", size=14)
 
@@ -133,8 +159,7 @@ def build_kde_vs_lan_figure(
         col_tmp = i - (cfg.cols * row_tmp)
         ax[row_tmp, col_tmp].axis("off")
 
-    fig.subplots_adjust(top=0.9)
-    fig.subplots_adjust(hspace=0.3, wspace=0.3)
+    fig.set_layout_engine("constrained", hspace=0.06, wspace=0.04)
 
     return fig
 
@@ -179,7 +204,7 @@ def build_manifold_figure(
                 x=surface.columns.to_numpy(dtype=float),
                 y=surface.index.to_numpy(dtype=float),
                 z=surface.to_numpy(dtype=float),
-                colorscale="RdBu",
+                colorscale=cfg.manifold_colorscale,
                 colorbar={"title": "Likelihood"},
             )
         ]
