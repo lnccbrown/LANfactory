@@ -9,6 +9,7 @@ from lanfactory.network_inspectors.parameters import (
     make_parameter_df,
     missing_parameters,
     out_of_bounds,
+    sweep_bound_problems,
     sweep_bounds,
 )
 
@@ -84,3 +85,36 @@ def test_out_of_bounds_resolves_dependent_bounds_against_values():
 
     assert set(out_of_bounds("full_ddm_rv", values)) == {"st"}
     assert out_of_bounds("full_ddm_rv", {**values, "st": 0.1}) == {}
+
+
+def _full_ddm_rv(**overrides):
+    config = ssms.config.model_config["full_ddm_rv"]
+    values = dict(zip(config["params"], config["default_params"], strict=True))
+    return {**values, **overrides}
+
+
+def test_sweep_bound_problems_checks_dependent_bounds_along_the_sweep():
+    base = _full_ddm_rv(t=1.0, st=0.3)
+
+    # st <= t holds at every swept t, although the t default (0.25) is below st.
+    assert sweep_bound_problems("full_ddm_rv", "t", base, 0.5, 2.0) == []
+    # Sweeping t down to 0.25 crosses below st.
+    problems = sweep_bound_problems("full_ddm_rv", "t", base, 0.25, 2.0)
+    assert len(problems) == 1
+    assert problems[0].startswith("st = 0.3")
+
+
+def test_sweep_bound_problems_reports_sweep_outside_bounds():
+    lower, upper = sweep_bounds("ddm", "a")
+    base = dict(
+        zip(
+            ssms.config.model_config["ddm"]["params"],
+            ssms.config.model_config["ddm"]["default_params"],
+            strict=True,
+        )
+    )
+
+    assert sweep_bound_problems("ddm", "a", base, lower, upper) == []
+    assert sweep_bound_problems("ddm", "a", base, lower, upper + 1) == [
+        f"a sweep {lower:g} to {upper + 1:g} (bounds {lower:g} to {upper:g})"
+    ]

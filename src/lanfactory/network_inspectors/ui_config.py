@@ -25,6 +25,7 @@ class WidgetSpec:
     min_value: float | None = None
     max_value: float | None = None
     step: float | None = None
+    format: str | None = None
     width: int | None = None
 
     def kwargs(self, **overrides: Any) -> dict[str, Any]:
@@ -78,6 +79,7 @@ KDE_GRID_STEP = WidgetSpec(
     value=0.0025,
     min_value=1e-6,
     step=0.0025,
+    format="%g",
 )
 KDE_PLOT_COLUMNS = WidgetSpec(
     label="KDE plot columns",
@@ -129,10 +131,12 @@ MANIFOLD_MAX_RT = WidgetSpec(
 # ``value`` when rendering.
 SWEEP_MIN = WidgetSpec(
     label="Sweep min",
+    format="%g",
     help="Minimum value in the parameter sweep range.",
 )
 SWEEP_MAX = WidgetSpec(
     label="Sweep max",
+    format="%g",
     help="Maximum value in the parameter sweep range.",
 )
 SWEEP_STEPS = WidgetSpec(

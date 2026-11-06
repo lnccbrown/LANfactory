@@ -75,3 +75,36 @@ def out_of_bounds(
         if not lower <= value <= upper:
             outside[param] = (lower, upper)
     return outside
+
+
+def sweep_bound_problems(
+    model: str,
+    vary_param: str,
+    base_values: Mapping[str, float],
+    sweep_min: float,
+    sweep_max: float,
+) -> list[str]:
+    """Describe each manifold input outside the model's training bounds.
+
+    Fixed parameters are checked with the swept one at both sweep endpoints: a
+    bound may name the swept parameter (``full_ddm_rv``: ``st <= t``), and such
+    a bound is that parameter's value, so the endpoints cover every point in
+    between. Returns an empty list when the whole sweep stays in bounds.
+    """
+    outside: dict[str, tuple[float, float]] = {}
+    for endpoint in (sweep_min, sweep_max):
+        values = {**base_values, vary_param: endpoint}
+        for param, bounds in out_of_bounds(model, values).items():
+            if param != vary_param:
+                outside.setdefault(param, bounds)
+    problems = [
+        f"{param} = {base_values[param]:g} (bounds {lo:g} to {hi:g})"
+        for param, (lo, hi) in outside.items()
+    ]
+    lower, upper = sweep_bounds(model, vary_param, base_values)
+    if sweep_min < lower or sweep_max > upper:
+        problems.append(
+            f"{vary_param} sweep {sweep_min:g} to {sweep_max:g} "
+            f"(bounds {lower:g} to {upper:g})"
+        )
+    return problems

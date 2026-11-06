@@ -38,7 +38,7 @@ from lanfactory.network_inspectors.loaders import get_torch_mlp
 from lanfactory.network_inspectors.parameters import (
     make_parameter_df,
     missing_parameters,
-    out_of_bounds,
+    sweep_bound_problems,
     sweep_bounds,
 )
 from lanfactory.network_inspectors.plotting import (
@@ -147,19 +147,6 @@ def _kde_tab(model: str, predictor) -> None:
         n_points_2c=n_points_2c,
         rt_step_2c=float(rt_step_2c),
     )
-    n_rows = -(-n_parameter_sets // cols)  # ceil division
-    plot_cfg = PlotConfig(
-        show=False,
-        save=False,
-        cols=cols,
-        alpha=alpha,
-        font_scale=font_scale,
-        figsize=(
-            ui.KDE_FIGURE_WIDTH_IN,
-            n_rows * ui.KDE_PANEL_ROW_HEIGHT_IN + ui.KDE_TITLE_HEIGHT_IN,
-        ),
-    )
-
     parameter_df = make_parameter_df(model=model, n_rows=n_parameter_sets, seed=seed)
     st.caption("Generated parameter vectors")
     st.dataframe(parameter_df, width="content")
@@ -177,15 +164,19 @@ def _kde_tab(model: str, predictor) -> None:
         grid_spec,
     )
     if st.button("Run KDE vs LAN", type="primary", width="stretch"):
-        with st.spinner("Computing likelihoods..."):
-            comparison = compute_kde_vs_lan_likelihoods(
-                parameter_df=parameter_df,
-                model=model,
-                torch_mlp_predict=predictor,
-                n_samples=n_samples,
-                n_reps=n_reps,
-                grid=grid_spec,
-            )
+        try:
+            with st.spinner("Computing likelihoods..."):
+                comparison = compute_kde_vs_lan_likelihoods(
+                    parameter_df=parameter_df,
+                    model=model,
+                    torch_mlp_predict=predictor,
+                    n_samples=n_samples,
+                    n_reps=n_reps,
+                    grid=grid_spec,
+                )
+        except ValueError as exc:
+            st.error(str(exc))
+            return
         st.session_state[_KDE_RESULT] = {"inputs": inputs, "comparison": comparison}
 
     result = _stored_result(_KDE_RESULT, model, predictor)
@@ -193,7 +184,22 @@ def _kde_tab(model: str, predictor) -> None:
         return
     if result["inputs"] != inputs:
         st.info(_STALE_RESULT_NOTE)
-    fig = build_kde_vs_lan_figure(result["comparison"], plot_cfg)
+    comparison = result["comparison"]
+    # Size the figure from the stored result, which may have a different number
+    # of parameter sets than the slider now shows.
+    n_rows = -(-len(comparison.rows) // cols)  # ceil division
+    plot_cfg = PlotConfig(
+        show=False,
+        save=False,
+        cols=cols,
+        alpha=alpha,
+        font_scale=font_scale,
+        figsize=(
+            ui.KDE_FIGURE_WIDTH_IN,
+            n_rows * ui.KDE_PANEL_ROW_HEIGHT_IN + ui.KDE_TITLE_HEIGHT_IN,
+        ),
+    )
+    fig = build_kde_vs_lan_figure(comparison, plot_cfg)
     st.caption(
         "KDE vs LAN chart. X-axis is signed reaction time and y-axis is "
         "likelihood. Gray curves are KDE estimates and indigo curves are LAN outputs."
@@ -216,7 +222,8 @@ def _manifold_tab(model: str, predictor) -> None:
     # Base vector and swept parameter come first so the sweep range below can
     # resolve dependent bounds (full_ddm_rv: st <= t) against the edited values.
     st.caption("Base parameter vector")
-    base_parameter_df = pd.DataFrame([defaults], columns=params)
+    # float: some ssms defaults are ints, which would make the column integer-only.
+    base_parameter_df = pd.DataFrame([defaults], columns=params, dtype=float)
     edited_df = st.data_editor(
         base_parameter_df,
         num_rows="fixed",
@@ -237,7 +244,14 @@ def _manifold_tab(model: str, predictor) -> None:
     sweep_max = col_b.number_input(**ui.SWEEP_MAX.kwargs(value=p_max))
     sweep_steps = col_c.slider(**ui.SWEEP_STEPS.kwargs())
 
-    _warn_out_of_bounds(model, vary_param, base_values, sweep_min, sweep_max)
+    problems = sweep_bound_problems(
+        model, vary_param, base_values, sweep_min, sweep_max
+    )
+    if problems:
+        st.warning(
+            "Outside the training bounds, the network extrapolates and its "
+            "output is not a reliable likelihood: " + "; ".join(problems) + "."
+        )
 
     run_manifold = st.button("Run Manifold", type="primary", width="stretch")
 
@@ -288,36 +302,9 @@ def _manifold_tab(model: str, predictor) -> None:
         "3D manifold chart. X-axis is signed reaction time, y-axis is the swept "
         "parameter value, and z-axis is likelihood."
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     st.caption("Computed manifold table")
     st.dataframe(computation.manifold, width="content")
-
-
-def _warn_out_of_bounds(
-    model: str,
-    vary_param: str,
-    base_values: dict[str, float],
-    sweep_min: float,
-    sweep_max: float,
-) -> None:
-    """Warn when the manifold would evaluate the network outside training bounds."""
-    fixed = {k: v for k, v in base_values.items() if k != vary_param}
-    outside = out_of_bounds(model, fixed) if fixed else {}
-    problems = [
-        f"{param} = {base_values[param]:g} (bounds {lo:g} to {hi:g})"
-        for param, (lo, hi) in outside.items()
-    ]
-    lower, upper = sweep_bounds(model, vary_param, base_values)
-    if sweep_min < lower or sweep_max > upper:
-        problems.append(
-            f"{vary_param} sweep {sweep_min:g} to {sweep_max:g} "
-            f"(bounds {lower:g} to {upper:g})"
-        )
-    if problems:
-        st.warning(
-            "Outside the training bounds, the network extrapolates and its "
-            "output is not a reliable likelihood: " + "; ".join(problems) + "."
-        )
 
 
 def run() -> None:

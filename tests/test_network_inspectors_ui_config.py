@@ -49,5 +49,6 @@ def test_spec_fields_are_streamlit_keyword_names():
         "min_value",
         "max_value",
         "step",
+        "format",
         "width",
     }
