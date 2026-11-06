@@ -172,6 +172,10 @@ flat `<base>/<model>/` layout also works. It skips `cpn/`, `opn/`, and
 `gonogo/` subtrees, and pairs each state dict with the network config from
 the same training run by its run UUID.
 
+Only models registered in `ssms.config.model_config` are detected. Variants
+that ssms builds at runtime, such as `ddm_deadline`, are not supported yet
+([#167](https://github.com/lnccbrown/LANfactory/issues/167)).
+
 ## Launch the UI
 
 Start the app from the repository root:
