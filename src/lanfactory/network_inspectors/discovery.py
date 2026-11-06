@@ -134,11 +134,19 @@ def pair_run_artifacts(model_dir: Path) -> tuple[Path, Path]:
     )
 
 
-def resolve_model_paths(base_dir: str, model: str) -> tuple[Path, Path]:
-    """Return the (state dict, network config) pair to load for ``model``."""
-    model_dir = model_directories(base_dir).get(model)
+def resolve_model_paths(
+    base_dir: str, model: str, directories: dict[str, Path] | None = None
+) -> tuple[Path, Path]:
+    """Return the (state dict, network config) pair to load for ``model``.
+
+    Pass ``directories`` (from :func:`model_directories`) to reuse a scan the
+    caller already made instead of walking ``base_dir`` again.
+    """
+    if directories is None:
+        directories = model_directories(base_dir)
+    model_dir = directories.get(model)
     if model_dir is None:
-        available = available_models(base_dir)
+        available = sorted(directories)
         available_str = ", ".join(available) if available else "none detected"
         raise FileNotFoundError(
             f"Model directory not found for '{model}' under {base_dir}. "

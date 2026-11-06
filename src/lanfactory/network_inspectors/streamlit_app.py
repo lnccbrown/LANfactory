@@ -31,7 +31,7 @@ from lanfactory.network_inspectors.config import (
     PlotConfig,
 )
 from lanfactory.network_inspectors.discovery import (
-    available_models,
+    model_directories,
     resolve_model_paths,
 )
 from lanfactory.network_inspectors.loaders import get_torch_mlp
@@ -59,14 +59,19 @@ def _load_stylesheet() -> str:
         )
 
 
-def _load_predictor(base_dir: str, model: str):
+def _load_predictor(
+    base_dir: str, model: str, directories: dict[str, Path] | None = None
+):
     """Load the predictor for the newest run, re-resolving artifacts every call.
 
     Resolution happens outside the resource cache and the cache key includes
     the artifact paths and modification times, so a newly finished training run
     (or a replaced checkpoint) is picked up instead of serving stale weights.
+    ``directories`` reuses this rerun's discovery scan.
     """
-    state_dict_path, network_config_path = resolve_model_paths(base_dir, model)
+    state_dict_path, network_config_path = resolve_model_paths(
+        base_dir, model, directories
+    )
     return _load_predictor_cached(
         model=model,
         state_dict_path=str(state_dict_path),
@@ -261,7 +266,10 @@ def run() -> None:
             st.session_state["torch_models_base_dir"] = _default_base_dir()
 
         base_dir = st.text_input(**ui.BASE_DIR.kwargs(key="torch_models_base_dir"))
-        detected_models = available_models(base_dir)
+        # One scan per rerun, shared by model selection and loading; the next
+        # rerun scans again so new checkpoints are still picked up.
+        directories = model_directories(base_dir)
+        detected_models = sorted(directories)
 
         if detected_models:
             default_model = "ddm" if "ddm" in detected_models else detected_models[0]
@@ -287,7 +295,7 @@ def run() -> None:
             )
 
     try:
-        predictor = _load_predictor(base_dir, model)
+        predictor = _load_predictor(base_dir, model, directories)
     except Exception as exc:  # pragma: no cover - Streamlit interactive path
         st.error(str(exc))
         st.stop()

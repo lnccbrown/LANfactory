@@ -12,6 +12,7 @@ from numpy.typing import NDArray
 
 from .compute import (
     build_manifold,
+    encode_choices,
     evaluate_kde,
     evaluate_network,
     make_manifold_grid,
@@ -80,14 +81,17 @@ def compute_kde_vs_lan_likelihoods(
     spec = ModelSpec.from_model(model, predictor=torch_mlp_predict)
     _validate_parameter_df(parameter_df, spec)
     grid_arr = make_rt_choice_grid(spec, grid)
+    # The network and KDE see the model's choice values; the returned grid
+    # keeps the display encoding used for plotting.
+    model_grid = encode_choices(spec, grid_arr)
 
     rows: list[LikelihoodRow] = []
     for i in range(parameter_df.shape[0]):
         params = parameter_df.iloc[i, :][spec.params].values.astype(np.float32)
-        lan_like = np.exp(evaluate_network(spec, params, grid_arr))
+        lan_like = np.exp(evaluate_network(spec, params, model_grid))
         kdes = [
             np.exp(
-                evaluate_kde(simulate_ground_truth(spec, params, n_samples), grid_arr)
+                evaluate_kde(simulate_ground_truth(spec, params, n_samples), model_grid)
             )
             for _ in range(n_reps)
         ]

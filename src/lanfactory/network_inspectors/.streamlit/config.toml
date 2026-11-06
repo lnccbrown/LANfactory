@@ -13,6 +13,14 @@
 [client]
 toolbarMode = "minimal"
 
+[server]
+# Listen on localhost only. The UI loads the network config pickle from any
+# directory a viewer types in, and unpickling an untrusted file can run code,
+# so the app must not be reachable by other users or hosts. On a remote machine
+# use SSH port forwarding (ssh -L 8501:localhost:8501 host). To expose it
+# anyway, pass --server.address explicitly and only point it at trusted files.
+address = "localhost"
+
 [theme]
 # IBM Plex is loaded from Google Fonts; offline, the browser falls back to
 # its system UI and monospace fonts.

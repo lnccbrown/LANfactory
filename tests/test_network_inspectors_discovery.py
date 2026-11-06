@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from lanfactory.network_inspectors import discovery
 from lanfactory.network_inspectors.discovery import (
     available_models,
     model_directories,
@@ -164,3 +165,20 @@ def test_model_directories_picks_directory_with_newest_run(tmp_path, newer):
     os.utime(newest_state, (future, future))
 
     assert model_directories(str(tmp_path)) == {"ddm": dirs[newer]}
+
+
+def test_resolve_model_paths_reuses_given_directories(tmp_path, monkeypatch):
+    model_dir = tmp_path / "ddm"
+    _add_model_artifacts(model_dir, "ddm_state_dict.pt", "ddm_network_config.pickle")
+    directories = model_directories(str(tmp_path))
+
+    def no_rescan(*_):
+        raise AssertionError("resolve_model_paths rescanned the base directory")
+
+    monkeypatch.setattr(discovery, "model_directories", no_rescan)
+
+    assert resolve_model_paths(str(tmp_path), "ddm", directories)[0] == (
+        model_dir / "ddm_state_dict.pt"
+    )
+    with pytest.raises(FileNotFoundError, match="Detected models .*: ddm"):
+        resolve_model_paths(str(tmp_path), "angle", directories)

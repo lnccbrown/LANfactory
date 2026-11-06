@@ -180,6 +180,17 @@ Start the app from the repository root:
 uv run network-inspectors-ui
 ```
 
+The app listens on `localhost` only. It loads network configs with `pickle`,
+which can run code from an untrusted file, so it must not be reachable by other
+users. On a remote machine such as a cluster login node, forward the port over
+SSH and open `http://localhost:8501` locally:
+
+```bash
+ssh -L 8501:localhost:8501 <user>@<host>
+```
+
+Only point the app at directories of artifacts you trust.
+
 In the sidebar, set **Torch models base directory** to:
 
 ```text

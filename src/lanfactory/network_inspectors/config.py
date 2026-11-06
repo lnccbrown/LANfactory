@@ -31,7 +31,9 @@ class ModelSpec:
         return cls(
             name=model,
             params=list(cfg["params"]),
-            choices=list(cfg["choices"]),
+            # Some ssms configs give only ``nchoices`` (e.g. lca_3); their
+            # simulators emit choices 0..n-1.
+            choices=list(cfg.get("choices") or range(cfg["nchoices"])),
             predictor=predictor,
         )
 
