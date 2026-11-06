@@ -52,7 +52,7 @@ def test_load_predictor_picks_up_newer_run(tmp_path, monkeypatch):
 def test_app_scans_base_directory_once_per_rerun(tmp_path, monkeypatch):
     from streamlit.testing.v1 import AppTest
 
-    from lanfactory.network_inspectors import discovery
+    from lanfactory.network_inspectors import discovery, loaders
 
     walks = []
     original = discovery._iter_directories
@@ -62,8 +62,10 @@ def test_app_scans_base_directory_once_per_rerun(tmp_path, monkeypatch):
         return original(root, max_depth)
 
     monkeypatch.setattr(discovery, "_iter_directories", counting)
+    # AppTest re-executes the script as __main__, which imports get_torch_mlp
+    # from the loaders module, so patch it there (not on streamlit_app).
     monkeypatch.setattr(
-        streamlit_app, "get_torch_mlp", lambda **_: lambda batch: batch[:, :1]
+        loaders, "get_torch_mlp", lambda **_: lambda batch: batch[:, :1]
     )
     _load_predictor_cached.clear()
     _add_model_artifacts(
@@ -77,5 +79,10 @@ def test_app_scans_base_directory_once_per_rerun(tmp_path, monkeypatch):
     app.run()
 
     assert not app.exception
+    assert not app.error, [error.value for error in app.error]
+    assert [subheader.value for subheader in app.subheader] == [
+        "KDE vs LAN Likelihoods",
+        "LAN Manifold",
+    ]
     assert len(walks) == 1
     _load_predictor_cached.clear()

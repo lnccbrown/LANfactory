@@ -36,3 +36,7 @@ def test_make_parameter_df_applies_sampling_constraints(model, larger, smaller):
     df = make_parameter_df(model=model, n_rows=200, seed=0)
 
     assert np.all(df[larger] >= df[smaller])
+
+
+def test_sweep_bounds_resolves_against_edited_base_vector():
+    assert sweep_bounds("full_ddm_rv", "st", {"t": 1.5}) == pytest.approx((0.001, 1.5))

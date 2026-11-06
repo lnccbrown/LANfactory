@@ -3,28 +3,19 @@
  * the theme options cannot express. Values are HSSM design tokens:
  * https://github.com/lnccbrown/hssm_website/blob/main/design-system/tokens.json
  *
- * Light and dark follow prefers-color-scheme, which matches Streamlit's
- * default "use system setting" theme choice.
+ * Each color is light-dark(<light>, <dark>). Streamlit sets `color-scheme` on
+ * its app container from the *active* theme, and unregistered custom
+ * properties resolve light-dark() where they are used, so these follow the
+ * theme chosen in Streamlit's settings, not the OS preference.
  */
 
 :root {
-    --hssm-text-heading: #3538a1; /* text-heading (indigo) */
-    --hssm-accent: #db0850;       /* accent: interaction states only */
-    --hssm-rule: #dcdff2;         /* rule */
-    --hssm-primary: #3538a1;      /* primary (indigo) */
-    --hssm-primary-hover: #402392; /* primary-hover (wave-02) */
-    --hssm-on-primary: #ffffff;   /* on-primary: 9.4:1 on indigo */
-}
-
-@media (prefers-color-scheme: dark) {
-    :root {
-        --hssm-text-heading: #e8edf8;
-        --hssm-accent: #ff5f7c;
-        --hssm-rule: #344159;
-        --hssm-primary: #00d8cf;       /* teal */
-        --hssm-primary-hover: #00e6c3; /* mint */
-        --hssm-on-primary: #080d1a;    /* navy: 10.8:1 on teal */
-    }
+    --hssm-text-heading: light-dark(#3538a1, #e8edf8); /* text-heading */
+    --hssm-accent: light-dark(#db0850, #ff5f7c);       /* accent: interaction only */
+    --hssm-rule: light-dark(#dcdff2, #344159);         /* rule */
+    --hssm-primary: light-dark(#3538a1, #00d8cf);      /* primary: indigo / teal */
+    --hssm-primary-hover: light-dark(#402392, #00e6c3); /* primary-hover */
+    --hssm-on-primary: light-dark(#ffffff, #080d1a);   /* on-primary */
 }
 
 h1,

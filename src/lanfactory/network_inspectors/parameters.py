@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import numpy as np
 import pandas as pd
 import ssms
@@ -27,17 +29,22 @@ def make_parameter_df(model: str, n_rows: int, seed: int) -> pd.DataFrame:
     return pd.DataFrame({param: samples[param] for param in config["params"]})
 
 
-def sweep_bounds(model: str, param: str) -> tuple[float, float]:
+def sweep_bounds(
+    model: str, param: str, base_values: Mapping[str, float] | None = None
+) -> tuple[float, float]:
     """Return numeric bounds for ``param``, resolving named endpoints.
 
     An endpoint may name another parameter (``full_ddm_rv``: ``st`` in
-    ``(0.001, "t")``); it is resolved against the model's default vector.
+    ``(0.001, "t")``). It is resolved against ``base_values`` (the base
+    parameter vector the sweep runs from), falling back to the model defaults.
     """
     config = ssms.config.model_config[model]
-    defaults = dict(zip(config["params"], config["default_params"], strict=True))
+    values = dict(zip(config["params"], config["default_params"], strict=True))
+    if base_values is not None:
+        values.update(base_values)
     lower, upper = config["param_bounds_dict"][param]
 
     def resolve(endpoint: float | str) -> float:
-        return float(defaults[endpoint] if isinstance(endpoint, str) else endpoint)
+        return float(values[endpoint] if isinstance(endpoint, str) else endpoint)
 
     return resolve(lower), resolve(upper)

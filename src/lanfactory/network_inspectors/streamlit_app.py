@@ -174,22 +174,12 @@ def _manifold_tab(model: str, predictor) -> None:
     params = ssms.config.model_config[model]["params"]
     defaults = ssms.config.model_config[model]["default_params"]
 
-    selected_vary_param = st.session_state.get("manifold_vary_param", params[0])
-    if selected_vary_param not in params:
-        selected_vary_param = params[0]
-    p_min, p_max = sweep_bounds(model, selected_vary_param)
-
     with st.expander("Manifold Grid", expanded=True):
         n_rt_steps = st.slider(**ui.MANIFOLD_RT_STEPS.kwargs())
         max_rt = st.slider(**ui.MANIFOLD_MAX_RT.kwargs())
 
-    col_a, col_b, col_c = st.columns(3)
-    sweep_min = col_a.number_input(**ui.SWEEP_MIN.kwargs(value=p_min))
-    sweep_max = col_b.number_input(**ui.SWEEP_MAX.kwargs(value=p_max))
-    sweep_steps = col_c.slider(**ui.SWEEP_STEPS.kwargs())
-
-    run_manifold = st.button("Run Manifold", type="primary", width="stretch")
-
+    # Base vector and swept parameter come first so the sweep range below can
+    # resolve dependent bounds (full_ddm_rv: st <= t) against the edited values.
     st.caption("Base parameter vector")
     base_parameter_df = pd.DataFrame([defaults], columns=params)
     edited_df = st.data_editor(
@@ -198,12 +188,17 @@ def _manifold_tab(model: str, predictor) -> None:
         width="content",
     )
     vary_param = st.selectbox(
-        **ui.SWEEP_PARAMETER.kwargs(
-            options=params,
-            index=params.index(selected_vary_param),
-            key="manifold_vary_param",
-        )
+        **ui.SWEEP_PARAMETER.kwargs(options=params, key="manifold_vary_param")
     )
+    base_values = {param: float(edited_df[param].iloc[0]) for param in params}
+    p_min, p_max = sweep_bounds(model, vary_param, base_values)
+
+    col_a, col_b, col_c = st.columns(3)
+    sweep_min = col_a.number_input(**ui.SWEEP_MIN.kwargs(value=p_min))
+    sweep_max = col_b.number_input(**ui.SWEEP_MAX.kwargs(value=p_max))
+    sweep_steps = col_c.slider(**ui.SWEEP_STEPS.kwargs())
+
+    run_manifold = st.button("Run Manifold", type="primary", width="stretch")
 
     grid_spec = GridSpec(n_rt_steps=n_rt_steps, max_rt=max_rt)
     plot_cfg = PlotConfig(show=False, save=False)
