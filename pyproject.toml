@@ -8,7 +8,7 @@ requires = ["setuptools", "wheel"]
 
 [project]
 name = "lanfactory"
-version = "0.9.0"
+version = "0.10.0"
 authors = [
     { name = "Alexander Fengler", email = "alexander_fengler@brown.edu" },
     { name = "Carlos Paniagua", email = "carlos_paniagua@brown.edu" },
@@ -31,11 +31,12 @@ classifiers = [
 ]
 
 dependencies = [
-    # Floor tracks the current ssm-simulators release so training data and HSSM
-    # (>=0.14.0) agree on simulator semantics: 0.14.0 masks omissions on rts,
-    # 0.15.0 declares the response-time support edge (ndt_edge_shift) in model
-    # configs. See HSSMSpine#118.
-    "ssm-simulators>=0.15.0",
+    # Floor tracks HSSM's (>=0.16.0) so training data never comes from an older
+    # simulator than inference uses: 0.14.0 masks omissions on rts, 0.15.0
+    # declares the response-time support edge (ndt_edge_shift) in model configs,
+    # 0.16.0 adds the softmax_inv_temperature choice-only models. See
+    # HSSMSpine#118.
+    "ssm-simulators>=0.16.0",
     "scipy>=1.15.2",
     "pandas>=2.2.3",
     "torch>=2.10.0",
@@ -43,6 +44,8 @@ dependencies = [
     "tqdm>=4.67.1",
     "frozendict>=2.4.6",
     "onnx>=1.17.0",
+    # lanfactory.derive batches published (1, D) graphs through onnxruntime.
+    "onnxruntime>=1.17",
     # jax -> ONNX export for jaxtrain networks. Exact-pinned to the 0.15 line:
     # 0.x releases move the API, and the parity test in tests/onnx guards the
     # ecosystem's single-trial ONNX contract against silent changes.
@@ -96,7 +99,6 @@ dev = [
     "types-PyYAML",
     "mlflow>=3.14.0",
     "jaxonnxruntime>=0.3",
-    "onnxruntime>=1.17",
     "nflows>=0.14",
     "bayesflow>=2.0.8",
     "keras>=3.12",
@@ -106,11 +108,11 @@ dev = [
 ]
 docs = [
     "mkdocs==1.6.1",
-    "mkdocs-material==9.7.7",
-    "mkdocstrings==1.0.6",
-    "mkdocstrings-python==2.0.9",
-    "mkdocs-jupyter==0.26.3",
-    "mkdocs-autorefs==1.4.4",
+    "mkdocs-material==9.8.0",
+    "mkdocstrings==1.0.8",
+    "mkdocstrings-python==2.0.10",
+    "mkdocs-jupyter==0.27.0",
+    "mkdocs-autorefs==1.4.5",
     # 1.2.3 depends on ProperDocs, which injects an unrelated migration banner.
     "mkdocs-redirects==1.2.3",
 ]
@@ -201,6 +203,7 @@ transform-onnx = "lanfactory.onnx.transform_onnx:app"
 transform-jax-onnx = "lanfactory.onnx.jax_export:app"
 upload-hf = "lanfactory.cli.upload_hf:app"
 download-hf = "lanfactory.cli.download_hf:app"
+derive-aux = "lanfactory.cli.derive_aux:app"
 network-inspectors-ui = "lanfactory.cli.network_inspectors_ui:app"
 
 [tool.setuptools.package-data]

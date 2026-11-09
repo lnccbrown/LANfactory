@@ -118,8 +118,9 @@ export guides.
     - [HuggingFace Hub](using_huggingface.md) — upload and download trained networks.
     - [Exporting sbi models](exporting_sbi_models.md) and [exporting bayesflow models](exporting_bayesflow_models.md) — bring externally trained networks into HSSM.
 - **API reference** — [config](api/config.md), [trainers](api/trainers.md),
-  [ONNX](api/onnx.md), [network inspectors](api/network_inspectors.md),
-  [Hugging Face](api/hf.md), and [utilities](api/utils.md).
+  [ONNX](api/onnx.md), [derive](api/derive.md),
+  [network inspectors](api/network_inspectors.md), [Hugging Face](api/hf.md),
+  and [utilities](api/utils.md).
 
 We hope this package may be helpful in case you attempt to train
 [LANs](https://elifesciences.org/articles/65074) for your own research.
