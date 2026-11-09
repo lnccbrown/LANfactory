@@ -31,11 +31,12 @@ classifiers = [
 ]
 
 dependencies = [
-    # Floor tracks the current ssm-simulators release so training data and HSSM
-    # (>=0.14.0) agree on simulator semantics: 0.14.0 masks omissions on rts,
-    # 0.15.0 declares the response-time support edge (ndt_edge_shift) in model
-    # configs. See HSSMSpine#118.
-    "ssm-simulators>=0.15.0",
+    # Floor tracks HSSM's (>=0.16.0) so training data never comes from an older
+    # simulator than inference uses: 0.14.0 masks omissions on rts, 0.15.0
+    # declares the response-time support edge (ndt_edge_shift) in model configs,
+    # 0.16.0 adds the softmax_inv_temperature choice-only models. See
+    # HSSMSpine#118.
+    "ssm-simulators>=0.16.0",
     "scipy>=1.15.2",
     "pandas>=2.2.3",
     "torch>=2.10.0",
