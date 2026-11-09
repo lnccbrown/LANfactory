@@ -150,16 +150,10 @@ def test_run_seed():
     return int(time.time())
 
 
-# The default parameter sampler draws each drift rate independently, so models
-# whose simulator requires the drift rates to sum to 1 can never generate
-# training data. Keep them out of the random pool.
-UNSAMPLEABLE_MODELS = {"lba_3_vs_constraint", "lba_angle_3_vs_constraint"}
-
-
 @pytest.fixture
 def available_models():
     """Fixture providing a list of available models."""
-    return [m for m in ssms.config.model_config if m not in UNSAMPLEABLE_MODELS]
+    return list(ssms.config.model_config)
 
 
 @pytest.fixture
