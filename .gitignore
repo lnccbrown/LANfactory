@@ -162,3 +162,6 @@ uv.lock
 # (scripts/sync_agent_config.py materializes these from .claude/).
 .cursor/
 .agents/
+data/
+.vscode/
+notebooks/figures/

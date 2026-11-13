@@ -41,6 +41,27 @@ def make_rt_choice_grid(
     return plot_data
 
 
+def encode_choices(spec: ModelSpec, grid: NDArray[np.float64]) -> NDArray[np.float64]:
+    """Return ``grid`` with its choice column in the model's own choice values.
+
+    Grids use a display encoding: two-choice grids put the first choice at -1
+    and the second at +1 (so ``rt * choice`` is a signed RT for plotting), and
+    multi-choice grids use positions ``0..n-1``. Networks are trained on, and
+    simulators emit, the values in the ssms config instead, which differ for
+    some models (``lba2`` and the ``race_*_2`` models use ``[0, 1]``). Encode a
+    grid with this before passing it to :func:`evaluate_network` or
+    :func:`evaluate_kde`; keep the display grid for plotting.
+    """
+    choices = np.asarray(spec.choices, dtype=np.float64)
+    if spec.n_choices == 2:
+        position = (grid[:, 1] > 0).astype(int)
+    else:
+        position = grid[:, 1].astype(int)
+    encoded = grid.copy()
+    encoded[:, 1] = choices[position]
+    return encoded
+
+
 def make_manifold_grid(grid_spec: GridSpec) -> NDArray[np.float64]:
     """Build the (rt, choice) grid for the 2-choice manifold plot."""
     return _symmetric_2choice_grid(
@@ -98,7 +119,12 @@ def build_manifold(
     vary_values: ArrayLike,
     grid: NDArray[np.float64],
 ) -> pd.DataFrame:
-    """LAN likelihoods over a grid while sweeping one param (tidy DataFrame)."""
+    """LAN likelihoods over a grid while sweeping one param (tidy DataFrame).
+
+    ``grid`` uses the display encoding; the ``choice`` column of the result
+    keeps it (for signed-RT plotting) while the network sees model choices.
+    """
+    model_grid = encode_choices(spec, grid)
     parameters = np.asarray(base_params, dtype=np.float32).copy()
     if vary_name not in spec.params:
         raise ValueError(
@@ -110,7 +136,7 @@ def build_manifold(
     blocks = []
     for par_tmp in np.asarray(vary_values):
         parameters[idx] = par_tmp
-        like = np.exp(evaluate_network(spec, parameters, grid))
+        like = np.exp(evaluate_network(spec, parameters, model_grid))
         blocks.append(
             pd.DataFrame(
                 {

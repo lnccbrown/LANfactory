@@ -1,0 +1,117 @@
+/*
+ * Additions to the Streamlit theme in .streamlit/config.toml, limited to what
+ * the theme options cannot express. Values are HSSM design tokens:
+ * https://github.com/lnccbrown/hssm_website/blob/main/design-system/tokens.json
+ *
+ * Each color is light-dark(<light>, <dark>). Streamlit sets `color-scheme` on
+ * its app container from the *active* theme, and unregistered custom
+ * properties resolve light-dark() where they are used, so these follow the
+ * theme chosen in Streamlit's settings, not the OS preference.
+ */
+
+:root {
+    --hssm-text-heading: light-dark(#3538a1, #e8edf8); /* text-heading */
+    --hssm-accent: light-dark(#db0850, #ff5f7c);       /* accent: interaction only */
+    --hssm-rule: light-dark(#dcdff2, #344159);         /* rule */
+    --hssm-primary: light-dark(#3538a1, #00d8cf);      /* primary: indigo / teal */
+    --hssm-primary-hover: light-dark(#402392, #00e6c3); /* primary-hover */
+    --hssm-on-primary: light-dark(#ffffff, #080d1a);   /* on-primary */
+}
+
+h1,
+h2,
+h3 {
+    color: var(--hssm-text-heading) !important;
+}
+
+/*
+ * Tab selector: large bold labels; the active tab is drawn in the primary
+ * color with a thick underline. Streamlit >= 1.6x renders tabs as
+ * [data-testid="stTab"] / role="tab" with aria-selected; older releases used
+ * BaseWeb (data-baseweb="tab"), so both are targeted.
+ */
+[data-testid="stTabs"] [role="tab"],
+div[data-baseweb="tab-list"] button[data-baseweb="tab"] {
+    min-height: 44px;
+    padding: 0.4rem 1rem !important;
+    border-bottom: 4px solid transparent !important;
+}
+
+[data-testid="stTabs"] [role="tab"],
+[data-testid="stTabs"] [role="tab"] p,
+div[data-baseweb="tab-list"] button[data-baseweb="tab"] p {
+    font-size: 1.25rem !important;
+    font-weight: 700 !important;
+}
+
+[data-testid="stTabs"] [role="tab"][aria-selected="true"],
+div[data-baseweb="tab-list"] button[data-baseweb="tab"][aria-selected="true"] {
+    border-bottom-color: var(--hssm-primary) !important;
+}
+
+[data-testid="stTabs"] [role="tab"][aria-selected="true"],
+[data-testid="stTabs"] [role="tab"][aria-selected="true"] p,
+div[data-baseweb="tab-list"] button[data-baseweb="tab"][aria-selected="true"] p {
+    color: var(--hssm-primary) !important;
+}
+
+div[data-baseweb="tab-highlight"] {
+    background-color: var(--hssm-primary) !important;
+}
+
+/* Focus ring: accent, 3px, on every keyboard-focusable control. */
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[role="slider"]:focus-visible,
+summary:focus-visible {
+    outline: 3px solid var(--hssm-accent) !important;
+    outline-offset: 2px !important;
+}
+
+/* Figures sit on a white `paper` card in every theme (radius-card + rule). */
+div[data-testid="stImage"] img,
+div[data-testid="stPlotlyChart"] {
+    border: 1px solid var(--hssm-rule);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* Minimum target size for controls (target-min). */
+div.stButton > button {
+    min-height: 44px;
+    font-weight: 600;
+}
+
+/*
+ * Run buttons are the one key action per tab, so they use the filled
+ * `primary` style. The label color is pinned to `on-primary`: the dark theme's
+ * primary is a light teal, which needs dark text rather than white.
+ */
+button[data-testid="stBaseButton-primary"] {
+    background-color: var(--hssm-primary) !important;
+    border-color: var(--hssm-primary) !important;
+    color: var(--hssm-on-primary) !important;
+}
+
+button[data-testid="stBaseButton-primary"] * {
+    color: var(--hssm-on-primary) !important;
+}
+
+button[data-testid="stBaseButton-primary"]:hover,
+button[data-testid="stBaseButton-primary"]:active {
+    background-color: var(--hssm-primary-hover) !important;
+    border-color: var(--hssm-primary-hover) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}

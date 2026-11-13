@@ -50,11 +50,17 @@ def _literal_assignment(module_path: str, name: str) -> object:
 def _cli_option_flags(module_path: str) -> set[str]:
     tree = ast.parse((ROOT / module_path).read_text())
     main = next(
-        node
-        for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and node.name == "main"
+        (
+            node
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == "main"
+        ),
+        None,
     )
+    if main is None:
+        # Pass-through launchers (e.g. network-inspectors-ui) define no options.
+        return set()
     arguments = [*main.args.posonlyargs, *main.args.args]
     defaults = [None] * (len(arguments) - len(main.args.defaults)) + list(
         main.args.defaults

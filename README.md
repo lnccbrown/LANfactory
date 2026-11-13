@@ -30,8 +30,8 @@ JAX/Flax. It exports concrete-shape ONNX artifacts for use as likelihoods in
 pip install lanfactory
 ```
 
-Optional integrations are available through the `mlflow`, `hf`, `sbi`, and
-`bayesflow` extras, or together through `lanfactory[all]`. The documentation is
+Optional integrations are available through the `mlflow`, `hf`, `sbi`,
+`bayesflow`, and `ui` extras, or together through `lanfactory[all]`. The documentation is
 the canonical source for training, export, configuration, and sharing guidance.
 
 ## Contributor bootstrap

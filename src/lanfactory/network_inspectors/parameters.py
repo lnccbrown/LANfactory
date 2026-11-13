@@ -1,0 +1,151 @@
+"""Parameter vectors and sweep ranges for the network inspector UI."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+
+import numpy as np
+import pandas as pd
+import ssms
+from ssms.config import ModelConfigBuilder
+from ssms.dataset_generators.parameter_samplers import UniformParameterSampler
+from ssms.transforms.sampling.swap import SwapIfLessConstraint
+
+
+def make_parameter_df(model: str, n_rows: int, seed: int) -> pd.DataFrame:
+    """Sample parameter vectors within the model bounds.
+
+    Mirrors how ssms samples training data: ``param_bounds_dict`` with the
+    dependency-aware sampler (``full_ddm_rv`` bounds ``st`` by ``t``, which the
+    positional ``param_bounds`` cannot express) plus the model's sampling
+    transforms (e.g. LBA swaps ``b``/``A`` so ``b >= A``). Without them, the
+    inspector would test networks on parameter sets they were never trained on.
+    """
+    config = ssms.config.model_config[model]
+    sampler = UniformParameterSampler(
+        param_space=config["param_bounds_dict"],
+        constraints=ModelConfigBuilder.get_sampling_transforms(config),
+    )
+    samples = sampler.sample(n_samples=n_rows, rng=np.random.default_rng(seed))
+    return pd.DataFrame({param: samples[param] for param in config["params"]})
+
+
+def sweep_bounds(
+    model: str, param: str, base_values: Mapping[str, float] | None = None
+) -> tuple[float, float]:
+    """Return numeric bounds for ``param``, resolving named endpoints.
+
+    An endpoint may name another parameter (``full_ddm_rv``: ``st`` in
+    ``(0.001, "t")``). It is resolved against ``base_values`` (the base
+    parameter vector the sweep runs from), falling back to the model defaults.
+    """
+    config = ssms.config.model_config[model]
+    values = dict(zip(config["params"], config["default_params"], strict=True))
+    if base_values is not None:
+        values.update(base_values)
+    lower, upper = config["param_bounds_dict"][param]
+
+    def resolve(endpoint: float | str) -> float:
+        return float(values[endpoint] if isinstance(endpoint, str) else endpoint)
+
+    return resolve(lower), resolve(upper)
+
+
+def missing_parameters(row: pd.DataFrame, params: list[str]) -> list[str]:
+    """Return the parameters whose first-row value is empty or not finite.
+
+    ``st.data_editor`` turns a cleared numeric cell into ``NaN`` (or ``None``),
+    which ``float()`` accepts silently and the network would evaluate.
+    """
+    values = pd.to_numeric(row[params].iloc[0], errors="coerce")
+    return [param for param in params if not np.isfinite(values[param])]
+
+
+def out_of_bounds(
+    model: str, values: Mapping[str, float]
+) -> dict[str, tuple[float, float]]:
+    """Return the parameters in ``values`` outside the model's training bounds.
+
+    Maps each offending parameter to its ``(lower, upper)`` bounds, resolved
+    against ``values`` so dependent bounds (``full_ddm_rv``: ``st <= t``) use
+    the vector being checked. Outside these bounds the network extrapolates.
+    """
+    outside = {}
+    for param, value in values.items():
+        lower, upper = sweep_bounds(model, param, values)
+        if not lower <= value <= upper:
+            outside[param] = (lower, upper)
+    return outside
+
+
+def sweep_bound_problems(
+    model: str,
+    vary_param: str,
+    base_values: Mapping[str, float],
+    sweep_min: float,
+    sweep_max: float,
+) -> list[str]:
+    """Describe each manifold input outside the model's training domain.
+
+    Fixed parameters are checked with the swept one at both sweep endpoints: a
+    bound may name the swept parameter (``full_ddm_rv``: ``st <= t``), and such
+    a bound is that parameter's value, so the endpoints cover every point in
+    between. Returns an empty list when the whole sweep stays in bounds.
+    """
+    outside: dict[str, tuple[float, float]] = {}
+    for endpoint in (sweep_min, sweep_max):
+        values = {**base_values, vary_param: endpoint}
+        for param, bounds in out_of_bounds(model, values).items():
+            if param != vary_param:
+                outside.setdefault(param, bounds)
+    problems = [
+        f"{param} = {base_values[param]:g} (bounds {lo:g} to {hi:g})"
+        for param, (lo, hi) in outside.items()
+    ]
+    lower, upper = sweep_bounds(model, vary_param, base_values)
+    if sweep_min < lower or sweep_max > upper:
+        problems.append(
+            f"{vary_param} sweep {sweep_min:g} to {sweep_max:g} "
+            f"(bounds {lower:g} to {upper:g})"
+        )
+    problems.extend(
+        _ordering_problems(model, vary_param, base_values, sweep_min, sweep_max)
+    )
+    return problems
+
+
+def _ordering_problems(
+    model: str,
+    vary_param: str,
+    base_values: Mapping[str, float],
+    sweep_min: float,
+    sweep_max: float,
+) -> list[str]:
+    """Describe broken ordering constraints from the model's sampling transforms.
+
+    ssms trains on vectors where e.g. LBA's ``b > A`` holds: its sampler swaps
+    the pair otherwise (``SwapIfLessConstraint``). Vectors breaking the order
+    are outside the training data even when each value is within its bounds.
+    The order is linear in the swept value, so checking both endpoints covers
+    the sweep. Other transforms (e.g. drift normalization) rescale values
+    rather than constrain them and are not checked.
+    """
+    config = ssms.config.model_config[model]
+    problems = []
+    for transform in ModelConfigBuilder.get_sampling_transforms(config):
+        if not isinstance(transform, SwapIfLessConstraint):
+            continue
+        high, low = transform.param_a, transform.param_b
+        if high not in base_values or low not in base_values:
+            continue
+        for endpoint in (sweep_min, sweep_max):
+            values = {**base_values, vary_param: endpoint}
+            if values[high] <= values[low]:
+                where = (
+                    f" at {vary_param} = {endpoint:g}"
+                    if vary_param in (high, low)
+                    else ""
+                )
+                problems.append(f"{high} must exceed {low}{where}")
+                break
+    return problems
