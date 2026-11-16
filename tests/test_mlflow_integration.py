@@ -119,6 +119,8 @@ def mock_data_generation_experiment(test_mlflow_dir):
 
             mlflow.log_dict(file_inventory, "generated_files_inventory.json")
             mlflow.log_param("run_index", i)
+            # As ssm-simulators records it; `train` reads it in MLflow-first mode.
+            mlflow.log_param("data_output_folder", "data/training_data")
 
     return {
         "experiment_id": experiment.experiment_id,
@@ -178,6 +180,29 @@ class TestMLflowUtils:
         expected_files = set(mock_data_generation_experiment["all_files"])
         actual_files = set(result["all_files"])
         assert expected_files == actual_files
+
+        # The folder each run wrote to, for MLflow-first data discovery
+        assert {info["data_output_folder"] for info in result["runs_info"]} == {
+            "data/training_data"
+        }
+
+    def test_data_output_folder_is_none_when_not_logged(self, test_mlflow_dir):
+        """A generation run without the parameter yields None, not a crash."""
+        mlflow.set_tracking_uri(test_mlflow_dir["tracking_uri"])
+        experiment_id = mlflow.create_experiment(
+            "no-output-folder", artifact_location=test_mlflow_dir["artifact_location"]
+        )
+        with mlflow.start_run(experiment_id=experiment_id):
+            mlflow.log_dict(
+                {"num_files": 0, "total_size_mb": 0.0, "files": []},
+                "generated_files_inventory.json",
+            )
+
+        result = get_files_from_data_generation_experiment(
+            experiment_id=experiment_id,
+            tracking_uri=test_mlflow_dir["tracking_uri"],
+        )
+        assert result["runs_info"][0]["data_output_folder"] is None
 
     def test_get_files_from_empty_experiment(self, test_mlflow_dir):
         """Test behavior when experiment has no runs."""

@@ -1,11 +1,13 @@
+import re
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 from torch.utils.data import DataLoader
 from typer.testing import CliRunner
 
-from lanfactory.cli.train import app, run_training
+from lanfactory.cli.train import _folder_from_runs, _split_files, app, run_training
 
 HERE = Path(__file__).parent
 TRAINING_DATA_FOLDER = (
@@ -17,6 +19,14 @@ TRAINING_DATA_FOLDER = (
 CONFIG_PATH = HERE / "config_network_training_lan.yaml"
 
 runner = CliRunner()
+
+# typer renders errors through rich, which colors them when it detects CI
+# (e.g. GITHUB_ACTIONS): the escape codes split `--backend` into `-` + `-backend`.
+_ANSI_RE = re.compile(r"\x1b\[[\d;]*m")
+
+
+def _plain_output(result) -> str:
+    return _ANSI_RE.sub("", result.output)
 
 
 @pytest.fixture
@@ -97,18 +107,138 @@ def test_train_dry_run(tmp_path, backend, inprocess_dataloader):
 def test_train_requires_backend(tmp_path):
     result = runner.invoke(app, _args(tmp_path))
     assert result.exit_code != 0
-    assert "--backend" in result.output
+    assert "--backend" in _plain_output(result)
 
 
 def test_train_rejects_unknown_backend(tmp_path):
     result = runner.invoke(app, ["--backend", "tensorflow", *_args(tmp_path)])
     assert result.exit_code != 0
-    assert "tensorflow" in result.output
+    assert "tensorflow" in _plain_output(result)
 
 
 def test_train_backend_is_case_insensitive():
     """`JAX` parses; the run then stops at the next missing required option."""
     result = runner.invoke(app, ["--backend", "JAX"])
     assert result.exit_code != 0
-    assert "--networks-path-base" in result.output
-    assert "JAX" not in result.output
+    output = _plain_output(result)
+    assert "--networks-path-base" in output
+    assert "JAX" not in output
+
+
+def test_cli_import_does_not_load_jax():
+    """Importing the CLI (torch runs, --help) must not pull in jax/flax/optax."""
+    code = (
+        "import sys, lanfactory.cli.train; "
+        "print(*[m for m in ('jax', 'flax', 'optax') if m in sys.modules])"
+    )
+    # A fresh interpreter: this process has long since imported jax.
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+    )
+    assert result.stdout.strip() == "", f"loaded on import: {result.stdout.strip()}"
+
+
+def test_jax_trainer_exports_resolve_lazily():
+    from lanfactory import trainers
+    from lanfactory.trainers.jax_mlp import JaxMLP, JaxMLPFactory, ModelTrainerJaxMLP
+
+    assert trainers.JaxMLP is JaxMLP
+    assert trainers.JaxMLPFactory is JaxMLPFactory
+    assert trainers.ModelTrainerJaxMLP is ModelTrainerJaxMLP
+    assert {"JaxMLP", "JaxMLPFactory", "ModelTrainerJaxMLP"} <= set(dir(trainers))
+
+
+@pytest.mark.parametrize(
+    ("n_files", "cap", "split", "expected"),
+    [
+        (10, 4, 0.75, (3, 1)),  # the cap bounds validation too, not just training
+        (2, 10_000, 0.98, (1, 1)),  # fewer files than the cap
+        (10, 10, 0.8, (8, 2)),
+    ],
+)
+def test_split_files_respects_the_cap(n_files, cap, split, expected):
+    files = [Path(f"f{i}.pickle") for i in range(n_files)]
+    train, val = _split_files(files, cap, split)
+    assert (len(train), len(val)) == expected
+    assert train + val == files[: sum(expected)]
+
+
+@pytest.mark.parametrize(
+    ("n_files", "cap", "split", "empty"),
+    [
+        (10, 5, 1.0, "validation"),  # a cap below the file count leaves none over
+        (10, 1, 0.98, "training"),
+    ],
+)
+def test_split_files_rejects_an_empty_split(n_files, cap, split, empty):
+    files = [Path(f"f{i}.pickle") for i in range(n_files)]
+    with pytest.raises(ValueError, match=f"No {empty} files"):
+        _split_files(files, cap, split)
+
+
+def test_folder_from_runs():
+    assert _folder_from_runs([]) is None
+    assert _folder_from_runs([{"data_output_folder": None}]) is None
+    same = [{"data_output_folder": "/data/ddm"}] * 3
+    assert _folder_from_runs(same) == Path("/data/ddm")
+    disagree = [{"data_output_folder": "/data/a"}, {"data_output_folder": "/data/b"}]
+    with pytest.raises(ValueError, match="2 different folders"):
+        _folder_from_runs(disagree)
+
+
+def test_train_from_data_generation_experiment_alone(
+    tmp_path, monkeypatch, inprocess_dataloader
+):
+    """MLflow-first: the data folder comes from the generation run's parameters."""
+    mlflow = pytest.importorskip("mlflow")
+    monkeypatch.delenv("MLFLOW_EXPERIMENT_NAME", raising=False)
+    tracking_uri = f"sqlite:///{(tmp_path / 'tracking.db').absolute()}"
+    artifacts = str((tmp_path / "artifacts").absolute())
+
+    # A generation run as ssm-simulators records it.
+    client = mlflow.MlflowClient(tracking_uri=tracking_uri)
+    generation = client.create_experiment("generation", artifact_location=artifacts)
+    run = client.create_run(generation)
+    client.log_param(
+        run.info.run_id, "data_output_folder", str(TRAINING_DATA_FOLDER.absolute())
+    )
+    files = sorted(f.name for f in TRAINING_DATA_FOLDER.glob("*.pickle"))
+    client.log_dict(
+        run.info.run_id,
+        {
+            "num_files": len(files),
+            "total_size_mb": 0.0,
+            "files": [{"filename": name} for name in files],
+        },
+        "generated_files_inventory.json",
+    )
+    client.set_terminated(run.info.run_id)
+
+    original_uri = mlflow.get_tracking_uri()
+    try:
+        run_training(
+            backend="torch",
+            config_path=CONFIG_PATH,
+            data_generation_experiment_id=generation,
+            networks_path_base=tmp_path / "networks",
+            dry_run=True,
+            mlflow_experiment_name="training",
+            mlflow_tracking_uri=tracking_uri,
+            mlflow_artifact_location=artifacts,
+        )
+    finally:
+        if mlflow.active_run() is not None:
+            mlflow.end_run()
+        mlflow.set_tracking_uri(original_uri)
+
+    # The training run records where its data came from, and the folder it
+    # resolved is the one the generation run logged.
+    training = client.get_experiment_by_name("training")
+    (train_run,) = client.search_runs([training.experiment_id])
+    assert train_run.data.tags["data_generation_experiment_id"] == generation
+    assert train_run.data.params["data_generation_total_files"] == str(len(files))
+    lineage = mlflow.artifacts.load_dict(
+        f"{train_run.info.artifact_uri}/training_data_lineage.json"
+    )
+    assert lineage["training_data_folder"] == str(TRAINING_DATA_FOLDER.absolute())
+    assert sorted(lineage["actual_files_used"]) == files

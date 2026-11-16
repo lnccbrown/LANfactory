@@ -100,6 +100,47 @@ def _start_mlflow_run(
         )
 
 
+def _split_files(
+    files: list[Path], n_training_files: int, train_val_split: float
+) -> tuple[list[Path], list[Path]]:
+    """Split the first ``n_training_files`` files into train and validation.
+
+    ``n_training_files`` caps the total: files beyond it are used for neither.
+    """
+    n_used = min(len(files), n_training_files)
+    cutoff = int(train_val_split * n_used)
+    train, val = files[:cutoff], files[cutoff:n_used]
+    for name, split in (("training", train), ("validation", val)):
+        if not split:
+            raise ValueError(
+                f"No {name} files after the split: {len(files)} files found, "
+                f"n_training_files={n_training_files}, "
+                f"train_val_split={train_val_split}. Each split needs at least "
+                "one file."
+            )
+    return train, val
+
+
+def _folder_from_runs(runs_info: list[dict]) -> Path | None:
+    """The one folder the generation runs wrote to, or None if none is recorded.
+
+    Raises when the runs disagree: any single choice would train on part of
+    the experiment's data, or fail the file check that follows.
+    """
+    folders = {
+        info["data_output_folder"]
+        for info in runs_info
+        if info.get("data_output_folder")
+    }
+    if len(folders) > 1:
+        raise ValueError(
+            f"The data generation runs wrote to {len(folders)} different folders "
+            f"({', '.join(sorted(folders))}); pass --training-data-folder to "
+            "choose one."
+        )
+    return Path(folders.pop()) if folders else None
+
+
 def _select_batch_size(backend: Backend, train_config: dict) -> int:
     """GPU batch size when the backend sees a GPU, CPU batch size otherwise."""
     if backend is Backend.torch:
@@ -207,23 +248,31 @@ def run_training(
     backend = Backend(backend)
 
     # DataLoader workers ------------------------------------------
-    n_workers = (
-        dl_workers if dl_workers > 0 else min(12, psutil.cpu_count(logical=False) - 2)
-    )
+    if dl_workers > 0:
+        n_workers = dl_workers
+    else:
+        # None where psutil cannot count physical cores (some containers/VMs).
+        n_workers = min(12, (psutil.cpu_count(logical=False) or 1) - 2)
     n_workers = max(1, n_workers)
     logger.info("Number of workers we assign to the DataLoader: %d", n_workers)
 
     # Configuration -----------------------------------------------
     if config_path is None:
         logger.warning("No config path provided, using default configuration.")
+        # Read inside the block: as_file may hand out a temporary copy that is
+        # deleted on exit (e.g. a zipped install). The later uses of
+        # config_path check is_file() first.
         with as_file(
             files("lanfactory.cli") / "config_network_training_lan.yaml"
         ) as default_config:
             config_path = default_config
-
-    config_dict = _get_train_network_config(
-        yaml_config_path=str(config_path), net_index=network_id
-    )
+            config_dict = _get_train_network_config(
+                yaml_config_path=str(default_config), net_index=network_id
+            )
+    else:
+        config_dict = _get_train_network_config(
+            yaml_config_path=str(config_path), net_index=network_id
+        )
 
     train_config = config_dict["config_dict"]["train_config"]
     network_config = config_dict["config_dict"]["network_config"]
@@ -272,12 +321,6 @@ def run_training(
         try:
             from lanfactory.utils import get_files_from_data_generation_experiment
 
-            if not mlflow_tracking_enabled:
-                # Initialize MLflow just for querying
-                import mlflow
-
-                mlflow.set_tracking_uri(tracking_uri)
-
             logger.info("Querying MLflow experiment: %s", data_generation_experiment_id)
             mlflow_lineage_info = get_files_from_data_generation_experiment(
                 experiment_id=data_generation_experiment_id, tracking_uri=tracking_uri
@@ -288,23 +331,19 @@ def run_training(
                 mlflow_lineage_info["total_files"],
             )
 
-            # All runs write to the same folder; take it from the first.
-            if mlflow_lineage_info["runs_info"]:
-                first_run_info = mlflow_lineage_info["runs_info"][0]
-                mlflow_data_folder = first_run_info.get("data_output_folder")
-
-                if mlflow_data_folder:
-                    logger.info("MLflow recorded data folder: %s", mlflow_data_folder)
-                    if training_data_folder is None:  # Mode 1
-                        training_data_folder = Path(mlflow_data_folder)
-                        logger.info(
-                            "Using training data folder from MLflow: %s",
-                            training_data_folder,
-                        )
-                    else:  # Mode 2
-                        logger.info(
-                            "Validation mode: Checking MLflow files against provided folder"
-                        )
+            if training_data_folder is None:  # Mode 1
+                training_data_folder = _folder_from_runs(
+                    mlflow_lineage_info["runs_info"]
+                )
+                if training_data_folder is not None:
+                    logger.info(
+                        "Using training data folder from MLflow: %s",
+                        training_data_folder,
+                    )
+            else:  # Mode 2
+                logger.info(
+                    "Validation mode: Checking MLflow files against provided folder"
+                )
 
             if training_data_folder is None:
                 raise ValueError(
@@ -361,26 +400,36 @@ def run_training(
             len(expected_files),
         )
 
+    # Split ---------------------------------------------------------
+    random.shuffle(valid_file_list)
+    train_files, val_files = _split_files(
+        valid_file_list,
+        train_config["n_training_files"],
+        config_dict["config_dict"]["train_val_split"],
+    )
+    n_training_files = len(train_files) + len(val_files)
+    logger.info("NUMBER OF TRAINING FILES USED: %d", n_training_files)
+    logger.info("TRAIN/VAL SPLIT AT INDEX: %d", len(train_files))
+
+    # Lineage needs an active run: without one, MLflow's fluent API would
+    # start an orphan run in the Default experiment.
+    if (
+        mlflow_lineage_info
+        and data_generation_experiment_id
+        and mlflow_tracking_enabled
+    ):
         from lanfactory.utils import log_training_data_lineage
 
         log_training_data_lineage(
             data_generation_experiment_id=data_generation_experiment_id,
             training_data_folder=training_data_folder,
+            # Shuffled, and the split takes its first n_training_files: the
+            # lineage's "files used" are the ones training actually reads.
             valid_file_list=valid_file_list,
-            n_training_files=min(
-                len(valid_file_list), train_config["n_training_files"]
-            ),
+            n_training_files=n_training_files,
             tracking_uri=tracking_uri,
+            generation_info=mlflow_lineage_info,
         )
-
-    # Split ---------------------------------------------------------
-    random.shuffle(valid_file_list)
-    n_training_files = min(len(valid_file_list), train_config["n_training_files"])
-    val_idx_cutoff = int(
-        config_dict["config_dict"]["train_val_split"] * n_training_files
-    )
-    logger.info("NUMBER OF TRAINING FILES USED: %d", n_training_files)
-    logger.info("TRAIN/VAL SPLIT AT INDEX: %d", val_idx_cutoff)
 
     batch_size = _select_batch_size(backend, train_config)
     train_config["train_batch_size"] = batch_size
@@ -404,8 +453,8 @@ def run_training(
         )
         return dataset, loader
 
-    train_dataset, dataloader_train = _loader(valid_file_list[:val_idx_cutoff])
-    _, dataloader_val = _loader(valid_file_list[val_idx_cutoff:])
+    train_dataset, dataloader_train = _loader(train_files)
+    _, dataloader_val = _loader(val_files)
 
     # Dry run ---------------------------------------------------------
     if dry_run:
@@ -418,10 +467,11 @@ def run_training(
                 batch[0].shape,
                 batch[1].shape,
             )
-            logger.info("✓ DRY RUN: Would train with %d training files", val_idx_cutoff)
             logger.info(
-                "✓ DRY RUN: Would train with %d validation files",
-                n_training_files - val_idx_cutoff,
+                "✓ DRY RUN: Would train with %d training files", len(train_files)
+            )
+            logger.info(
+                "✓ DRY RUN: Would train with %d validation files", len(val_files)
             )
             logger.info("✓ DRY RUN: Network config: %s", network_config)
             logger.info("✓ DRY RUN: Train config: %s", train_config)

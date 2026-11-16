@@ -29,7 +29,9 @@ def get_files_from_data_generation_experiment(
             - num_runs: number of runs in the experiment
             - total_files: total number of files generated
             - all_files: list of all filenames
-            - runs_info: list of dicts with run details
+            - runs_info: list of dicts with run details, including
+              ``data_output_folder`` (the folder the run wrote to, from the
+              run parameter ssm-simulators logs; ``None`` when absent)
 
     Raises
     ------
@@ -82,10 +84,18 @@ def get_files_from_data_generation_experiment(
             run_files = [file_info["filename"] for file_info in inventory["files"]]
             all_files.extend(run_files)
 
+            data_output_folder = run.get("params.data_output_folder")
             runs_info.append(
                 {
                     "run_id": run_id,
                     "run_name": run.get("tags.mlflow.runName", "unknown"),
+                    # Read by `train` to locate the data from the experiment
+                    # alone; ssm-simulators logs it as a run parameter.
+                    "data_output_folder": (
+                        data_output_folder
+                        if isinstance(data_output_folder, str) and data_output_folder
+                        else None
+                    ),
                     "num_files": inventory["num_files"],
                     "total_size_mb": inventory["total_size_mb"],
                     "files": run_files,
@@ -111,6 +121,7 @@ def log_training_data_lineage(
     valid_file_list: list,
     n_training_files: int,
     tracking_uri: str | None = None,
+    generation_info: dict | None = None,
 ) -> dict:
     """Log training data lineage information to MLflow.
 
@@ -129,6 +140,10 @@ def log_training_data_lineage(
             Number of files actually used for training
         tracking_uri : str, optional
             MLflow tracking URI (uses current if None)
+        generation_info : dict, optional
+            The result of ``get_files_from_data_generation_experiment`` for
+            this experiment, when the caller already has it; saves
+            downloading every run's inventory a second time.
 
     Returns
     -------
@@ -153,8 +168,11 @@ def log_training_data_lineage(
 
     try:
         # Get expected files from data generation experiment
-        expected_files_info = get_files_from_data_generation_experiment(
-            data_generation_experiment_id, tracking_uri
+        expected_files_info = (
+            generation_info
+            or get_files_from_data_generation_experiment(
+                data_generation_experiment_id, tracking_uri
+            )
         )
 
         # Log data lineage as tags/params

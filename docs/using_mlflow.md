@@ -173,7 +173,9 @@ train --backend jax \
 LANfactory supports three modes for managing training data:
 
 ### MLflow-First Mode
-Provide only `--data-generation-experiment-id`. Training data folder is derived from MLflow.
+Provide only `--data-generation-experiment-id`. Training data folder is derived from MLflow:
+the `data_output_folder` parameter ssm-simulators logs on each generation run. A relative
+folder resolves against the directory you run `train` from.
 
 ```bash
 train --backend jax \
