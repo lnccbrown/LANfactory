@@ -21,7 +21,7 @@ pip install lanfactory[mlflow]
 
 **2. Train with tracking:**
 ```bash
-jaxtrain \
+train --backend jax \
   --config-path config.yaml \
   --training-data-folder ./data \
   --networks-path-base ./networks \
@@ -63,7 +63,7 @@ runs = mlflow.search_runs(filter_string="tags.data_origin = 'derived'")
 ### Example 1: Basic JAX Training
 
 ```bash
-jaxtrain \
+train --backend jax \
   --config-path config.yaml \
   --training-data-folder ./data \
   --networks-path-base ./networks \
@@ -74,7 +74,7 @@ jaxtrain \
 ### Example 2: PyTorch Training
 
 ```bash
-torchtrain \
+train --backend torch \
   --config-path config.yaml \
   --training-data-folder ./data \
   --networks-path-base ./networks \
@@ -88,7 +88,7 @@ Validate the pipeline without training:
 
 ```bash
 # Validate config before committing to a long training run
-jaxtrain \
+train --backend jax \
   --config-path config.yaml \
   --training-data-folder ./data \
   --networks-path-base ./networks \
@@ -96,7 +96,7 @@ jaxtrain \
   --mlflow-run-name "validation-test"
 
 # Then run for real
-jaxtrain \
+train --backend jax \
   --config-path config.yaml \
   --training-data-folder ./data \
   --networks-path-base ./networks \
@@ -109,7 +109,7 @@ Link training to a data generation experiment for full reproducibility:
 
 ```bash
 # Training with automatic data lineage tracking
-jaxtrain \
+train --backend jax \
   --config-path config.yaml \
   --data-generation-experiment-id "123456789" \
   --networks-path-base ./networks \
@@ -128,7 +128,7 @@ Note: When `--data-generation-experiment-id` is provided, the training data fold
 export MLFLOW_TRACKING_URI="sqlite:////nfs/project/mlflow/tracking.db"
 export MLFLOW_ARTIFACT_LOCATION="/nfs/project/mlflow/artifacts"
 
-jaxtrain \
+train --backend jax \
   --config-path config.yaml \
   --training-data-folder /nfs/project/data \
   --networks-path-base /nfs/project/networks \
@@ -144,7 +144,7 @@ Three layers of configuration (priority: CLI > Environment > Defaults):
 
 **1. Defaults (no configuration):**
 ```bash
-jaxtrain --config-path config.yaml --training-data-folder ./data \
+train --backend jax --config-path config.yaml --training-data-folder ./data \
   --networks-path-base ./networks --mlflow-run-name "test"
 # Uses: sqlite:///mlflow.db
 ```
@@ -158,7 +158,7 @@ export MLFLOW_EXPERIMENT_NAME="my-project"
 
 **3. CLI arguments (per-run override):**
 ```bash
-jaxtrain \
+train --backend jax \
   --mlflow-tracking-uri "sqlite:////shared/mlflow.db" \
   --mlflow-artifact-location "/shared/artifacts" \
   --mlflow-experiment-name "override-experiment" \
@@ -176,7 +176,7 @@ LANfactory supports three modes for managing training data:
 Provide only `--data-generation-experiment-id`. Training data folder is derived from MLflow.
 
 ```bash
-jaxtrain \
+train --backend jax \
   --data-generation-experiment-id "123456789" \
   --networks-path-base ./networks \
   --mlflow-run-name "train-from-mlflow"
@@ -186,7 +186,7 @@ jaxtrain \
 Provide both options. LANfactory validates that all MLflow-tracked files exist.
 
 ```bash
-jaxtrain \
+train --backend jax \
   --data-generation-experiment-id "123456789" \
   --training-data-folder ./data \
   --networks-path-base ./networks \
@@ -198,12 +198,12 @@ Provide only `--training-data-folder`. No MLflow tracking unless `--mlflow-run-n
 
 ```bash
 # Without MLflow tracking
-jaxtrain \
+train --backend jax \
   --training-data-folder ./data \
   --networks-path-base ./networks
 
 # With MLflow tracking
-jaxtrain \
+train --backend jax \
   --training-data-folder ./data \
   --networks-path-base ./networks \
   --mlflow-run-name "traditional-mode-run"
@@ -305,7 +305,7 @@ print(f"Found {len(runs)} matching runs")
 
 ```bash
 # Continue logging to an existing run
-torchtrain \
+train --backend torch \
   --config-path config.yaml \
   --training-data-folder ./data \
   --networks-path-base ./networks \
@@ -316,14 +316,14 @@ torchtrain \
 
 ```bash
 # Version 1
-jaxtrain --config-path config_v1.yaml \
+train --backend jax --config-path config_v1.yaml \
   --training-data-folder ./data \
   --networks-path-base ./networks/v1 \
   --mlflow-run-name "architecture-v1" \
   --mlflow-experiment-name "architecture-comparison"
 
 # Version 2 (improved architecture)
-jaxtrain --config-path config_v2.yaml \
+train --backend jax --config-path config_v2.yaml \
   --training-data-folder ./data \
   --networks-path-base ./networks/v2 \
   --mlflow-run-name "architecture-v2" \
@@ -368,26 +368,26 @@ export MLFLOW_ARTIFACT_LOCATION="/nfs/shared/artifacts"
 
 ```bash
 # Minimal JAX training with MLflow
-jaxtrain --config-path config.yaml \
+train --backend jax --config-path config.yaml \
   --training-data-folder ./data \
   --networks-path-base ./networks \
   --mlflow-run-name "my-run"
 
 # Minimal PyTorch training with MLflow
-torchtrain --config-path config.yaml \
+train --backend torch --config-path config.yaml \
   --training-data-folder ./data \
   --networks-path-base ./networks \
   --mlflow-run-name "my-run"
 
 # Dry run validation
-jaxtrain --config-path config.yaml \
+train --backend jax --config-path config.yaml \
   --training-data-folder ./data \
   --networks-path-base ./networks \
   --dry-run \
   --mlflow-run-name "validation"
 
 # Full command with all MLflow options
-jaxtrain \
+train --backend jax \
   --config-path config.yaml \
   --training-data-folder ./data \
   --networks-path-base ./networks \
@@ -428,7 +428,7 @@ generate --config-path data_config.yaml --output ./data/train \
   --mlflow-experiment-name "data-generation"
 
 # 2. Validate training pipeline
-jaxtrain \
+train --backend jax \
   --config-path network_config.yaml \
   --training-data-folder ./data/train \
   --networks-path-base ./networks \
@@ -436,7 +436,7 @@ jaxtrain \
   --mlflow-run-name "validation"
 
 # 3. Train LAN network
-jaxtrain \
+train --backend jax \
   --config-path network_config.yaml \
   --training-data-folder ./data/train \
   --networks-path-base ./networks \
