@@ -704,6 +704,7 @@ class ModelTrainerTorchMLP:
         mlflow_on: bool = False,
         save_outputs: bool = True,
         verbose: int = 1,
+        export_onnx: bool = True,
     ) -> None:
         """Train and evaluate the model.
 
@@ -721,6 +722,9 @@ class ModelTrainerTorchMLP:
                 Whether to save all outputs.
             verbose (int):
                 Verbosity level.
+            export_onnx (bool):
+                Whether to export the trained network to ONNX alongside the
+                state dict (single-trial contract; the artifact HSSM consumes).
         """
 
         output_folder = Path(output_folder)
@@ -840,7 +844,8 @@ class ModelTrainerTorchMLP:
             self._save_data_details(
                 self.train_dl, self.valid_dl, partial_path_str + "_data_details.pickle"
             )
-            self._save_onnx(self.model, self.dev, partial_path_str + "_model.onnx")
+            if export_onnx:
+                self._save_onnx(self.model, self.dev, partial_path_str + "_model.onnx")
 
             if mlflow_on:
                 try:
@@ -860,10 +865,11 @@ class ModelTrainerTorchMLP:
                         partial_path_str + "_data_details.pickle",
                         artifact_path="training_output",
                     )
-                    mlflow.log_artifact(
-                        partial_path_str + "_model.onnx",
-                        artifact_path="training_output",
-                    )
+                    if export_onnx:
+                        mlflow.log_artifact(
+                            partial_path_str + "_model.onnx",
+                            artifact_path="training_output",
+                        )
                     mlflow.end_run()
                 except Exception as e:
                     logger.error(f"Failed to log artifacts to MLflow: {e}")
