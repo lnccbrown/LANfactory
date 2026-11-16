@@ -103,7 +103,7 @@ def test_mlp_jax_forward_pass():
         ["tanh", "linear", "linear"],  # issue #105: IndexError
         ["linear", "tanh", "linear"],
         ["relu", "linear", "sigmoid"],
-        # Over-long: `train --backend jax` appends the output "linear" to a YAML that
+        # Over-long: jaxtrain appends the output "linear" to a YAML that
         # already lists it. Must keep working (hence no zip(strict=True)).
         ["tanh", "tanh", "linear", "linear"],
         # Over-long with a hidden "linear": main ran these without an error
@@ -141,7 +141,7 @@ def test_mlp_jax_activations_stay_layer_aligned(activations):
 
 def test_mlp_jax_too_few_activations_raises():
     """Fewer activations than layers is a clear ValueError, not an IndexError."""
-    # A jax training YAML missing one hidden activation: the CLI appends the
+    # A jaxtrain YAML missing one hidden activation: the CLI appends the
     # output "linear", leaving 3 activations for 4 layers.
     model = JaxMLP(
         layer_sizes=[10, 10, 10, 1],

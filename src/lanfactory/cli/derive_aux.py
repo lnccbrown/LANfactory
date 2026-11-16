@@ -1,7 +1,7 @@
 """Command-line interface for deriving auxiliary-network corpora from a LAN.
 
 Integrates a trained LAN's density over reaction time and writes a cpn or opn
-training corpus in the layout ``train`` consumes.
+training corpus in the layout ``torchtrain`` / ``jaxtrain`` consume.
 
 Usage:
     derive-aux --from-onnx ddm.onnx --network-type cpn --model-name ddm \\
@@ -72,8 +72,8 @@ def main(
 
     Writes ``--n-files`` pickles plus ``derive_manifest.json`` to
     ``--output-folder`` and prints the manifest path. Train on the folder with
-    ``train`` (either backend) using a batch size that divides the rows per
-    file.
+    ``torchtrain`` or ``jaxtrain`` using a batch size that divides the rows
+    per file.
 
     Example:
         derive-aux --from-onnx ddm.onnx --network-type cpn --model-name ddm

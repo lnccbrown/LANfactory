@@ -1,31 +1,24 @@
 # Command-line reference
 
-LANfactory installs six commands. The tables below describe the complete
+LANfactory installs seven commands. The tables below describe the complete
 command-line surface; run `COMMAND --help` to inspect the version installed in
-your environment. The training command consumes LANfactory configuration files,
+your environment. Training commands consume LANfactory configuration files,
 export commands convert saved trainer artifacts, Hub commands move reviewed
 artifacts to or from a Hugging Face repository, and `derive-aux` turns a
 trained LAN into an auxiliary-network training corpus.
 
-## `train`
+## `jaxtrain`
 
-Train a network with the PyTorch or JAX backend. Either
-`--training-data-folder` or `--data-generation-experiment-id` must identify
-the training data.
-
-```bash
-train --backend jax --config-path config.yaml \
-  --training-data-folder data/lan/ddm --networks-path-base networks
-```
+Train a JAX network. Either `--training-data-folder` or
+`--data-generation-experiment-id` must identify the training data.
 
 | Option | Required/default | Contract |
 | --- | --- | --- |
-| `--backend {torch,jax}`, `-b` | required | Training backend (case-insensitive) |
 | `--config-path PATH` | bundled configuration | YAML training configuration |
 | `--training-data-folder PATH` | unset | Training data directory; optional when an MLflow data-generation experiment is supplied |
-| `--networks-path-base PATH` | required | Base directory for saved network artifacts; files land in `{network_type}/{model}/` |
 | `--network-id INTEGER` | `0` | Network entry selected from the configuration |
 | `--dl-workers INTEGER` | `1` | DataLoader worker count; non-positive values request automatic sizing |
+| `--networks-path-base PATH` | required | Base directory for saved network artifacts |
 | `--dry-run` | off | Validate configuration and data discovery without training |
 | `--export-onnx` / `--no-export-onnx` | on | Export the HSSM-consumable ONNX artifact after training |
 | `--mlflow-run-name TEXT` | unset | Enable tracking under this run name |
@@ -36,10 +29,26 @@ train --backend jax --config-path config.yaml \
 | `--mlflow-artifact-location TEXT` | `MLFLOW_ARTIFACT_LOCATION` or `./mlruns` | MLflow artifact root |
 | `--log-level LEVEL`, `-l LEVEL` | `WARNING` | Logging threshold |
 
-The backends write different native state next to the ONNX artifact: torch a
-`*_train_state_dict.pt`, jax a `*_train_state.jax` Flax state. Either can be
-re-exported later with `transform-onnx` or `transform-jax-onnx`. The run's
-MLflow `backend` parameter records which one trained it.
+## `torchtrain`
+
+Train a PyTorch network. Its data-discovery and MLflow options match
+`jaxtrain`; PyTorch artifacts can be converted with `transform-onnx`.
+
+| Option | Required/default | Contract |
+| --- | --- | --- |
+| `--config-path PATH` | bundled configuration | YAML training configuration |
+| `--training-data-folder PATH` | unset | Training data directory; optional when an MLflow data-generation experiment is supplied |
+| `--networks-path-base PATH` | required | Base directory for saved network artifacts |
+| `--network-id INTEGER` | `0` | Network entry selected from the configuration |
+| `--dl-workers INTEGER` | `1` | DataLoader worker count; non-positive values request automatic sizing |
+| `--dry-run` | off | Validate configuration and data discovery without training |
+| `--mlflow-run-name TEXT` | unset | Enable tracking under this run name |
+| `--mlflow-experiment-name TEXT` | `MLFLOW_EXPERIMENT_NAME` or unset | MLflow experiment name |
+| `--mlflow-run-id TEXT` | unset | Resume an existing MLflow run |
+| `--data-generation-experiment-id TEXT` | unset | Derive the data location and lineage from an MLflow experiment |
+| `--mlflow-tracking-uri TEXT` | `MLFLOW_TRACKING_URI` or `sqlite:///mlflow.db` | MLflow tracking backend |
+| `--mlflow-artifact-location TEXT` | `MLFLOW_ARTIFACT_LOCATION` or `./mlruns` | MLflow artifact root |
+| `--log-level LEVEL`, `-l LEVEL` | `WARNING` | Logging threshold |
 
 ## `transform-onnx`
 
@@ -54,7 +63,7 @@ Convert a saved PyTorch `TorchMLP` configuration and state dictionary to ONNX.
 
 ## `transform-jax-onnx`
 
-Convert a saved `train --backend jax` network configuration and Flax state to ONNX.
+Convert a saved `jaxtrain` network configuration and Flax state to ONNX.
 
 | Option | Required/default | Contract |
 | --- | --- | --- |
@@ -119,7 +128,7 @@ Derive a CPN or OPN training corpus from a trained LAN by
 integrating its density over reaction time (see
 [Deriving auxiliary networks](../network_types.md#deriving-auxiliary-networks-from-a-trained-lan)).
 Writes `--n-files` pickles plus `derive_manifest.json` to `--output-folder`,
-in the layout `train` reads, and prints the manifest path.
+in the layout `torchtrain` and `jaxtrain` read, and prints the manifest path.
 The option names follow the Hub commands.
 
 | Option | Required/default | Contract |
