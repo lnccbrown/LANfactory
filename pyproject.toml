@@ -8,7 +8,7 @@ requires = ["setuptools", "wheel"]
 
 [project]
 name = "lanfactory"
-version = "0.10.0"
+version = "0.11.0"
 authors = [
     { name = "Alexander Fengler", email = "alexander_fengler@brown.edu" },
     { name = "Carlos Paniagua", email = "carlos_paniagua@brown.edu" },
@@ -46,7 +46,7 @@ dependencies = [
     "onnx>=1.17.0",
     # lanfactory.derive batches published (1, D) graphs through onnxruntime.
     "onnxruntime>=1.17",
-    # jax -> ONNX export for jaxtrain networks. Exact-pinned to the 0.15 line:
+    # jax -> ONNX export for jax-trained networks. Exact-pinned to the 0.15 line:
     # 0.x releases move the API, and the parity test in tests/onnx guards the
     # ecosystem's single-trial ONNX contract against silent changes.
     "jax2onnx>=0.15,<0.18",
@@ -175,8 +175,6 @@ omit = [
     "*/tests/*",
     "*/__init__.py",
     "*/conftest.py",
-    "*/cli/jax_train.py",   # CLI entry points are tested via smoke tests
-    "*/cli/torch_train.py", # CLI entry points are tested via smoke tests
     "*/cli/upload_hf.py",   # CLI entry points are tested via smoke tests
     "*/cli/download_hf.py", # CLI entry points are tested via smoke tests
 ]
@@ -197,8 +195,7 @@ exclude_lines = [
 
 
 [project.scripts]
-jaxtrain = "lanfactory.cli.jax_train:app"
-torchtrain = "lanfactory.cli.torch_train:app"
+train = "lanfactory.cli.train:app"
 transform-onnx = "lanfactory.onnx.transform_onnx:app"
 transform-jax-onnx = "lanfactory.onnx.jax_export:app"
 upload-hf = "lanfactory.cli.upload_hf:app"
