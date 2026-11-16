@@ -319,7 +319,7 @@ def test_provenance_hashes_and_parses_run_uuid(tmp_path):
 
     run_uuid = "56d99936415e11f0a2bf3cecefb6d5ee"
     torch_style = tmp_path / f"ddm_lan_{run_uuid}_model.onnx"
-    jax_style = tmp_path / f"{run_uuid}_lan_ddm__model.onnx"  # jaxtrain's spelling
+    jax_style = tmp_path / f"{run_uuid}_lan_ddm__model.onnx"  # jax trainer spelling
     for path in (torch_style, jax_style):
         shutil.copy(DDM_ONNX, path)
         parsed = _provenance(path, "cpn", OnsetGrid(), None, None)

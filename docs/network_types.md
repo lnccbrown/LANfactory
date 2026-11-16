@@ -113,7 +113,7 @@ fresh cluster simulation — and the trainers consume it unchanged.
 
 **From which LAN.** Any `(1, n_params + 2)` LAN for the model — a production
 network from the Hub (`download-hf --network-type lan --model-name ddm`) or
-your own `torchtrain` / `jaxtrain` export. Its identity is recorded in every
+your own `train` export. Its identity is recorded in every
 pickle's `generator_config["source"]` under the keys downstream tools read by
 name — `derivation_method` (`"derived-from-lan"`), `aux_category` (`choice` /
 `omission`), `source_lan_run_uuid` (`--source-run-uuid`, else parsed from the
@@ -158,7 +158,7 @@ below); the float32 clip to `[0, 1]` is a safety net.
 ```bash
 derive-aux --from-onnx ddm.onnx --network-type cpn --model-name ddm \
   --output-folder data/cpn/ddm
-torchtrain --config-path cpn.yaml --training-data-folder data/cpn/ddm \
+train --backend torch --config-path cpn.yaml --training-data-folder data/cpn/ddm \
   --networks-path-base networks
 ```
 

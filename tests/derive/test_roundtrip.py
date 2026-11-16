@@ -1,4 +1,4 @@
-"""derive → ``torchtrain`` → ONNX, on the production ddm LAN.
+"""derive → ``train --backend torch`` → ONNX, on the production ddm LAN.
 
 The corpus tests check that a derived folder is what the trainer reads; this
 test drives the trainer's own CLI through it and checks what comes out: an
@@ -20,7 +20,7 @@ import pytest
 import yaml
 from torch.utils.data import DataLoader
 
-from lanfactory.cli.torch_train import main as torchtrain
+from lanfactory.cli.train import run_training
 from lanfactory.derive import MANIFEST_NAME, derive_aux_corpus
 from lanfactory.onnx.contract import assert_single_trial_contract
 from tests._onnx_utils import DDM_ONNX
@@ -40,7 +40,7 @@ FALLBACK_N_SIM = 500
 
 @pytest.fixture(autouse=True)
 def cleanup_mlflow():
-    """Reset MLflow state after each run (``torchtrain`` sets the tracking URI)."""
+    """Reset MLflow state after each run (training sets the tracking URI)."""
     original_uri = mlflow.get_tracking_uri()
     yield
     if mlflow.active_run() is not None:
@@ -107,23 +107,16 @@ def test_derive_train_export_round_trip(tmp_path, network_type):
     tracking_uri = f"sqlite:///{(tmp_path / 'tracking.db').absolute()}"
     networks = tmp_path / "networks"
 
-    # The command function itself, in-process (so the DataLoader patch above
-    # applies), with every option spelled out: their defaults are typer
-    # OptionInfo objects.
-    torchtrain(
+    # In-process (so the DataLoader patch above applies).
+    run_training(
+        backend="torch",
         config_path=config_path,
         training_data_folder=corpus,
         networks_path_base=networks,
-        network_id=0,
-        dl_workers=1,
-        dry_run=False,
         mlflow_run_name=f"roundtrip-{network_type}",
         mlflow_experiment_name="derive-roundtrip",
-        mlflow_run_id=None,
-        data_generation_experiment_id=None,
         mlflow_tracking_uri=tracking_uri,
         mlflow_artifact_location=str(tmp_path / "artifacts"),
-        log_level="WARNING",
     )
 
     # The artifact: single-trial contract, n_params + 1 wide, and the

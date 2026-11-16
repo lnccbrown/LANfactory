@@ -602,7 +602,7 @@ class ModelTrainerJaxMLP:
 
             if self.mlflow_on:
                 # Per-epoch metrics under the cross-backend schema names
-                # (HSSMSpine _docs/mlflow-schema.md), matching torchtrain.
+                # (HSSMSpine _docs/mlflow-schema.md), matching the torch trainer.
                 # The per-100-step `loss` metric above is kept as-is.
                 with contextlib.suppress(Exception):
                     mlflow.log_metrics(
