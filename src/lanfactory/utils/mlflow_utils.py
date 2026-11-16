@@ -84,18 +84,18 @@ def get_files_from_data_generation_experiment(
             run_files = [file_info["filename"] for file_info in inventory["files"]]
             all_files.extend(run_files)
 
+            # Read by `train` to locate the data from the experiment alone;
+            # ssm-simulators logs it as a run parameter. Missing (None/NaN in
+            # the runs frame) or empty becomes None.
             data_output_folder = run.get("params.data_output_folder")
+            is_path = isinstance(data_output_folder, str) and data_output_folder
+            data_output_folder = data_output_folder if is_path else None
+
             runs_info.append(
                 {
                     "run_id": run_id,
                     "run_name": run.get("tags.mlflow.runName", "unknown"),
-                    # Read by `train` to locate the data from the experiment
-                    # alone; ssm-simulators logs it as a run parameter.
-                    "data_output_folder": (
-                        data_output_folder
-                        if isinstance(data_output_folder, str) and data_output_folder
-                        else None
-                    ),
+                    "data_output_folder": data_output_folder,
                     "num_files": inventory["num_files"],
                     "total_size_mb": inventory["total_size_mb"],
                     "files": run_files,
@@ -168,12 +168,11 @@ def log_training_data_lineage(
 
     try:
         # Get expected files from data generation experiment
-        expected_files_info = (
-            generation_info
-            or get_files_from_data_generation_experiment(
+        expected_files_info = generation_info
+        if expected_files_info is None:
+            expected_files_info = get_files_from_data_generation_experiment(
                 data_generation_experiment_id, tracking_uri
             )
-        )
 
         # Log data lineage as tags/params
         mlflow.set_tag("data_generation_experiment_id", data_generation_experiment_id)
