@@ -1,6 +1,6 @@
-"""Export jax-trained networks to ONNX. Can be run as a script.
+"""Export jaxtrain networks to ONNX. Can be run as a script.
 
-Closes the gap that made jax training a dead end for HSSM: the jax trainer saves
+Closes the gap that made jaxtrain a dead end for HSSM: the jax trainer saves
 flax parameter bytes (``*_train_state.jax``) which nothing downstream could
 convert — ``transform-onnx`` only reads torch state dicts, and HSSM consumes
 ONNX exclusively.
@@ -137,7 +137,7 @@ def main(
     output_onnx_file: str = option_no_default("Path to the output ONNX file."),
     opset: int = typer.Option(DEFAULT_OPSET, help="ONNX opset version to target."),
 ):
-    """Convert a ``train --backend jax`` JaxMLP to ONNX format."""
+    """Convert a jaxtrain-produced JaxMLP to ONNX format."""
     transform_jax_to_onnx(
         network_config_file,
         state_file,
