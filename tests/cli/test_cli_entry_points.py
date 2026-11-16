@@ -2,12 +2,21 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from torch.utils.data import DataLoader
 from typer.testing import CliRunner
 
-from lanfactory.cli.train import _folder_from_runs, _split_files, app, run_training
+from lanfactory.cli import train as train_module
+from lanfactory.cli.train import (
+    Backend,
+    _folder_from_runs,
+    _split_files,
+    _start_mlflow_run,
+    app,
+    run_training,
+)
 
 HERE = Path(__file__).parent
 TRAINING_DATA_FOLDER = (
@@ -186,59 +195,243 @@ def test_folder_from_runs():
         _folder_from_runs(disagree)
 
 
-def test_train_from_data_generation_experiment_alone(
-    tmp_path, monkeypatch, inprocess_dataloader
-):
-    """MLflow-first: the data folder comes from the generation run's parameters."""
+@pytest.fixture
+def mlflow_env(tmp_path, monkeypatch):
+    """An isolated MLflow tracking store; restores global MLflow state after."""
     mlflow = pytest.importorskip("mlflow")
-    monkeypatch.delenv("MLFLOW_EXPERIMENT_NAME", raising=False)
+    for var in ("MLFLOW_EXPERIMENT_NAME", "MLFLOW_ARTIFACT_LOCATION"):
+        monkeypatch.delenv(var, raising=False)
+    # MLflow's default artifact root is ./mlruns: keep any of it out of the repo.
+    monkeypatch.chdir(tmp_path)
     tracking_uri = f"sqlite:///{(tmp_path / 'tracking.db').absolute()}"
     artifacts = str((tmp_path / "artifacts").absolute())
-
-    # A generation run as ssm-simulators records it.
-    client = mlflow.MlflowClient(tracking_uri=tracking_uri)
-    generation = client.create_experiment("generation", artifact_location=artifacts)
-    run = client.create_run(generation)
-    client.log_param(
-        run.info.run_id, "data_output_folder", str(TRAINING_DATA_FOLDER.absolute())
+    original_uri = mlflow.get_tracking_uri()
+    yield SimpleNamespace(
+        mlflow=mlflow,
+        client=mlflow.MlflowClient(tracking_uri=tracking_uri),
+        tracking_uri=tracking_uri,
+        artifacts=artifacts,
     )
-    files = sorted(f.name for f in TRAINING_DATA_FOLDER.glob("*.pickle"))
-    client.log_dict(
-        run.info.run_id,
+    while mlflow.active_run() is not None:
+        mlflow.end_run()
+    mlflow.set_tracking_uri(original_uri)
+
+
+def _generation_experiment(env, filenames, folder=TRAINING_DATA_FOLDER) -> str:
+    """A data-generation experiment with one run, as ssm-simulators records it."""
+    experiment_id = env.client.create_experiment(
+        "generation", artifact_location=env.artifacts
+    )
+    run_id = env.client.create_run(experiment_id).info.run_id
+    if folder is not None:
+        env.client.log_param(run_id, "data_output_folder", str(folder.absolute()))
+    env.client.log_dict(
+        run_id,
         {
-            "num_files": len(files),
+            "num_files": len(filenames),
             "total_size_mb": 0.0,
-            "files": [{"filename": name} for name in files],
+            "files": [{"filename": name} for name in filenames],
         },
         "generated_files_inventory.json",
     )
-    client.set_terminated(run.info.run_id)
+    env.client.set_terminated(run_id)
+    return experiment_id
 
-    original_uri = mlflow.get_tracking_uri()
-    try:
+
+TRAINING_FILES = sorted(f.name for f in TRAINING_DATA_FOLDER.glob("*.pickle"))
+
+
+def test_train_from_data_generation_experiment_alone(mlflow_env, inprocess_dataloader):
+    """MLflow-first: the data folder comes from the generation run's parameters."""
+    env = mlflow_env
+    generation = _generation_experiment(env, TRAINING_FILES)
+
+    run_training(
+        backend="torch",
+        config_path=CONFIG_PATH,
+        data_generation_experiment_id=generation,
+        networks_path_base=Path("networks"),
+        dry_run=True,
+        mlflow_experiment_name="training",
+        mlflow_tracking_uri=env.tracking_uri,
+        mlflow_artifact_location=env.artifacts,
+    )
+
+    # The training run records where its data came from, and the folder it
+    # resolved is the one the generation run logged.
+    training = env.client.get_experiment_by_name("training")
+    (train_run,) = env.client.search_runs([training.experiment_id])
+    assert train_run.data.tags["data_generation_experiment_id"] == generation
+    assert train_run.data.params["data_generation_total_files"] == str(
+        len(TRAINING_FILES)
+    )
+    lineage = env.mlflow.artifacts.load_dict(
+        f"{train_run.info.artifact_uri}/training_data_lineage.json"
+    )
+    assert lineage["training_data_folder"] == str(TRAINING_DATA_FOLDER.absolute())
+    assert sorted(lineage["actual_files_used"]) == TRAINING_FILES
+
+
+def test_experiment_without_a_recorded_folder_needs_one(mlflow_env):
+    env = mlflow_env
+    generation = _generation_experiment(env, TRAINING_FILES, folder=None)
+    with pytest.raises(ValueError, match="no --training-data-folder provided"):
         run_training(
             backend="torch",
             config_path=CONFIG_PATH,
             data_generation_experiment_id=generation,
-            networks_path_base=tmp_path / "networks",
+            networks_path_base=Path("networks"),
             dry_run=True,
+            mlflow_tracking_uri=env.tracking_uri,
             mlflow_experiment_name="training",
-            mlflow_tracking_uri=tracking_uri,
-            mlflow_artifact_location=artifacts,
+            mlflow_artifact_location=env.artifacts,
         )
-    finally:
-        if mlflow.active_run() is not None:
-            mlflow.end_run()
-        mlflow.set_tracking_uri(original_uri)
 
-    # The training run records where its data came from, and the folder it
-    # resolved is the one the generation run logged.
-    training = client.get_experiment_by_name("training")
-    (train_run,) = client.search_runs([training.experiment_id])
-    assert train_run.data.tags["data_generation_experiment_id"] == generation
-    assert train_run.data.params["data_generation_total_files"] == str(len(files))
-    lineage = mlflow.artifacts.load_dict(
-        f"{train_run.info.artifact_uri}/training_data_lineage.json"
+
+def test_validation_mode_rejects_missing_files(mlflow_env):
+    """Both sources given: every file MLflow recorded must be in the folder."""
+    env = mlflow_env
+    generation = _generation_experiment(env, [*TRAINING_FILES, "absent.pickle"])
+    with pytest.raises(FileNotFoundError, match="1 are missing"):
+        run_training(
+            backend="torch",
+            config_path=CONFIG_PATH,
+            training_data_folder=TRAINING_DATA_FOLDER,
+            data_generation_experiment_id=generation,
+            networks_path_base=Path("networks"),
+            dry_run=True,
+            mlflow_tracking_uri=env.tracking_uri,
+            mlflow_experiment_name="training",
+            mlflow_artifact_location=env.artifacts,
+        )
+
+
+def test_validation_mode_tolerates_extra_files(
+    mlflow_env, inprocess_dataloader, caplog
+):
+    """Files in the folder that MLflow did not record are reported, not fatal."""
+    env = mlflow_env
+    generation = _generation_experiment(env, TRAINING_FILES[:1])
+    run_training(
+        backend="torch",
+        config_path=CONFIG_PATH,
+        training_data_folder=TRAINING_DATA_FOLDER,
+        data_generation_experiment_id=generation,
+        networks_path_base=Path("networks"),
+        dry_run=True,
+        mlflow_tracking_uri=env.tracking_uri,
+        mlflow_experiment_name="training",
+        mlflow_artifact_location=env.artifacts,
     )
-    assert lineage["training_data_folder"] == str(TRAINING_DATA_FOLDER.absolute())
-    assert sorted(lineage["actual_files_used"]) == files
+    assert "1 extra files in training folder" in caplog.text
+
+
+def test_start_mlflow_run_branches(mlflow_env):
+    env = mlflow_env
+    mlflow = env.mlflow
+    existing = env.client.create_experiment("existing", artifact_location=env.artifacts)
+
+    def start(**overrides):
+        kwargs = {
+            "tracking_uri": env.tracking_uri,
+            "mlflow_experiment_name": "existing",
+            "mlflow_artifact_location": env.artifacts,
+            "mlflow_run_name": "run",
+            "mlflow_run_id": None,
+            **overrides,
+        }
+        _start_mlflow_run(**kwargs)
+        run = mlflow.active_run()
+        mlflow.end_run()
+        return run
+
+    # An existing experiment is reused whether or not an artifact location
+    # is given (and is not re-created).
+    assert start().info.experiment_id == existing
+    resumable = start(mlflow_artifact_location=None)
+    assert resumable.info.experiment_id == existing
+    # A run id resumes that run.
+    assert start(mlflow_run_id=resumable.info.run_id).info.run_id == (
+        resumable.info.run_id
+    )
+    # No experiment name anywhere: the run starts in whatever experiment MLflow
+    # already has active, and no experiment is created.
+    n_experiments = len(env.client.search_experiments())
+    assert start(mlflow_experiment_name=None) is not None
+    assert len(env.client.search_experiments()) == n_experiments
+
+
+def test_run_training_requires_a_data_source(tmp_path):
+    with pytest.raises(ValueError, match="Must provide either"):
+        run_training(
+            backend="torch", config_path=CONFIG_PATH, networks_path_base=tmp_path
+        )
+
+
+def test_run_training_rejects_a_missing_folder(tmp_path):
+    with pytest.raises(FileNotFoundError, match="does not exist"):
+        run_training(
+            backend="torch",
+            config_path=CONFIG_PATH,
+            training_data_folder=tmp_path / "nowhere",
+            networks_path_base=tmp_path,
+        )
+
+
+def test_default_config_and_auto_workers(tmp_path, inprocess_dataloader, monkeypatch):
+    """No --config-path: the bundled config is used; --dl-workers 0 sizes itself."""
+    # The bundled config's GPU batch size does not divide the test files' rows;
+    # pin the CPU one so the result does not depend on the machine.
+    monkeypatch.setattr("torch.cuda.device_count", lambda: 0)
+    run_training(
+        backend="torch",
+        training_data_folder=TRAINING_DATA_FOLDER,
+        networks_path_base=tmp_path,
+        dl_workers=0,
+        dry_run=True,
+    )
+    assert not any(tmp_path.iterdir())
+
+
+def test_main_forwards_every_option(monkeypatch, tmp_path):
+    """The typer command passes each CLI option through to run_training."""
+    calls = []
+    monkeypatch.setattr(train_module, "run_training", lambda **kw: calls.append(kw))
+    result = runner.invoke(
+        app,
+        [
+            "--backend", "jax",
+            "--config-path", str(CONFIG_PATH),
+            "--training-data-folder", str(TRAINING_DATA_FOLDER),
+            "--networks-path-base", str(tmp_path),
+            "--network-id", "2",
+            "--dl-workers", "3",
+            "--dry-run",
+            "--no-export-onnx",
+            "--mlflow-run-name", "name",
+            "--mlflow-experiment-name", "exp",
+            "--mlflow-run-id", "rid",
+            "--data-generation-experiment-id", "7",
+            "--mlflow-tracking-uri", "sqlite:///x.db",
+            "--mlflow-artifact-location", "art",
+        ],
+    )  # fmt: skip
+    assert result.exit_code == 0, result.output
+    assert calls == [
+        {
+            "backend": Backend.jax,
+            "config_path": CONFIG_PATH,
+            "training_data_folder": TRAINING_DATA_FOLDER,
+            "networks_path_base": tmp_path,
+            "network_id": 2,
+            "dl_workers": 3,
+            "dry_run": True,
+            "export_onnx": False,
+            "mlflow_run_name": "name",
+            "mlflow_experiment_name": "exp",
+            "mlflow_run_id": "rid",
+            "data_generation_experiment_id": "7",
+            "mlflow_tracking_uri": "sqlite:///x.db",
+            "mlflow_artifact_location": "art",
+        }
+    ]
