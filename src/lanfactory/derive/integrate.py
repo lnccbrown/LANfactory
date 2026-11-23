@@ -373,12 +373,17 @@ class ChoiceMass:
         return np.where(total > 0.0, q, np.nan)
 
 
+# A module-level default: ruff versions disagree on whether a frozen-dataclass
+# call in the signature trips B008, so a noqa there fails one or the other.
+_DEFAULT_GRID = OnsetGrid()
+
+
 def choice_mass(
     predictor: Predictor,
     theta: ArrayLike,
     choices: Sequence[float] | NDArray,
     onset: ArrayLike,
-    grid: OnsetGrid = OnsetGrid(),  # noqa: B008 - frozen, so never mutated
+    grid: OnsetGrid = _DEFAULT_GRID,
 ) -> ChoiceMass:
     """Integrate a LAN's density over reaction time for every choice.
 
@@ -401,7 +406,8 @@ def choice_mass(
         around, e.g. ``theta[:, t_idx]``, less the config's ``ndt_edge_shift``
         where it declares one; 0 for a model without an onset.
     grid
-        Reaction-time grid (see the module's grid policy).
+        Reaction-time grid (see the module's grid policy); defaults to
+        ``OnsetGrid()``.
 
     Returns
     -------
