@@ -1,6 +1,6 @@
 # Command-line reference
 
-LANfactory installs seven commands. The tables below describe the complete
+LANfactory installs several commands. The tables below describe the complete
 command-line surface; run `COMMAND --help` to inspect the version installed in
 your environment. Training commands consume LANfactory configuration files,
 export commands convert saved trainer artifacts, Hub commands move reviewed
@@ -142,6 +142,13 @@ The option names follow the Hub commands.
 | `--seed INTEGER` | `0` | Base seed; each file depends only on it and its index |
 | `--source-run-uuid TEXT` | parsed from the filename | Training run uuid recorded in the provenance |
 | `--source-hf-revision TEXT` | unset | Hub revision the LAN was downloaded at, recorded as `source_lan_hf_commit` |
+
+## `network-inspectors-ui`
+
+Launch the Streamlit network inspector for trained Torch LANs. Requires the
+`ui` extra. The command defines no options of its own; any arguments are
+forwarded to `streamlit run`. See
+[Inspect trained networks in the UI](../network_inspectors_tutorial.md).
 
 For task-oriented workflows, see [Track training with MLflow](../using_mlflow.md)
 and [Share trained networks on Hugging Face Hub](../using_huggingface.md). The
