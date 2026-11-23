@@ -174,12 +174,14 @@ def test_kde_vs_lan_keeps_the_figure_open_unless_it_showed_it(monkeypatch):
     assert plt.fignum_exists(kept.number)
 
 
-def test_kde_vs_lan_layout_engine_keeps_text_inside_a_small_figure():
+def test_kde_vs_lan_layout_engine_keeps_text_inside_a_short_figure():
     """Fixed margins clip the x label of a short figure; a layout engine fits it."""
     grid, results, spec = _kde_vs_lan_inputs()
 
     def text_inside_figure(layout):
-        cfg = PlotConfig(show=False, figsize=(6, 2), layout=layout)
+        # 10 in wide: the 30 pt title must fit in every platform's default font
+        # (DejaVu Sans on CI is wider than Arial).
+        cfg = PlotConfig(show=False, figsize=(10, 4), layout=layout)
         fig = plot_kde_vs_lan(grid, results, spec, cfg)
         fig.canvas.draw()
         labels = [ax.xaxis.label for ax in fig.axes] + fig.texts

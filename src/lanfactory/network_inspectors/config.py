@@ -89,9 +89,10 @@ class PlotConfig:
     legend_fontsize
         Font size of the legend.
     layout
-        Matplotlib layout engine, ``"constrained"`` or ``"tight"``, which fits
-        the titles and labels into any figure size. ``None`` keeps the fixed
-        margins, which suit the default figure size and clip smaller figures.
+        Matplotlib layout engine, ``"constrained"`` or ``"tight"``, which sizes
+        the margins to the titles and labels. ``None`` keeps the fixed margins,
+        which suit the default figure size and clip smaller figures. No engine
+        can fit a title that is wider than the figure; lower its font size.
     filename
         File name inside ``save_dir``; its extension picks the format.
     dpi
