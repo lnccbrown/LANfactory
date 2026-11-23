@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     import plotly.graph_objects as go
+    from matplotlib.figure import Figure
 
 
 def kde_vs_lan_likelihoods(
@@ -35,13 +36,18 @@ def kde_vs_lan_likelihoods(
     n_reps: int = 10,
     grid: GridSpec | None = None,
     plot: PlotConfig | None = None,
-) -> None:
+) -> Figure:
     """Compare kernel density estimates from simulation data with LAN output.
 
     parameter_df: one model-compatible parameter vector per row.
     model: model name. torch_mlp_predict: predict_on_batch from get_torch_mlp.
     n_samples/n_reps: samples per KDE / KDEs per subplot.
-    grid: optional GridSpec. plot: optional PlotConfig.
+    grid: optional GridSpec. plot: optional PlotConfig (title, panel titles,
+    font sizes, file name and dpi of the saved figure).
+
+    Returns the Matplotlib figure. With plot.show (the default) it is displayed
+    and closed; with show=False it stays open so the caller can add to it, and
+    closing it (plt.close(fig)) is then the caller's job.
     """
     if parameter_df is None or model is None or torch_mlp_predict is None:
         raise ValueError(
@@ -61,6 +67,13 @@ def kde_vs_lan_likelihoods(
             + ", ".join(missing_params)
         )
     cfg = plot or PlotConfig()
+    if not isinstance(cfg.panel_titles, str) and len(cfg.panel_titles) != len(
+        parameter_df
+    ):
+        raise ValueError(
+            f"PlotConfig.panel_titles has {len(cfg.panel_titles)} titles for"
+            f" {len(parameter_df)} parameter vectors."
+        )
     grid_arr = make_rt_choice_grid(spec, grid)
 
     results: list[LikelihoodResult] = []
@@ -73,7 +86,7 @@ def kde_vs_lan_likelihoods(
             )
             for _ in range(n_reps)
         ]
-        results.append({"lan": lan_like, "kdes": kdes})
+        results.append({"lan": lan_like, "kdes": kdes, "params": params})
 
     return plot_kde_vs_lan(grid_arr, results, spec, cfg)
 
