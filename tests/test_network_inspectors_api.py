@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
 
-from lanfactory.network_inspectors import api
+from lanfactory.network_inspectors import PlotConfig, api
 
 
 def _predictor(batch: np.ndarray) -> np.ndarray:
@@ -43,6 +44,57 @@ def test_kde_vs_lan_uses_model_parameter_order(monkeypatch):
         seen_params[0],
         np.array([0.2, 1.5, 0.5, 0.3], dtype=np.float32),
     )
+
+
+def test_kde_vs_lan_rejects_wrong_number_of_panel_titles(monkeypatch):
+    """A title-count mismatch fails before any simulation is run."""
+
+    def no_simulation(spec, params, n_samples):
+        raise AssertionError("simulated before validating panel_titles")
+
+    monkeypatch.setattr(api, "simulate_ground_truth", no_simulation)
+    parameter_df = pd.DataFrame([{"v": 0.2, "a": 1.5, "z": 0.5, "t": 0.3}] * 2)
+
+    with pytest.raises(ValueError, match="3 titles for 2 parameter vectors"):
+        api.kde_vs_lan_likelihoods(
+            parameter_df,
+            "ddm",
+            _predictor,
+            plot=PlotConfig(panel_titles=["a", "b", "c"]),
+        )
+
+
+def test_kde_vs_lan_returns_figure_titled_with_each_rows_parameters(monkeypatch):
+    grid = np.array([[0.5, -1.0], [0.5, 1.0]])
+    monkeypatch.setattr(api, "make_rt_choice_grid", lambda spec, grid_spec: grid)
+    monkeypatch.setattr(api, "evaluate_network", lambda spec, params, grid: np.zeros(2))
+    monkeypatch.setattr(
+        api, "simulate_ground_truth", lambda spec, params, n_samples: {}
+    )
+    monkeypatch.setattr(api, "evaluate_kde", lambda sim_out, grid: np.zeros(2))
+    plt.switch_backend("Agg")
+    parameter_df = pd.DataFrame(
+        [
+            {"t": 0.3, "z": 0.5, "a": 1.5, "v": 0.2},
+            {"t": 0.3, "z": 0.5, "a": 1.5, "v": -1.0},
+        ]
+    )
+
+    fig = api.kde_vs_lan_likelihoods(
+        parameter_df,
+        "ddm",
+        _predictor,
+        n_reps=1,
+        plot=PlotConfig(show=False, panel_titles="params"),
+    )
+
+    try:
+        assert [ax.get_title() for ax in fig.axes if ax.axison] == [
+            "v=0.2, a=1.5, z=0.5, t=0.3",
+            "v=-1, a=1.5, z=0.5, t=0.3",
+        ]
+    finally:
+        plt.close(fig)
 
 
 def test_lan_manifold_validates_vary_dict():
