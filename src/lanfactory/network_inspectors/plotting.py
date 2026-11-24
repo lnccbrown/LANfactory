@@ -77,7 +77,7 @@ def plot_kde_vs_lan(
 
         if title is not None:
             fig.suptitle(title, fontsize=cfg.title_fontsize)
-        sns.despine(right=True)
+        sns.despine(fig=fig, right=True)
 
         for i, res in enumerate(results):
             logger.info("%d of %d", i + 1, len(results))
