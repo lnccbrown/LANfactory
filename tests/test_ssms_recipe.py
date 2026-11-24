@@ -92,6 +92,54 @@ def test_registered_bounds_are_normalized_without_mutation(monkeypatch):
     assert config == before
 
 
+def test_named_bounds_without_legacy_rows_are_supported():
+    cfg = ModelConfigBuilder.from_model("ddm")
+    expected = deepcopy(cfg["param_bounds_dict"])
+    cfg.pop("param_bounds")
+    assert normalize_model_config(cfg)["param_bounds_dict"] == expected
+
+
+@pytest.mark.parametrize(
+    "change,match",
+    [
+        ({"params": []}, "nonempty and unique"),
+        ({"params": ["v", "v"]}, "nonempty and unique"),
+        ({"choices": [0]}, "distinct"),
+        ({"choices": [0, 0]}, "distinct"),
+        (
+            {"param_bounds": [[-3.0, 0.3, 0.1, 0.0], [3.0, 3.0, 0.9, "t"]]},
+            "numeric bounds",
+        ),
+    ],
+)
+def test_invalid_model_contracts_are_actionable(change, match):
+    with pytest.raises(ValueError, match=match):
+        normalize_model_config(ModelConfigBuilder.from_model("ddm") | change)
+
+
+def test_unknown_fixed_parameter_is_not_silently_ignored():
+    with pytest.raises(ValueError, match="unknown parameters"):
+        normalize_model_config(ModelConfigBuilder.from_model("ddm"), {"typo": 1.0})
+
+
+def test_invalid_boxes_abort_instead_of_retrying_indefinitely():
+    guarded = pipeline()
+    for _ in range(100):
+        assert not guarded._is_valid_simulation(fixture_sim([20.1] * 6))[0]
+    with pytest.raises(RuntimeError, match="narrow the training box or extend max_t"):
+        guarded._is_valid_simulation(fixture_sim([20.1] * 6))
+
+
+def test_hssm_config_preserves_nondecision_support_declaration():
+    cfg = {
+        "params": ["t", "st"],
+        "choices": [-1, 1],
+        "param_bounds_dict": {"t": [0.1, 1.0], "st": [0.0, 0.1]},
+        "ndt_edge_shift": {"param": "st", "scale": 0.5},
+    }
+    assert hssm_config(cfg)["ndt_edge_shift"] == cfg["ndt_edge_shift"]
+
+
 def test_bounds_from_raw_source_override_stale_derived_bounds():
     cfg = ModelConfigBuilder.from_model("ddm")
     cfg["param_bounds"][0][0], cfg["param_bounds"][1][0] = -1.0, 1.0
@@ -236,6 +284,77 @@ def test_nonfinite_reference_cannot_pass(monkeypatch):
     )
     assert check["passed"] is False
     assert "nonfinite reference" in check["error"]
+
+
+@pytest.mark.parametrize("logp", [np.nan, 81.0])
+def test_nonfinite_or_exploding_network_cannot_pass_density(monkeypatch, logp):
+    from lanfactory.recipes import validation
+
+    monkeypatch.setattr(validation, "simulate", lambda *a, **kw: fixture_sim())
+
+    class KDE:
+        def evaluate(self, rt, choice):
+            return np.full(len(rt), -np.log(40))
+
+    monkeypatch.setattr(validation, "make_kde", lambda x: KDE())
+    check = gate_density(
+        lambda rows: np.full(len(rows), logp),
+        {"choices": [0, 1]},
+        [np.array([1.0])],
+        n_sim=6,
+        seed=1,
+        max_t=20.0,
+        delta_t=0.001,
+    )
+    assert check["passed"] is False
+    assert "network density" in check["error"]
+
+
+def test_missing_hssm_cannot_pass_load_or_gradient(monkeypatch, tmp_path):
+    from lanfactory.recipes import validation
+
+    find_spec = validation.importlib.util.find_spec
+    monkeypatch.setattr(
+        validation.importlib.util,
+        "find_spec",
+        lambda name: None if name == "hssm" else find_spec(name),
+    )
+    path = tmp_path / "not-used.onnx"
+    checks = [
+        validation.gate_hssm(path, {}, {}),
+        validation.gate_gradient(
+            path, None, {}, [], n_sim=1, seed=1, max_t=20.0, delta_t=0.001
+        ),
+    ]
+    assert all(c["passed"] is False and c["skipped"] for c in checks)
+
+
+@pytest.mark.parametrize(
+    "draws,match",
+    [
+        (fixture_sim([20.1] * 6), "horizon"),
+        (fixture_sim(choices=[0] * 6), "missing a possible choice"),
+    ],
+)
+def test_fresh_validation_simulation_rejects_bad_observations(
+    monkeypatch, draws, match
+):
+    import ssms
+
+    from lanfactory.recipes import validation
+
+    class Simulator:
+        def __init__(self, *args):
+            pass
+
+        def simulate(self, *args, **kwargs):
+            return draws
+
+    monkeypatch.setattr(ssms, "Simulator", Simulator)
+    with pytest.raises(ValueError, match=match):
+        validation.simulate(
+            {"params": ["v"], "choices": [0, 1]}, [1.0], 6, 1, 20.0, 0.001
+        )
 
 
 def test_nonfinite_failed_metrics_remain_strict_json(tmp_path):

@@ -77,3 +77,20 @@ def test_export_parity_rejects_a_different_network(tmp_path):
         validation.ONNXPredictor(path), network, np.ones((5, 4))
     )
     assert gate["passed"] is False
+
+
+def test_single_trial_gate_rejects_multiple_outputs(tmp_path):
+    class TwoOutputs(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.layer = torch.nn.Linear(4, 1)
+
+        def forward(self, x):
+            y = self.layer(x)
+            return y, y + 1
+
+    path = tmp_path / "two-outputs.onnx"
+    torch.onnx.export(TwoOutputs(), torch.zeros(1, 4), str(path), dynamo=False)
+    check = validation.gate_structure(path, 4)
+    assert check["passed"] is False
+    assert "one input and output" in check["error"]
