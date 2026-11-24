@@ -15,7 +15,9 @@ app = typer.Typer(add_completion=False)
 def main(
     model: str = typer.Option(...),
     out: Path = typer.Option(...),
-    preset: str = typer.Option("toy", help="toy, dev or explicitly authorized production"),
+    preset: str = typer.Option(
+        "toy", help="toy, dev or explicitly authorized production"
+    ),
     model_config: str | None = typer.Option(
         None, help="Trusted module:attribute returning an ssms config"
     ),
