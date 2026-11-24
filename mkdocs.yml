@@ -35,6 +35,7 @@ nav:
           - onnx: api/onnx.md
           - derive: api/derive.md
           - network_inspectors: api/network_inspectors.md
+          - recipes: api/recipes.md
           - trainers: api/trainers.md
           - utils: api/utils.md
 

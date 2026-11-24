@@ -1,11 +1,29 @@
 # Command-line reference
 
-LANfactory installs seven commands. The tables below describe the complete
+LANfactory installs eight commands. The tables below describe the complete
 command-line surface; run `COMMAND --help` to inspect the version installed in
 your environment. Training commands consume LANfactory configuration files,
 export commands convert saved trainer artifacts, Hub commands move reviewed
 artifacts to or from a Hugging Face repository, and `derive-aux` turns a
 trained LAN into an auxiliary-network training corpus.
+
+## `lan-from-ssms`
+
+Train, export and check a LAN from an ssms RT/choice model. All mandatory gates
+must run and pass before an HSSM config is emitted. A nonpassing run exits 1 and
+retains diagnostics. See [the recipe guide](../training_a_lan_for_a_new_model.md).
+
+| Option | Required/default | Contract |
+| --- | --- | --- |
+| `--model TEXT` | required | Built-in or registered ssms model name |
+| `--out PATH` | required | Fresh output directory |
+| `--preset TEXT` | `toy` | `toy`, `dev`, or explicitly authorized `production` |
+| `--model-config TEXT` | unset | Trusted `module:attribute` containing a dict or config factory |
+| `--fixed-parameters TEXT` | `{}` | JSON mapping of fixed values for a conditional design |
+| `--seed INTEGER` | `0` | Parameter/simulator/trainer seed |
+| `--estimator TEXT` | `kde` | `kde` or PyDDM for supported single-particle two-choice diffusions |
+| `--validate` / `--no-validate` | on | Disabling checks also disables HSSM config certification |
+| `--allow-production` | off | Required explicit production opt-in; does not submit a job |
 
 ## `jaxtrain`
 

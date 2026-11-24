@@ -120,6 +120,10 @@ def test_config_exports_are_referenced() -> None:
     _assert_documented("src/lanfactory/config/__init__.py", "docs/api/config.md")
 
 
+def test_recipe_exports_are_referenced() -> None:
+    _assert_documented("src/lanfactory/recipes/__init__.py", "docs/api/recipes.md")
+
+
 def test_hf_exports_are_referenced() -> None:
     _assert_documented("src/lanfactory/hf/__init__.py", "docs/api/hf.md")
 
