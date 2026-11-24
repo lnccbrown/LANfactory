@@ -16,6 +16,7 @@ nav:
   - Learn:
       - Train your first LAN (PyTorch): basic_tutorial/basic_tutorial_lan_torch.ipynb
   - How-to guides:
+      - Train a LAN for an ssms model: training_a_lan_for_a_new_model.md
       - Train with the JAX backend: basic_tutorial/basic_tutorial_lan_jax.ipynb
       - Export an sbi model to ONNX: tutorials/exporting_sbi_to_onnx.ipynb
       - Export a bayesflow model to ONNX: tutorials/exporting_bayesflow_to_onnx.ipynb
@@ -34,6 +35,7 @@ nav:
           - onnx: api/onnx.md
           - derive: api/derive.md
           - network_inspectors: api/network_inspectors.md
+          - recipes: api/recipes.md
           - trainers: api/trainers.md
           - utils: api/utils.md
 

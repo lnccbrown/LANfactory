@@ -204,6 +204,7 @@ transform-jax-onnx = "lanfactory.onnx.jax_export:app"
 upload-hf = "lanfactory.cli.upload_hf:app"
 download-hf = "lanfactory.cli.download_hf:app"
 derive-aux = "lanfactory.cli.derive_aux:app"
+lan-from-ssms = "lanfactory.cli.lan_from_ssms:app"
 
 [tool.setuptools.package-data]
 "lanfactory.cli" = ["config_network_training_lan.yaml"]

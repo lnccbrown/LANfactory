@@ -378,7 +378,7 @@ def choice_mass(
     theta: ArrayLike,
     choices: Sequence[float] | NDArray,
     onset: ArrayLike,
-    grid: OnsetGrid = OnsetGrid(),  # noqa: B008 - frozen, so never mutated
+    grid: OnsetGrid = OnsetGrid(),  # Frozen, so never mutated.
 ) -> ChoiceMass:
     """Integrate a LAN's density over reaction time for every choice.
 

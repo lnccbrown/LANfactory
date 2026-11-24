@@ -53,6 +53,43 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
+  test_recipe_hssm:
+    name: Recipe with HSSM (CPU)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MLFLOW_DISABLE_AGENT_HINT: "1"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+      - name: Install recipe and pinned HSSM consumer
+        run: |
+          uv sync --all-groups
+          # main identifies as 0.5.1 but is not released yet. Pin the consumer
+          # used for the development control, rather than a moving branch.
+          uv pip install "hssm @ git+https://github.com/lnccbrown/HSSM.git@1f94ce2ba5ed356209134f90a3cc6a6f8414a135"
+      - name: Exercise real HSSM load, ONNX gradients and fail-closed gates
+        run: >-
+          uv run --no-sync pytest tests/test_ssms_recipe.py tests/test_recipe_gradient.py
+          -q -o addopts= --cov=lanfactory --cov-branch
+          --cov-report=xml:coverage-recipe.xml --cov-report=term-missing
+      - name: Upload HSSM integration coverage
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage-recipe.xml
+
   test_notebooks:
     name: Execute tutorial notebooks
     runs-on: ubuntu-latest
